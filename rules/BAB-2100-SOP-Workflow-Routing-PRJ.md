@@ -75,7 +75,7 @@ Inherits all of COR-1103 §"ALWAYS":
 | Sub-task | Route |
 |---|---|
 | Net-new architecture decision (not covered by existing ADRs) | PRP (COR-1102) → review (COR-1602) → ADR (COR-1100) → file as `BAB-11xx` |
-| Phase implementation spec (Phase 0/1/2/3) | PRP (COR-1102) → file as `BAB-22xx` |
+| Phase implementation spec (Phase 0/1/2/3/4) | PRP (COR-1102) → file as `BAB-22xx` |
 | New citizen archetype (not covered by `BAB-1500`) | PRP (COR-1102) first if structurally novel; otherwise follow `BAB-1500` |
 
 ### 4. Execution coordination for approved work
@@ -116,7 +116,7 @@ Fall back to COR-1103 §"None of the above" branch.
 ### Phase 0 — PTY Stability Spike
 
 - Execution SOP: `BAB-1502`
-- Spec: `BAB-2200` PRP (when written)
+- Spec: `BAB-2200`
 - Triggers method-A-vs-method-B selection per `BAB-1103`
 - Pass criterion: ≤1 erlexec port crash per 48h AND any crash leaves the underlying tmux session alive
 
@@ -189,3 +189,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 |------|--------|----|
 | 2026-05-03 | Initial version — Babs project-specific routing | Claude Code |
 | 2026-05-03 | Drop "Migration cutover" routes (Babs is from-scratch); collapse SOP "(when written)" notes for docs that now exist | Claude Code |
+| 2026-05-03 | Self-review fixes: Phase 0/1/2/3 → 0/1/2/3/4; remove "(when written)" on BAB-2200 | Claude Code |

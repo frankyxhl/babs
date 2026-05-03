@@ -64,11 +64,11 @@ A citizen is not a single config entry — it is a coherent subtree of processes
    - Insert into the `citizens` table (Babs Ecto schema) with columns: `name`, `tmux_session`, `host`, `a2a_url`, `skills`, `created_at`.
 
 5. **Register the supervisor.**
-   - Babs's `Babs.Citizens.Supervisor` (DynamicSupervisor) discovers new entries on the next registry refresh tick (every 30s by default). To start immediately:
+   - Start the citizen subtree explicitly:
      ```elixir
      Babs.Citizens.Supervisor.start_citizen("<name>")
      ```
-   - This spawns the `Babs.CitizenSupervisor("<name>")` subtree: `Citizen.Server`, `PaneSession` (attaches to the tmux session created in step 2), and `TranscriptTailer` (no transcript file yet — tails a path that will appear).
+   - `Babs.Citizens.Supervisor` is the top-level DynamicSupervisor. The call spawns one `Babs.CitizenSupervisor` (per-citizen `:rest_for_one` supervisor) holding the subtree: `Citizen.Server`, `PaneSession` (attaches to the tmux session from step 2), and `TranscriptTailer` (no transcript file yet — tails a path that will appear).
 
 6. **Register Connectors (if the citizen receives external messages).**
    - For Discord: add an entry to `relay_config` (Babs SQLite) with `channel_id`, `target_citizen = "<name>"`, `ai_type`. Babs's `Babs.Connectors.Supervisor` picks it up on its next refresh.
@@ -138,3 +138,4 @@ Tempting shortcut: just copy `relay.bob` to `relay2.bob`. **Don't.** A citizen h
 |------|--------|----|
 | 2026-05-03 | Initial version — covers the create-tmux → directory → register → wire → verify path | Claude Code |
 | 2026-05-03 | Drop hybrid/migration sub-bullet (Babs is from-scratch; no Python-era citizen.db) | Claude Code |
+| 2026-05-03 | Step 5 reworded to drop unsupported "30s registry refresh tick" claim; clarified DynamicSupervisor relationship | Claude Code |

@@ -68,7 +68,7 @@ When making changes that touch architecture, **always cross-reference the releva
 
 ## Code (when development starts)
 
-Not yet — repository is pre-development. Phase 0 (PTY stability spike, `BAB-1502`) precedes any production code; subsequent build phases are sequenced in `BAB-2300` (when written) per `BAB-1001` §"Build Phases".
+Not yet — repository is pre-development. Phase 0 (PTY stability spike, `BAB-1502`) precedes any production code; subsequent build phases are sequenced in `BAB-2300` per `BAB-1001` §"Build Phases".
 
 When development starts, this section will document:
 - Module layout (`Babs.*` namespace)

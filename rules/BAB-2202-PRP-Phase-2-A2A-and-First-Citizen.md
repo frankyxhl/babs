@@ -32,10 +32,10 @@ Adds to the Phase 1 skeleton:
 lib/babs/
 ├── repo.ex                     (Ecto repo, ecto_sqlite3 backend)
 ├── schema/
-│   ├── citizen.ex              (Ecto schema for citizens table)
+│   ├── citizen.ex              (Ecto schema for citizens table; columns per BAB-1500 §Step 4)
 │   └── task_history.ex         (Ecto schema for A2A audit log)
 ├── citizens/
-│   ├── supervisor.ex           (DynamicSupervisor; replaces Phase 1's bare DynamicSupervisor)
+│   ├── supervisor.ex           (DynamicSupervisor; replaces Phase 1's hardcoded-list supervisor)
 │   └── registry.ex             (Registry-backed lookup; reads SQLite citizens table on boot)
 ├── citizen/
 │   └── transcript_tailer.ex    (NEW: tails JSONL via File.stream! + position tracking)
@@ -122,3 +122,4 @@ Phase 2 is done when:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial draft | Claude Code |
+| 2026-05-03 | Self-review: cross-reference BAB-1500 §Step 4 for citizens schema columns; clarify Phase 1's supervisor was hardcoded-list, not DynamicSupervisor | Claude Code |

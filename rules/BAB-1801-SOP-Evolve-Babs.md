@@ -155,7 +155,7 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
 - This SOP must not modify `BAB-1800`, `COR-1800`, or itself. Changes to these go through PRP/CHG.
 - Never delete files based on signal alone — every deletion needs evidence in the candidate record AND human reviewer sign-off.
 - Never merge two surfaces without verifying the merged surface still passes its regression scenarios.
-- Phase 0/1/2/3 implementation work is NOT eligible for evolve — it is forward design via PRP.
+- Phase 0/1/2/3/4 implementation work is NOT eligible for evolve — it is forward design via PRP.
 
 ---
 
@@ -164,3 +164,4 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial version — adapted CLD-1801 for Babs runtime system | Claude Code |
+| 2026-05-03 | Self-review fix: Phase 0/1/2/3 → 0/1/2/3/4 in guard rails | Claude Code |
