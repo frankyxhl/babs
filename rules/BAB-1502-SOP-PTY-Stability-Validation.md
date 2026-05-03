@@ -3,9 +3,10 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Active
-**Depends on:** BAB-1103 (PTY method choice; Method A primary, Method B fallback)
-**Gates:** Phase 1+ implementation (`BAB-2201`, `BAB-2202`, `BAB-2203`)
+**Status:** Active (Amended for v0.1)
+**Depends on:** BAB-1103 (PTY method choice; Method A primary, Method B fallback), BAB-1110 (β + γ live-reload-safety)
+**Gates:** Phase 1 implementation (`BAB-2201` Phase 1 SEED Flywheel Ignition)
+**Spike location:** `/Users/frank/Projects/babs/spikes/hardline/` (sub-mix-project inside the babs repo, per `BAB-2200` D8 amendment)
 
 ---
 
@@ -36,17 +37,29 @@ The empirical pre-flight check that decides whether Babs can use **erlexec PTY a
 
 ## Test Setup
 
-A throwaway repo `babs_pty_spike/` (NOT in the main Babs codebase) with the minimum dependency set:
+A self-contained sub-mix-project at `/Users/frank/Projects/babs/spikes/hardline/` (inside the babs repo, isolated from the future main `:babs` umbrella per `BAB-1110`) with the minimum dependency set:
 
 ```
 mix.exs:
-  deps: [{:erlexec, "~> 2.3"}]
+  deps: [
+    {:erlexec, "~> 2.2"},          # NOTE: "~> 2.3" does NOT exist on Hex; use ~> 2.2
+    {:phoenix, "~> 1.8"},          # for Hardline.Web (Channel + xterm.js validation, BAB-1106)
+    {:phoenix_live_view, "~> 1.0"} # optional, only if testing LiveView reattach UX
+  ]
 
-lib/spike.ex:
-  - SpikeRunner.start/1     spawns N tmux sessions with a long-running command (e.g. `bash -c "while true; do echo tick; sleep 1; done"`)
-  - SpikeRunner.attach/1    erlexec PTY attach to each session
-  - SpikeRunner.chaos/2     kills the erlexec port at random intervals (next section)
-  - SpikeRunner.observe/1   records timestamps of: port crash, tmux session death, AI-CLI-equivalent process death
+lib/hardline/runner.ex:
+  - Hardline.Runner.start/1     spawns N tmux sessions with a long-running command (e.g. `bash -c "while true; do echo tick; sleep 1; done"`)
+  - Hardline.Runner.attach/1    erlexec PTY attach to each session
+lib/hardline/chaos.ex:
+  - Hardline.Chaos.run/2        kills the erlexec port at random intervals (next section)
+lib/hardline/observer.ex:
+  - Hardline.Observer.start/1   records timestamps of: port crash, tmux session death, AI-CLI-equivalent process death
+lib/hardline/scenarios.ex:
+  - Hardline.Scenarios.resize_storm/0
+  - Hardline.Scenarios.slow_reader/0
+  - Hardline.Scenarios.detach_reattach/0   (per BAB-1110, BAB-2200 step 7)
+lib/hardline/web/                          (BAB-1106 Channel→xterm.js validation)
+priv/static/index.html                     (xterm.js page for byte-path test)
 ```
 
 The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if available, or a long-running bash loop with stdin/stdout interactions for cheaper iteration. Both must be exercised; reality may differ from the synthetic case.
@@ -55,7 +68,7 @@ The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if av
 
 ## Steps
 
-1. **Set up the test harness.** Create `babs_pty_spike/` with the structure above. `mix deps.get && mix compile` to confirm erlexec builds on the target machine. If the C++ build fails, log the toolchain delta and stop — no point testing further.
+1. **Set up the test harness.** Create `spikes/hardline/` (inside the babs repo) with the structure above. `mix deps.get && mix compile` to confirm erlexec builds on the target machine. If the C++ build fails, log the toolchain delta and stop — no point testing further.
 
 2. **Provision the test fleet.** Start `N = 5` tmux sessions, each running the long-running command. For each, start an erlexec PTY attach. Confirm bidirectional bytes (write something to the PTY and read it back through capture).
 
@@ -71,7 +84,25 @@ The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if av
 
 6. **Run the slow-reader test (1 hour).** On one port, do not consume output for several minutes (simulate a stuck consumer / browser tab gone away). Confirm no unbounded BEAM-side memory growth and no PTY-side blocking that affects other ports.
 
-7. **Compile the results.** Tabulate:
+7. **Run the detach + reattach test (30 min minimum, per `BAB-1110` β + γ requirement).** For each of N=3 sessions:
+   - Start tmux session detached (`tmux new-session -d -s babs-test-<i>`); spawn a long-running interactive workload inside (e.g. `vim`, `htop`, or real `claude` CLI)
+   - Open erlexec port that attaches and consumes byte stream; collect bytes for 5 min
+   - **Kill ONLY the erlexec port** (simulating `:babs_citizens` reload or BEAM crash) — confirm tmux session and the workload inside survive
+   - Wait 5 s
+   - Open a fresh erlexec port that attaches to the SAME tmux session; resume byte collection
+   - Continue for 20 min
+   - **Verify zero byte loss across the gap** (ground truth: drive the workload with a known sequence and check sequence completeness in the captured byte log)
+   - Verify tmux session ID and the workload's OS PID are unchanged before/after the port-kill
+   This is the test that validates the Phase 2 chicken-and-egg solution: a Citizen modifying its own host code triggers `:babs_citizens` reload, which kills the erlexec port; γ guarantees the AI CLI inside tmux survives and reattach is loss-free.
+
+8. **Run the Channel→xterm.js byte-path test (30 min minimum, per `BAB-1106` revision).** Start `Hardline.Web` (the minimal Phoenix Endpoint inside the spike); open `priv/static/index.html` in a browser; confirm:
+   - PTY bytes flow from erlexec → `Hardline.Pane` GenServer → `Phoenix.PubSub` topic `pane:test` → Channel → WebSocket → xterm.js
+   - PubSub publishes are chunked at ≤4 KB per message (per `BAB-1106` constraint)
+   - TUI session inside tmux (e.g. `htop`) renders correctly: ANSI colors intact, cursor positioning correct, no garbled escape sequences over 30 min
+   - Reload the browser tab mid-stream — Channel re-subscribes the PubSub topic; xterm.js sees brief flicker (≤2s) but stream resumes
+   - Optional: edit a file in `lib/hardline/web/` to trigger Phoenix `live_reload`; confirm Channel dies but tmux + erlexec port + Hardline.Pane all survive
+
+9. **Compile the results.** Tabulate:
    - Total port-hours run
    - Number of unprovoked port crashes (steady-state phase)
    - Number of tmux session deaths correlated with port deaths (chaos phase)
@@ -88,8 +119,10 @@ The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if av
 - **0%** of intentional port kills cause the underlying tmux session to die (the AI CLI inside is the irreplaceable thing — losing the port is recoverable; losing the session is not)
 - BEAM memory does not grow without bound under resize storm or slow reader
 - No NIF-induced VM crashes
+- **Detach + reattach test (step 7)**: zero byte loss across a port-kill + reattach gap; tmux session ID and workload PID unchanged before/after; reattach completes in ≤5s
+- **Channel→xterm.js byte-path test (step 8)**: TUI renders correctly over 30 min; PubSub messages chunked ≤4 KB; browser tab reload recovers within 2s without backend disruption
 
-**If Method A passes:** mark `BAB-1103` Method A as validated; proceed to Phase 1.
+**If Method A passes:** mark `BAB-1103` Method A as validated; **mark `BAB-1106` Channel→PubSub→xterm.js path validated**; **mark `BAB-1110` β + γ detach/reattach validated**; proceed to Phase 1 (`BAB-2201`).
 
 **Method A fails** if any of:
 
@@ -97,8 +130,15 @@ The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if av
 - ANY chaos-phase port kill kills the underlying tmux session
 - Memory growth indicates a leak under sustained operation
 - BEAM VM crashes from a NIF path
+- **Detach + reattach test fails**: bytes lost across the gap, OR tmux session dies on port kill, OR reattach fails / hangs
+- **Channel→xterm.js test fails**: garbled rendering, byte loss, BEAM scheduler block on large payloads (>4 KB unchunked)
 
-**If Method A fails:** activate `BAB-1103` Method B fallback. File a CHG against `BAB-1103` updating its status to record the empirical failure and the switch. Phase 1 plans (`BAB-2201`+) must be reread to confirm they don't assume Method A semantics that B doesn't provide (real-time byte streaming primarily — Method B has a 150-250ms polling floor).
+**If Method A fails:** the failure mode determines the response:
+- *PTY-substrate failure* (port crashes, tmux deaths under chaos, NIF crashes) → activate `BAB-1103` Method B fallback. File CHG.
+- *Detach/reattach failure* → `BAB-1110` β + γ design must be revised; specifically the chicken-and-egg solution for Phase 2 needs an alternative. Phase 1 SEED (`BAB-2201`) cannot start until alternative is designed and validated.
+- *Channel→xterm.js failure* → `BAB-1106` revision needs follow-up; specific failure determines fix (chunking strategy, alternative transport, or LiveView replacement of Channel).
+
+In all failure cases, file CHG entries on the affected ADRs and reread `BAB-2201` Phase 1 plan before starting any production code.
 
 ---
 
@@ -122,10 +162,11 @@ The "AI CLI equivalent" can be a real Claude/Codex CLI in interactive mode if av
 
 The spike produces, in order of priority:
 
-1. **A pass/fail decision** filed as a CHG against `BAB-1103`
-2. **The raw log file** (port events, tmux events, memory samples) committed to `babs_pty_spike/results/run-YYYY-MM-DD/`
-3. **A short writeup** (`results/run-YYYY-MM-DD/SUMMARY.md`) with the tabulated results and the decision
-4. **Issue or follow-up notes** for any unexpected behavior worth investigating later
+1. **Pass/fail decisions** filed as CHG entries against `BAB-1103` (PTY substrate), `BAB-1106` (Channel→PubSub byte path), and `BAB-1110` (β + γ detach/reattach)
+2. **The raw log file** (port events, tmux events, memory samples, byte-stream sequences for detach/reattach) committed to `spikes/hardline/results/run-YYYY-MM-DD/`
+3. **A short writeup** (`spikes/hardline/results/run-YYYY-MM-DD/SUMMARY.md`) with tabulated results and decisions
+4. **Phase 0 → Phase 1 handoff artifact list** (per Trinity 2nd-round review): erlexec flags / tmux command shapes / PubSub byte contract / xterm.js asset versions / OS+toolchain versions / detach test thresholds — all captured in SUMMARY.md so Phase 1 SEED (`BAB-2201`) implementation can reference exact values
+5. **Issue or follow-up notes** for any unexpected behavior worth investigating later
 
 ---
 
@@ -134,3 +175,4 @@ The spike produces, in order of priority:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial version — gates Phase 1+ on empirical erlexec PTY validation | Claude Code |
+| 2026-05-03 | v0.1 amendments: spike location moved to `spikes/hardline/` inside babs repo (was throwaway sibling repo); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added step 7 (detach + reattach test per `BAB-1110` β + γ); added step 8 (Channel→xterm.js byte-path test per `BAB-1106` revision); pass/fail criteria expanded to cover both new tests; output artifacts now also CHG against `BAB-1106` and `BAB-1110`; Phase 0 → Phase 1 handoff artifact list added per Trinity 2nd-round review | Claude Code |
