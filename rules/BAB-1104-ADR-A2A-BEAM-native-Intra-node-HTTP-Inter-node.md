@@ -3,7 +3,21 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted
+**Status:** Accepted (Amended for v0.1 — see banner)
+
+---
+
+## ⚠️ v0.1 Scope Amendment (2026-05-03)
+
+The intra-node A2A design **stands**. Cross-node A2A is significantly amended:
+
+- **v0.1 removes cross-node citizen-to-citizen messaging entirely.** Bidirectional HTTP JSON-RPC A2A is deferred to v0.2+. See `BAB-1109` (UI Federation Only for v0.1).
+- **v0.1 cross-node is read-only UI federation only** — Tailscale-connected nodes expose `GET /api/v1/tickets`, `GET /api/v1/citizens`, `GET /api/v1/citizens/<name>/transcript`. No write operations.
+- **v0.1 intra-node A2A is mediated by the Ticket system** per `BAB-1111`. Citizens coordinate via `bb ticket` CLI commands (write/comment/transition). Registry + GenServer.call remains the substrate but is wrapped, not exposed directly.
+
+The intra-node "BEAM-native" framing is the right substrate; it's just not the coordination API anymore. Operators reason about Tickets, not GenServer calls.
+
+A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
 ---
 

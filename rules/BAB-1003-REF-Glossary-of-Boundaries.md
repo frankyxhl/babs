@@ -3,7 +3,23 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Active
+**Status:** Partially Superseded
+
+---
+
+## ⚠️ Partially Superseded by v0.1 Scope Redefinition (2026-05-03)
+
+This document was authored under the original 5-phase scope. v0.1 narrows boundaries:
+
+- **Discord / Telegram boundaries are removed** (no Connector layer in v0.1; deferred indefinitely)
+- **Tmux is now a lifecycle-owned boundary** — Babs creates and destroys tmux sessions per `BAB-1107` (not "attach-only")
+- **Cross-node boundary is read-only** per `BAB-1109` (no bidirectional HTTP JSON-RPC A2A in v0.1)
+- **Ticket filesystem (`tickets/`)** is a new boundary added in V0-M per `BAB-1111`
+- **Two OTP apps** (`:babs` web + `:babs_citizens` lifecycle) per `BAB-1110` is a new internal boundary
+
+Use this document for the boundaries still in scope (PTY → see `BAB-1110`; Phoenix Endpoint, SQLite, JSONL transcripts). For changed/added boundaries, see the linked ADRs.
+
+A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
 ---
 

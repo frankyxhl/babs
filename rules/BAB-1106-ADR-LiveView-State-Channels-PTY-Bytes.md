@@ -3,7 +3,41 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted
+**Status:** Accepted (with v0.1 Amendments — see banner)
+
+---
+
+## ⚠️ v0.1 Amendments (2026-05-03; further fixes from Trinity 2nd-round review)
+
+The core three-layer decision (LiveView for state, React-via-hooks for complex widgets, Phoenix Channels for raw PTY bytes) **stands**. Amendments:
+
+1. **Channels do NOT hold persistent PID references to `Hardline.Pane`** (renamed from `PaneSession`). `Hardline.Pane` publishes received bytes to `Phoenix.PubSub` topic `pane:<name>`; Channels subscribe on connect, unsubscribe on disconnect. Required for live-reload-safety per `BAB-1110` (β + γ).
+2. **Channel reconnection protocol**: When `:babs` reloads, all Channels die. Phoenix LiveView's auto-reconnect re-establishes WebSocket; Channel re-subscribes the PubSub topic; xterm.js may show a brief gap (≤2s) but `Hardline.Pane` (in `:babs_citizens`) and the tmux/AI process never knew anything happened. See `BAB-1110` and `BAB-2201`.
+3. **PTY back-pressure**: For citizens producing high-volume byte streams (TUI redraws, long file dumps), `Hardline.Pane` must chunk publishes to PubSub to avoid blocking BEAM schedulers. Trinity review (`BAB-1006`) flagged this as a v0.1 risk.
+4. **Phase 0 spike (`BAB-2200`)** validates the byte path PTY → BEAM → Channel → WebSocket → xterm.js end-to-end including detach + reattach scenarios.
+
+A full rewrite will be done by Babs Citizens themselves post-Phase 1.
+
+---
+
+## 🛑🛑🛑 STALE BODY WARNING — IMPLEMENTERS READ THIS 🛑🛑🛑
+
+**The body sections below describe the SUPERSEDED design**, written before β + γ live-reload-safety was decided. Specifically:
+
+- ❌ **Body says** "Channel↔PaneSession messaging bypasses Phoenix.PubSub" → **WRONG.** v0.1 design uses PubSub.
+- ❌ **Body describes** Channel storing `PaneSession` PID in `socket.assigns` + `Process.monitor/1` → **WRONG.** No persistent PIDs.
+- ❌ **Body argues against** PubSub for terminal bytes → **REVERSED** by the amendment banner above.
+
+**Authoritative implementation rules (apply these instead of body)**:
+
+1. `Hardline.Pane` (renamed from `PaneSession`) publishes received bytes to `Phoenix.PubSub` topic `pane:<name>`. **No direct PIDs to Channels.**
+2. Phoenix Channel processes subscribe to `pane:<name>` on `:join`, unsubscribe on terminate. They are stateless w.r.t. `Hardline.Pane`.
+3. **PubSub payload size limit: 4 KB max per message.** `Hardline.Pane` MUST chunk larger byte buffers (TUI redraws, file dumps) into ≤4 KB messages to avoid blocking BEAM schedulers and OOM on browser reconnect.
+4. On `:babs` reload: Channels die; LiveView auto-reconnects; new Channel re-subscribes the topic; xterm.js sees a brief gap (≤2s) but `Hardline.Pane` (in `:babs_citizens`) is unaffected.
+
+The *three-layer split* (LiveView for state / React via hooks / Channels for bytes) **stands**. Only the implementation details of layer 3 are reversed.
+
+A loud rewrite of the body sections will land post-Phase 1 once the design has lived through Phase 0 + 1.
 
 ---
 
@@ -13,7 +47,7 @@ The Babs web frontend has **three distinct rendering layers**, each chosen for a
 
 1. **Phoenix LiveView** — default for all stateful UI (dashboard, status, ops, diagram views)
 2. **React** (mounted inside LiveView via hooks) — for complex client-side interactions that exceed LiveView's natural sweet spot
-3. **xterm.js + Phoenix Channels** — for raw PTY byte streams; Channel↔PaneSession messaging **bypasses Phoenix.PubSub**
+3. **xterm.js + Phoenix Channels** — for raw PTY byte streams; Channels subscribe to `Phoenix.PubSub` topic `pane:<name>` published by `Hardline.Pane` (per stale-body warning above; the original draft below contained the now-reversed "bypasses PubSub" framing).
 
 This split exists because the three layers' access patterns differ by orders of magnitude in update frequency and interactivity model.
 

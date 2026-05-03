@@ -32,3 +32,9 @@ npm-debug.log
 
 # Alfred (per-session, not durable)
 .alfred-session-*
+
+# Claude Code tooling state (per-machine, not committed)
+.claude/
+
+# Trinity / multi-model tooling state
+trinity.json

@@ -1,97 +1,225 @@
-# PLN-2300: Build Roadmap
+# PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Draft
+**Status:** Active
+**Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
+**Sources:** v0.1 design session 2026-05-03; Trinity Review `BAB-1006`
 
 ---
 
 ## What Is It?
 
-The end-to-end coordination plan for building Babs from zero to a working multi-agent runtime. Sequences the five build phases (`BAB-2200` through `BAB-2204`), names each phase's gating decision, and defines the kill criteria that would force a re-plan rather than push forward.
+The master roadmap of Babs from Phase 0 (PTY validation) through Phase 16 (V0-L complete: Mayor + federation). Replaces the earlier 5-phase plan in full.
+
+Two stages:
+- **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
+- **Flywheel** (Phase 2-16): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~16-30 weeks (per Trinity 2× multiplier).
+
+Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
 
 ---
 
-## Goals
+## Milestone Map
 
-- Stand up Babs to feature parity with the operator's mental model: citizens hosted, messages relayed, A2A working, web dashboard usable
-- Eliminate the highest-risk decision (PTY method choice) before any production code
-- Keep each phase narrow enough that one engineer can complete it in 1-2 weeks of focused work
-- Produce a runnable system at the end of each phase, not just at the end of the roadmap
-
----
-
-## Milestones
-
-| # | Milestone | PRP | Gates next phase on... | Tentative effort |
-|---|-----------|-----|-----------------------|------------------|
-| 1 | Phase 0 — PTY Stability Spike | `BAB-2200` | erlexec PTY pass/fail recorded against `BAB-1103` | ~3-4 days wall-clock; ~6h attention |
-| 2 | Phase 1 — Core Supervision Skeleton | `BAB-2201` | `iex` round-trip: inject bytes → tmux pane; subtree restarts cleanly | 1 week |
-| 3 | Phase 2 — A2A + SQLite + First Citizen | `BAB-2202` | Two citizens A2A-talk locally; transcripts tail live; cross-process A2A over HTTP works | 2 weeks |
-| 4 | Phase 3 — Connectors (Discord + Telegram) | `BAB-2203` | Discord message round-trip ≤3s; reconnect after 60s network drop; rate-limit handled | 2 weeks |
-| 5 | Phase 4 — BabsWeb (LiveView + React + xterm.js) | `BAB-2204` | All 5 views per `BAB-1004` render correctly; terminal latency ≤50ms | 2-3 weeks |
-
-**Total tentative**: ~8-10 weeks of focused work spread across whatever calendar that fits operator availability. No hard deadlines.
+| Milestone | Phases | Definition |
+|-----------|--------|------------|
+| **M0** | 0 | PTY substrate validated |
+| **M1** | 1 | **Flywheel ignited** — single Citizen running in browser, can edit Babs and survive reload |
+| **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
+| **M2.5** | 6.5 | Manual ticket dogfood validation (Trinity-mandated) |
+| **M3** | 7-12 | **V0-M complete** — filesystem-first ticket-driven multi-agent system |
+| **M4** | 13-16 | **V0-L complete** — Mayor + Inspector autonomy; PWA + read-only federation |
 
 ---
 
-## Phase Dependencies
+## Stage 1: Bootstrap (Manual Build)
 
-```
-Phase 0 (PTY spike)
-  │  pass → continue
-  │  fail → switch BAB-1103 to Method B; downstream PRPs unchanged structurally,
-  │         but PaneSession internals differ
-  ▼
-Phase 1 (supervision skeleton)
-  │  acceptance: iex demo
-  ▼
-Phase 2 (A2A + registry + first citizen)
-  │  acceptance: two citizens A2A-talk; transcripts live
-  ▼
-Phase 3 (Connectors)
-  │  acceptance: Discord + Telegram round-trip
-  ▼
-Phase 4 (BabsWeb)
-  │  acceptance: 5 views per BAB-1004 + xterm.js terminal panel
-  ▼
-v0.1.0 release
-```
+### Phase 0 — Hardline PTY Spike
 
-Phases are **strictly sequential** for v0.1.0. Parallelization (Phase 4 chrome work alongside Phase 3 Connectors) is tempting and probably fine for the no-real-PaneSession-needed parts of Phase 4 (Dashboard skeleton, palette/typography), but the rule for the roadmap is "don't start the next phase's *integration* work until the prior phase's acceptance ships."
+**Doc**: `BAB-2200` (full PRP, drafted)
+**Output**: `spikes/hardline/` sub-mix-project; CHG entries on `BAB-1103` and `BAB-1106`
+**Acceptance**: 24-48h soak + chaos kill + 30-min Channel render no dropped bytes; **detach + reattach scenario** validates that erlexec ports can attach to pre-existing tmux sessions without byte loss (per `BAB-1110` and Trinity findings)
+**Estimate**: 3-5 days
+**Built by**: human
+
+### Phase 1 — V0-S0 SEED (Flywheel Ignition)
+
+**Doc**: `BAB-2201` (full PRP, drafted)
+**Output**: Mix umbrella with `:babs` and `:babs_citizens` apps; **two seed Citizens** (`alex` running `claude`, `morgan` running `codex` — validates multi-CLI works at SEED time, not deferred); minimal LiveView terminal at `/citizens/<name>`; Channel re-registration; tmux detach + reattach; multi-CLI `citizen.toml`; `Babs.Citizens.SourceWatcher` for `:babs_citizens` reload (per `BAB-1110`); restricted keyboard set; PubSub chunk size ≤4KB (per `BAB-1106`)
+**Acceptance**: **Flywheel Test (Gate A scripted + Gate B dogfood)** — Gate A is a machine-verifiable sentinel reload test (alex survives `:babs_citizens` reload with tmux/CLI PID intact); Gate B is the human dogfood test (user implements Phase 2 entirely from browser, closes all terminals first). Both gates must pass.
+**Estimate**: 14-21 days (Trinity 2× multiplier from naive 7-10)
+**Built by**: human (last manual phase)
+
+🔥 **FLYWHEEL IGNITES at end of Phase 1** 🔥
 
 ---
 
-## Kill Criteria (when to re-plan instead of push)
+## Stage 2: Flywheel (Citizens Build Babs)
 
-If any of the following happen, **stop and replan** rather than carry the issue forward:
+> From here, every phase is a task given to a Citizen via BabsWeb browser. The user is PM + reviewer. Estimates assume single-Citizen sequential work; multi-Citizen parallelism (from Phase 5) reduces wall-clock time.
 
-| Trigger | Action |
-|---------|--------|
-| Phase 0 fails AND Method B has unexpected blockers (e.g., tmux capture-pane unreliable on the target system) | File an INC + ADR; consider Method C (custom NIF) or pause project |
-| Phase 1 supervision strategy reveals fundamental flaw in `BAB-1102` (e.g., `:rest_for_one` causes pathological restart loops in real use) | File a PRP to revise `BAB-1102`; do NOT proceed to Phase 2 with a known-broken supervision pattern |
-| Phase 2 A2A latency over HTTP is >100ms intra-host (way above estimate) | Reopen `BAB-1104` ADR — possibly investigate `:erpc` for *intra-host between BEAM nodes* (a different question than inter-machine) |
-| Phase 3 Discord rate-limits prevent realistic operator workloads | File an INC; consider message batching, queue, or lower-cadence relay; may revise `BAB-1003` Discord boundary contract |
-| Phase 4 LiveView reconnection causes terminal byte loss | Reopen `BAB-1106` — possibly pivot to a SPA frontend for Citizen Detail and Full Terminal; LiveView remains for Dashboard / Ops / Diagram |
+### Phase 2 — Transcript JSONL Persistence
 
-These are not soft thresholds. Hitting any means the roadmap stops; the trigger is documented as an INC; a CHG or ADR addresses it; the roadmap restarts.
+**Scope**: Every byte that flows through `Hardline.Pane` is appended to `<name>.bob/transcript.jsonl`. On browser reload, last N lines replayed to xterm.js for context.
+**Acceptance**: Close browser tab, re-open: see most recent 200 lines of transcript; tab restart is byte-loss-free
+**Note**: This phase is the first chicken-and-egg test for the flywheel — alex modifies the file (`Hardline.Pane`) that captures her own bytes. Per `BAB-1110`, tmux survives the reload; new Pane reattaches.
+**Estimate**: 3-5 days
+
+### Phase 3 — SQLite Citizens Table + Auto-Respawn
+
+**Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table fields: `name`, `cwd`, `cli`, `cli_args`, `status` (`:running`/`:stopped`/`:failed`), `created_at`, `metadata` (JSONB), `role` (nullable), `is_mayor` (bool, default false). On Babs boot, scan SQLite + reattach.
+**Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
+**Acceptance**: Restart Babs node; alex auto-respawns from SQLite; cwd preserved
+**Estimate**: 4-6 days
+
+### Phase 4 — NewCitizenLive Spawn UI
+
+**Scope**: `/citizens/new` form (name + CLI radio: claude/codex/droid/pi/gh copilot + cwd field + optional env block). Submit → write `<name>.bob/citizen.toml` + SQLite row + start citizen + redirect to `/citizens/<name>`.
+**Acceptance**: Spawn morgan via UI; morgan reaches interactive prompt; SQLite row + citizen.toml exist; transcript starts persisting
+**Estimate**: 4-6 days
+
+### Phase 5 — Multi-Citizen Index + Tab Navigation
+
+**Scope**: `/citizens` index page (list all citizens with status badges); tab navigation between active citizens; ≥3 concurrent hardlines without PTY fd leak (verified via `lsof`).
+**Acceptance**: Spawn alex / morgan / kim simultaneously; each in own tab; 30 min concurrent run, fd count stable
+**Estimate**: 3-5 days
+
+### Phase 6 — Stop / Start / Restart UI
+
+**Scope**: Buttons in citizen detail view: stop (`tmux kill-session` + SQLite `:stopped` + preserve `.bob/`), start (reuse `.bob/`, fresh tmux + erlexec, status `:running`), restart (atomic stop + start). Per `BAB-1107` semantics.
+**Acceptance**: Stop alex → restart alex; transcript continues with `:reattached` event in history; AI CLI starts fresh but `.bob/` files are intact
+**Estimate**: 2-4 days
+
+### 🎯 M2 = V0-S complete (~3-5 weeks flywheel time)
+
+### Phase 6.5 — Manual Ticket Dogfood (Trinity-mandated)
+
+**Scope**: Operator manually creates 1-2 ticket markdown files at `tickets/T-2026-XX-XX-001.md`; manually edits frontmatter to assign to alex; manually injects ticket body as alex's prompt; alex completes work; operator manually flips state to `closed`. **No automation.** Validates that the schema design (per `BAB-1111`) actually works end-to-end before infrastructure is built.
+**Why**: Trinity 3/3 reviewers flagged that Phase 7-12 is high-cost ticket infrastructure built without proving the workflow first. This 1-2 day phase validates the workflow.
+**Acceptance**: 2 tickets driven through full lifecycle; observed friction informs Phase 7-12 designs
+**Estimate**: 1-2 days
+
+### Phase 7 — Ticket File System Skeleton
+
+**Scope**: `tickets/` directory; schema validation (per `BAB-1111` frontmatter); `mix bb.ticket.new` task; per-ticket single-writer GenServer (concurrent-write safety); `T-...history.jsonl` append-only log.
+**Acceptance**: Create 5 tickets via mix task; `git status` clean (atomic write); concurrent writes from 2 processes do not corrupt files (test in code)
+**Estimate**: 4-6 days
+
+### Phase 8 — Ticket Index UI + Render
+
+**Scope**: `/tickets` list page (grouped by state); `/tickets/<id>` view (frontmatter table + markdown body + history timeline); filesystem watcher (FSEvents on macOS) drives live UI updates.
+**Acceptance**: Browse all tickets; click one, see full content; manually edit ticket file in editor → UI updates within 1s
+**Estimate**: 5-7 days
+
+### Phase 9 — Ticket → Citizen Assignment
+
+**Scope**: UI button "Assign to alex" → ticket `assignee` field updated → ticket body **injected as alex's initial prompt** (via `bb` CLI write to alex's stdin); state transitions to `in_progress`; history event written.
+**Acceptance**: Create T-001 = "Add health check endpoint"; assign to alex; alex's terminal receives the body as input and starts working
+**Estimate**: 4-6 days
+
+### Phase 10 — Ticket 6-State Machine
+
+**Scope**: Open / In Progress / Pending Approval / Closed / Cancelled + Rejected transition. Each transition writes to `.history.jsonl`. UI shows state badge. Illegal transitions are rejected with error message.
+**Acceptance**: All paths walkable: Open → In Progress → Pending Approval → Closed; Reject from Pending Approval returns to In Progress with feedback comment in history; Cancel terminates from any non-closed state
+**Estimate**: 3-5 days
+
+### Phase 11 — Approval UI (Inspector = User in V0-M)
+
+**Scope**: Pending Approval tickets show "Approve" / "Reject" buttons. Reject requires feedback (modal). Approve transitions to Closed; Reject transitions back to In Progress with feedback comment injected into assignee's hardline.
+**Acceptance**: alex submits T-001 to Pending Approval; user rejects with feedback "missing docs"; alex receives feedback in terminal and continues; alex resubmits; user approves; ticket Closed
+**Estimate**: 2-4 days
+
+### Phase 12 — Cross-Citizen Ticket Comments
+
+**Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. All Citizens listed as `assignees` (multi-assignee allowed) receive the comment via PubSub injection into their hardline.
+**Acceptance**: T-001 assigned to alex + morgan; alex `bb ticket comment T-001 "Backend done"`; morgan sees the message in her terminal within 1s
+**Estimate**: 3-5 days
+
+### 🎯 M3 = V0-M complete (~4-7 weeks flywheel time)
+
+### Phase 13 — Citizen Roles
+
+**Scope**: `citizens.role` SQLite field (was reserved in Phase 3) becomes user-settable. UI shows role; `/citizens/new` form has role field. Tickets can specify `assignee_role` instead of named `assignee`. Babs picks an idle Citizen of that role (round-robin).
+**Acceptance**: Create T-002 with `assignee_role: developer`; Babs auto-routes to first idle developer-role citizen
+**Estimate**: 3-5 days
+
+### Phase 14 — Inspector Role (Auto-Approval)
+
+**Scope**: Dedicated Citizen with `role: inspector`. SOP: "When a ticket reaches Pending Approval, read the body + acceptance criteria + assignee's last comments; decide approve or reject with reasoning". Inspector becomes the default `inspector` for new tickets. User can override.
+**Acceptance**: T-003 reaches Pending Approval; inspector citizen wakes up (notified via PubSub on state change), reads ticket, writes approve/reject decision; user can intervene
+**Estimate**: 7-10 days (LLM protocol design)
+
+### Phase 15 — Mayor Citizen (research-grade)
+
+**Scope**: Citizen with `is_mayor: true`. Listens for tickets with `assignee: null` (the billboard). Outputs proposal: `bb propose <root-ticket> --children "T-A: BA work; T-B: Developer work; ..."`. Proposal becomes draft tickets in a special state; UI shows them awaiting user approval. User can edit/cull/approve. On approve, drafts are written to `tickets/` and routed to citizens by role.
+**Acceptance**: User creates T-100 = "Build a hello world site" (no assignee). Mayor proposes 4 children. User removes one ("designer"), approves rest. 3 children auto-routed to citizens by role. All 3 progress through the lifecycle.
+**Estimate**: 14-21 days (LLM protocol research)
+
+### Phase 16 — PWA + Mobile + Read-Only Federation
+
+**Scope**: PWA manifest + service worker for installable browser app; mobile-responsive breakpoints; read-only federation API (per `BAB-1109`) — Tailscale-connected Babs nodes expose `/api/v1/tickets`, `/api/v1/citizens`, `/api/v1/citizens/<name>/transcript`; remote nodes mount as `remote://<peer>/...` namespace in UI.
+**Acceptance**: Install PWA on iPhone; view desktop's running citizens. Configure laptop Babs to peer with desktop Babs; laptop's UI shows desktop tickets read-only.
+**Estimate**: 14-21 days
+
+### 🎯 M4 = V0-L complete (~6-9 weeks flywheel time)
 
 ---
 
-## Rollback Path
+## Total Timeline (with Trinity Realism Multiplier)
 
-There is no production system to roll back to — Babs is greenfield. "Rollback" means: revert the offending commit, keep the prior phase's state, file an INC documenting why the phase was rolled back, and re-plan.
+| Stage | Optimistic | Realistic (×2) |
+|-------|-----------|---------------|
+| Phase 0 (manual) | 3-4 days | 4-6 days |
+| Phase 1 (manual) | 7-10 days | 14-21 days |
+| Phase 2-6 (V0-S flywheel) | 16-25 days | 32-50 days |
+| Phase 6.5 (dogfood) | 1-2 days | 2-3 days |
+| Phase 7-12 (V0-M flywheel) | 21-33 days | 42-66 days |
+| Phase 13-14 (V0-L early) | 10-15 days | 20-30 days |
+| Phase 15 (Mayor) | 14-21 days | 28-42 days |
+| Phase 16 (Polish) | 14-21 days | 28-42 days |
+| **Total** | **~90-130 days (~13-19 weeks)** | **~170-260 days (~24-37 weeks, 6-9 months)** |
 
-If a phase is started and abandoned, its branch / WIP commits stay in git history (do NOT force-push). The phase's PRP gets a Change History entry recording the abandonment + reason.
+**Be honest**: The realistic column is the operating estimate. Plan for 6-9 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
 ---
 
-## Status
+## Flywheel Acceleration
 
-**Current**: Roadmap drafted; nothing started. Phase 0 is the next concrete action.
+Per the design intent (and Trinity confirmation), velocity increases as more capabilities come online:
 
-**Cadence for updating this doc**: At each phase boundary (start + end), append a Change History entry with the date, phase, and one-line outcome. If the roadmap changes (insertion / deletion / re-ordering of phases), file a CHG.
+| Stage | Speedup factor | Why |
+|-------|----------------|-----|
+| Phase 2-6 | 1× | Single citizen, sequential work |
+| Phase 7-9 | 1.5× | Multi-citizen, can split frontend / backend in parallel |
+| Phase 10-12 | 2× | Tickets-create-tickets meta-loop |
+| Phase 13-14 | 3× | Inspector automation removes user-as-bottleneck |
+| Phase 15-16 | 5× | Mayor self-plans the roadmap; user becomes director only |
+
+These are aspirational. Trinity flagged that AI rework cycles + context exhaustion can reduce effective speedup; observed velocity informs whether to invest in V0-L at all or freeze at V0-M.
+
+---
+
+## Anti-Goals (explicit non-roadmap)
+
+- **NO Discord / Telegram / Slack adapters in v0.1.** Removed from earlier scope (D6); deferred indefinitely.
+- **NO cross-machine citizen-to-citizen messaging in v0.1.** UI federation is read-only only. See `BAB-1109`.
+- **NO support for non-interactive AI workflows (batch jobs).** Babs is for live, interactive citizens. Background jobs are a different design.
+- **NO multi-tenancy / multi-user auth.** Single-operator default; Tailscale network identity is the only auth in v0.1.
+- **NO Babs-managed model API quotas / cost tracking** in v0.1. Operator manages provider quotas externally.
+
+---
+
+## Decision Points
+
+The roadmap can be **paused at any milestone**. V0-S, V0-M, V0-L are all defensible stopping points:
+
+- Stop at V0-S → Babs is "multi-AI tab in browser with persistence" (useful but minimal differentiation)
+- Stop at V0-M → Babs is "filesystem-first ticket-driven multi-agent system" (the strongest differentiator vs market)
+- Stop at V0-L → Babs is "AI city with autonomous orchestration" (research/flagship)
+
+Decision criterion: at each milestone, ask "is the additional feature set worth the next phase batch?" If no — V0-M is a perfectly good shipping product.
 
 ---
 
@@ -99,4 +227,4 @@ If a phase is started and abandoned, its branch / WIP commits stay in git histor
 
 | Date | Change | By |
 |------|--------|----|
-| 2026-05-03 | Initial draft — five-phase roadmap with kill criteria | Claude Code |
+| 2026-05-03 | Full rewrite from earlier 5-phase plan; new 17-phase (with 6.5) Bootstrap → Flywheel structure; incorporates Trinity review (`BAB-1006`); β + γ (`BAB-1110`); ticket-everything (`BAB-1111`); multi-CLI (`BAB-1112`); v0.1 scope narrowing (`BAB-1109`) | Claude Code |

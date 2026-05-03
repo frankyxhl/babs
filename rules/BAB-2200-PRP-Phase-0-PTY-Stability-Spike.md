@@ -9,7 +9,7 @@
 
 ## What Is It?
 
-The first build phase. A throwaway repo `babs_pty_spike/` that runs the empirical erlexec PTY stability test defined in `BAB-1502`. This phase **gates everything else** — Phase 1 production code does not start until Phase 0 produces a pass/fail decision recorded against `BAB-1103`.
+The first build phase. A self-contained sub-mix-project at `spikes/hardline/` (inside this repo) that runs the empirical erlexec PTY stability test defined in `BAB-1502`. This phase **gates everything else** — Phase 1 production code does not start until Phase 0 produces a pass/fail decision recorded against `BAB-1103`. The `hardline` name is from *The Matrix*'s wired cross-world phones; the full naming exploration is in `BAB-1005`.
 
 ---
 
@@ -25,20 +25,24 @@ Building Phase 1+ on Method A and discovering the failure mode in production mea
 
 ### Scope
 
-A separate repo at `~/Projects/babs_pty_spike/` (NOT inside `babs/`):
+A self-contained sub-mix-project at `spikes/hardline/` inside this repo. It has its own `mix.exs` and is isolated from the (yet-to-exist) main `:babs` mix project — if the spike fails and a different PTY substrate is chosen, the directory is deleted in one move without touching the main project.
 
 ```
-babs_pty_spike/
-├── mix.exs                  (single dep: {:erlexec, "~> 2.3"})
+spikes/hardline/
+├── mix.exs                  (deps: {:erlexec, "~> 2.2"}, {:phoenix, "~> 1.8"} for Channel test, {:phoenix_live_view, "~> 1.0"} optional)
 ├── lib/
-│   ├── spike.ex             (top-level API: start, stop, report)
-│   ├── spike/runner.ex      (provisions N tmux sessions, attaches via erlexec)
-│   ├── spike/chaos.ex       (kill-port-at-random)
-│   ├── spike/observer.ex    (logs every port event + tmux state to file)
-│   └── spike/scenarios.ex   (resize storm, slow reader, soak)
-├── results/                 (per-run subdir: logs, SUMMARY.md, metrics CSV)
-└── README.md                (how to run, how to read results)
+│   ├── hardline.ex             (top-level API: start, stop, report)
+│   ├── hardline/runner.ex      (provisions N tmux sessions, attaches via erlexec)
+│   ├── hardline/chaos.ex       (kill-port-at-random)
+│   ├── hardline/observer.ex    (logs every port event + tmux state to file)
+│   ├── hardline/scenarios.ex   (resize storm, slow reader, soak)
+│   └── hardline/web/           (minimal Phoenix Endpoint + Channel + xterm.js page for byte-path validation)
+├── priv/static/                (xterm.js, addon-fit, single index.html)
+├── results/                    (per-run subdir: logs, SUMMARY.md, metrics CSV)
+└── README.md                   (how to run, how to read results; references BAB-1005 for name origin)
 ```
+
+**Note on dep version:** `{:erlexec, "~> 2.3"}` does not exist on Hex (latest published is in the 2.2 line as of 2026-05-03). Use `~> 2.2` and pin in `mix.lock`. If a newer major appears before Phase 0 starts, re-evaluate.
 
 ### Execution
 
@@ -52,23 +56,27 @@ A single CHG appended to `BAB-1103`'s Change History recording: pass/fail + the 
 
 ### Implementation Plan
 
-1. Create the `babs_pty_spike/` repo (outside babs/)
-2. Implement `Spike.Runner` (~50 LOC) and verify mix compile + erlexec build on the target machine — if C++ build fails, halt and triage toolchain
-3. Implement `Spike.Observer` (~30 LOC, just `:exec.run/2` + receive loop into a file)
-4. Implement `Spike.Chaos` (~20 LOC, periodic SIGTERM/SIGKILL of random `os_pid`)
-5. Implement `Spike.Scenarios.resize_storm/0` and `Spike.Scenarios.slow_reader/0`
-6. Run scenarios per `BAB-1502` step sequence
-7. Compile `SUMMARY.md` per `BAB-1502` Output Artifacts section
-8. File CHG against `BAB-1103`
+1. Create `spikes/hardline/` sub-mix-project inside this repo (isolated from any future main `:babs` app)
+2. Implement `Hardline.Runner` (~50 LOC) and verify mix compile + erlexec build on the target machine — if C++ build fails, halt and triage toolchain
+3. Implement `Hardline.Observer` (~30 LOC, just `:exec.run/2` + receive loop into a file)
+4. Implement `Hardline.Chaos` (~20 LOC, periodic SIGTERM/SIGKILL of random `os_pid`)
+5. Implement `Hardline.Scenarios.resize_storm/0` and `Hardline.Scenarios.slow_reader/0`
+6. Implement `Hardline.Web` — minimal Phoenix Endpoint + one Channel that pushes raw PTY bytes to xterm.js in `priv/static/index.html`. This validates the **full Phase 4 byte path** (PTY → BEAM → Channel → WebSocket → xterm.js render) end-to-end, which `BAB-1502` did not cover in its original scope (HIGH-severity finding from prior multi-model review)
+7. **Implement `Hardline.Detach` — detach + reattach scenario** (per `BAB-1110` Trinity-mandated): start a tmux session detached (`tmux new-session -d`), open `erlexec` port that attaches; soak 30 min; kill the BEAM-side `erlexec` port (simulate `:babs_citizens` reload); verify tmux session and AI CLI inside survive; open fresh `erlexec` port that re-attaches to the same session; verify zero byte loss across the gap; the AI CLI process inside tmux must continue uninterrupted. **This validates the Phase 2 chicken-and-egg solution**.
+8. Run scenarios per `BAB-1502` step sequence + the Channel→xterm.js byte-path scenario from step 6 + the detach/reattach scenario from step 7
+9. Compile `SUMMARY.md` per `BAB-1502` Output Artifacts section
+10. File CHG against `BAB-1103` (PTY substrate decision), `BAB-1106` (LiveView/Channels/PTY decision — Channel→xterm.js leg now empirically validated), and `BAB-1110` (β + γ — detach/reattach validated)
 
 ### Acceptance
 
 This PRP is "done" when:
 
-- The `babs_pty_spike/` repo exists, compiles, and runs end-to-end
+- `spikes/hardline/` compiles and runs end-to-end on the target machine
 - A complete run's `results/run-YYYY-MM-DD/` exists with logs + SUMMARY
-- `BAB-1103` has a Change History entry recording the pass/fail
-- If fail: a follow-up CHG against affected downstream PRPs is filed
+- The Channel→xterm.js byte-path test renders a TUI session (e.g. `htop` or a real Claude/Codex CLI invocation) in a browser tab without dropped bytes, mangled escape sequences, or visible cursor desync over a 30-minute soak
+- The **detach + reattach scenario** passes: tmux session + AI CLI process survive an `erlexec` port kill; fresh port attaches to the same session and resumes byte streaming with **zero loss across the gap** (per `BAB-1110`'s β + γ requirement)
+- `BAB-1103`, `BAB-1106`, and `BAB-1110` have Change History entries recording the pass/fail of their respective slices
+- If fail: a follow-up CHG against affected downstream PRPs is filed; specifically, if detach/reattach fails, `BAB-1110` must downgrade γ and Phase 1 SEED rewrites accordingly (chicken-and-egg fix becomes harder)
 
 ---
 
@@ -85,3 +93,5 @@ This PRP is "done" when:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial draft | Claude Code |
+| 2026-05-03 | Integral revision (D8): spike location moved to `spikes/hardline/` inside babs repo (option a, sub-mix-project); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added Channel→xterm.js byte-path validation as new step 6 + acceptance criterion (HIGH-severity review finding now covered); CHG output now files against both `BAB-1103` and `BAB-1106`. Naming origin: `BAB-1005`. **Note:** `BAB-1502` SOP still describes the original scope and should be amended in Round 0a to incorporate the byte-path scenario | Claude Code |
+| 2026-05-03 | Trinity-driven amendment (D13/D14): added step 7 = detach + reattach scenario (validates `BAB-1110` β + γ chicken-and-egg solution); added detach/reattach acceptance criterion; CHG output now also files against `BAB-1110` | Claude Code |

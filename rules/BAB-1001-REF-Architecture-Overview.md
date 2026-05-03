@@ -3,7 +3,26 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Active
+**Status:** Partially Superseded
+
+---
+
+## ⚠️ Partially Superseded by v0.1 Scope Redefinition (2026-05-03)
+
+This document was authored under the original 5-phase scope. The v0.1 redefinition narrowed and restructured Babs significantly. **Refer to these documents first**; this doc remains for historical context and architectural pieces still valid (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination).
+
+| Topic | Authoritative source |
+|-------|--------------------|
+| OTP application structure (single vs umbrella) | `BAB-1110` (β: two OTP apps) |
+| Tmux lifecycle ownership | `BAB-1107` |
+| Build phase sequencing | `BAB-2300` (17-phase Bootstrap → Flywheel) |
+| Cross-machine A2A scope | `BAB-1109` (UI federation only in v0.1) |
+| Coordination primitive | `BAB-1111` (unified Ticket replaces Mission/Assignment) |
+| AI CLI choice | `BAB-1112` (multi-CLI from day 1) |
+| Vocabulary | `BAB-1002` v0.1 section |
+| Naming for `*.bob/` | Still valid as written below |
+
+A full rewrite of this document will be done by Babs Citizens themselves once the flywheel is alive (post-Phase 1).
 
 ---
 

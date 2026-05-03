@@ -13,7 +13,84 @@ The project's vocabulary. Defines the meaning of every term that appears in code
 
 ---
 
-## The Names
+## ⚠️ v0.1 Scope Notice (2026-05-03 update)
+
+This document was authored under the original 5-phase scope (with Discord/Telegram connectors and cross-node A2A). The v0.1 scope redefinition narrowed Babs significantly. **Read the "v0.1 Vocabulary (Authoritative)" section below first**; it supersedes terms in the legacy sections where they conflict. Terms still valid: `Babs`, `Citizen`, `*.bob/`, `Tmux.Core` (now generalized as `Hardline`), `Family Naming`. Terms partially superseded: `Citizen.Server`, `PaneSession`, `ChannelWorker`, `Connector`, `A2A`. See `BAB-1109` (UI federation only), `BAB-1110` (β + γ), `BAB-1111` (Ticket replaces A2A messaging), `BAB-1112` (multi-CLI).
+
+---
+
+## v0.1 Vocabulary (Authoritative)
+
+These terms reflect the current v0.1 design. They take precedence over legacy sections.
+
+### Hardline
+
+The PTY/byte channel between BEAM and a `tmux` pane. **1:1 with one Citizen execution** (one Citizen = one active Hardline; one Hardline owns one tmux session).
+
+Implemented as `Hardline.Pane` GenServer (in `:babs_citizens` OTP app — see `BAB-1110`). Holds an `erlexec` port. Publishes received bytes to `Phoenix.PubSub` topic `pane:<name>`; provides `inject/2` for input.
+
+Replaces the old `Tmux.Core` + `PaneSession` split. Origin: *The Matrix* hardline phones (see `BAB-1005`).
+
+### Ticket
+
+The unified primitive for representing work in Babs. Each Ticket = one markdown file + one history JSONL file:
+
+```
+tickets/T-2026-05-03-001.md
+tickets/T-2026-05-03-001.history.jsonl
+```
+
+Ticket has `type` field (`assignment`, `mission`, `proposal`, etc.) and a 6-state lifecycle (Open / In Progress / Pending Approval / Closed / Cancelled + Rejected transition). See `BAB-1111` for full schema.
+
+Replaces three earlier separate concepts: Mission, Assignment, Need. The collapse into Ticket is per ServiceNow / Linear / Jira issue-typing precedent.
+
+### Billboard
+
+The `tickets/` directory itself, viewed as a coordination surface. Tickets with `state: open, assignee: null` are "on the billboard" (unassigned, awaiting pickup or Mayor proposal). Subscription = filesystem watcher (FSEvents on macOS).
+
+There is no separate Billboard data structure — the filesystem is the billboard. See `BAB-1111`.
+
+### Mayor
+
+A special Citizen with `is_mayor: true` (V0-L only — Phase 15 in `BAB-2300`). Reads the Billboard, proposes ticket trees + citizen lists, awaits user approval, writes approved tickets to disk. **Not implemented in v0.1 (V0-S or V0-M)**; SQLite reserved field `is_mayor` is set false in v0.1.
+
+### Inspector
+
+A Citizen with `role: inspector` (V0-L only — Phase 14). Reviews tickets in `Pending Approval` state and decides approve/reject. In v0.1 (V0-S/V0-M), the inspector role is fulfilled by the human user.
+
+### Mission (deprecated as runtime concept; reborn as `Ticket(type=mission)`)
+
+**Do not use "Mission" as an independent term in code or new docs.** The earlier design had Mission as a long-running unit; this is now `Ticket(type=mission)`. Mission as a noun in casual conversation can still mean "a project a Citizen is working on", but that's user-facing language, not a runtime entity.
+
+### Thread (deprecated; replaced by `Ticket(type=assignment)`)
+
+The earlier design tried "Thread" for a unit-of-work; rejected because it collides with OS thread / BEAM scheduler thread terminology. **Do not use "Thread" in code or docs.**
+
+### Citizen (refined for v0.1)
+
+Same as legacy section, but: a Citizen now has at most ONE active Hardline (= one tmux session) at a time in v0.1 (serial execution); multiple parallel Tickets per Citizen is deferred to v0.2+. Each Citizen has:
+- A `<name>.bob/` directory (config + transcripts + AI-CLI workspace)
+- A `<name>.bob/citizen.toml` declaring `cli`, `cli_args`, `cwd`, `env`, optional `role` (see `BAB-1112`)
+- A SQLite `citizens` row with `name`, `cwd`, `cli`, `status`, `role` (nullable), `is_mayor`, `metadata`
+- A supervised subtree in `:babs_citizens` OTP app
+
+### Two OTP Apps: `:babs` and `:babs_citizens`
+
+`:babs` = Phoenix web app (Endpoint, LiveView, Channels, BabsWeb). `:babs_citizens` = Citizen lifecycle (DynamicSupervisor, Hardline.Pane, tmux ownership). They reload independently for live-reload-safety. See `BAB-1110`.
+
+### Multi-CLI
+
+Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `gh copilot`, plus future. Per-citizen `citizen.toml` declares `cli` + `cli_args` + `env`. See `BAB-1112`.
+
+### Babs ↔ Alfred Boundary
+
+Babs runs Citizens; Alfred (`af`) provides SOPs. Babs does NOT parse SOPs — Citizens themselves invoke `af` directly inside their tmux pane. Convention only. See `BAB-1108`.
+
+---
+
+## Legacy Vocabulary (some terms below are partially superseded; see notice above)
+
+
 
 ### Babs
 
