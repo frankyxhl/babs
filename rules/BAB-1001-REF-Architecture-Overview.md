@@ -57,7 +57,7 @@ Babs OTP release  (CLI: bb)
    │
    └─ BabsWeb.Endpoint
        ├─ LiveView      → state UI (dashboard / status / ops / diagram)
-       └─ Channels      → raw PTY byte streams (direct to PaneSession; bypasses PubSub)
+       └─ Channels      → raw PTY byte streams (subscribe `pane:<name>` PubSub topic published by Hardline.Pane — see `BAB-1106` v0.1 amendment; the "direct to PaneSession; bypasses PubSub" wording in earlier drafts is REVERSED)
 ```
 
 ---
