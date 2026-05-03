@@ -12,6 +12,7 @@
 | 1001 | REF | Architecture Overview |
 | 1002 | REF | Naming and Vocabulary |
 | 1003 | REF | Glossary of Boundaries |
+| 1004 | REF | UI Design Spec |
 | 1100 | ADR | Adopt Elixir Phoenix |
 | 1101 | ADR | Project Name Babs |
 | 1102 | ADR | Citizen as Supervised Subtree |
@@ -24,6 +25,12 @@
 | 1800 | REF | Evolution Philosophy |
 | 1801 | SOP | Evolve Babs |
 | 2100 | SOP | Workflow Routing PRJ |
+| 2200 | PRP | Phase 0 PTY Stability Spike |
+| 2201 | PRP | Phase 1 Core Supervision Skeleton |
+| 2202 | PRP | Phase 2 A2A and First Citizen |
+| 2203 | PRP | Phase 3 Connectors |
+| 2204 | PRP | Phase 4 BabsWeb |
+| 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 
 ---
