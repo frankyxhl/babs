@@ -3,7 +3,14 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted (full implementation gated to V0-M / Phase 7+; see `BAB-2300`)
+**Status:** Accepted
+**Implementation gate:** Full implementation gated to V0-M / Phase 7+; see `BAB-2300`
+
+---
+
+## What Is It?
+
+The decision to represent **all** work in Babs (project-level needs, citizen-execution units, mayor proposals, public-billboard items) as a single filesystem-first primitive called a **Ticket** — a markdown file with YAML frontmatter, accompanied by an append-only history JSONL — discriminated by a `type` field (`assignment` / `mission` / `proposal` / etc.). Replaces the earlier separate concepts of Mission, Assignment, and Need with one unified primitive in the manner of Linear / Jira issue typing.
 
 ---
 
@@ -175,3 +182,4 @@ SQLite still exists for `citizens` table (auto-respawn requires queryable struct
 |------|--------|----|
 | 2026-05-03 | Initial decision; ticket-everything model adopted | Claude Code |
 | 2026-05-03 | Trinity 2nd-round fixes: schema `assignee: alex` → `assignees: [alex]` (list form forward-compatible with multi-assignee in Phase 12); added explicit `bb` CLI Transport Specification (Elixir escript over UDS at `/tmp/babs-<uid>.sock`, JSON, mode-0700 auth, gated to Phase 7 implementation); clarified `Babs.Ticket.Writer` lives in `:babs_citizens` OTP app | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Accepted`; move implementation gate into a dedicated metadata field | Codex |

@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted (with v0.1 Amendments — see banner)
+**Status:** Accepted
 
 ---
 
@@ -123,3 +123,4 @@ Use `Application.start/2` for each citizen, giving it its own application superv
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial version — codifies the subtree-per-citizen pattern | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Accepted`; v0.1 amendments remain authoritative in the banner | Codex |

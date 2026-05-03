@@ -3,11 +3,11 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Partially Superseded
+**Status:** Active
 
 ---
 
-## ⚠️ Partially Superseded by v0.1 Scope Redefinition (2026-05-03)
+## ⚠️ v0.1 Scope Amendments — Substantial (2026-05-03)
 
 This document was authored under the original 5-phase scope. The v0.1 redefinition narrowed and restructured Babs significantly. **Refer to these documents first**; this doc remains for historical context and architectural pieces still valid (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination).
 
@@ -22,7 +22,7 @@ This document was authored under the original 5-phase scope. The v0.1 redefiniti
 | Vocabulary | `BAB-1002` v0.1 section |
 | Naming for `*.bob/` | Still valid as written below |
 
-A full rewrite of this document will be done by Babs Citizens themselves once the flywheel is alive (post-Phase 1).
+The amendments are **substantial** — the build-phase sequencing, OTP application structure, cross-machine model, and coordination primitive have all changed. The doc remains as historical context plus the still-valid pieces (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination, `*.bob/` convention). A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
 ---
 
@@ -180,3 +180,4 @@ Babs is a from-scratch project. The build is sequenced to surface high-risk bets
 |------|--------|----|
 | 2026-05-03 | Initial version — captures the architecture decided in the design discussion | Claude Code |
 | 2026-05-03 | Drop migration framing; reframe Phase plan as from-scratch build phases | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |

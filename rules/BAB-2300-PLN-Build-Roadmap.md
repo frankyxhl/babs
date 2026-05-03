@@ -39,7 +39,7 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 ### Phase 0 — Hardline PTY Spike
 
 **Doc**: `BAB-2200` (full PRP, drafted)
-**Output**: `spikes/hardline/` sub-mix-project; CHG entries on `BAB-1103` and `BAB-1106`
+**Output**: `spikes/hardline/` sub-mix-project; CHG entries on `BAB-1103`, `BAB-1106`, and `BAB-1110`
 **Acceptance**: 24-48h soak + chaos kill + 30-min Channel render no dropped bytes; **detach + reattach scenario** validates that erlexec ports can attach to pre-existing tmux sessions without byte loss (per `BAB-1110` and Trinity findings)
 **Estimate**: 3-5 days
 **Built by**: human
@@ -228,3 +228,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Full rewrite from earlier 5-phase plan; new 17-phase (with 6.5) Bootstrap → Flywheel structure; incorporates Trinity review (`BAB-1006`); β + γ (`BAB-1110`); ticket-everything (`BAB-1111`); multi-CLI (`BAB-1112`); v0.1 scope narrowing (`BAB-1109`) | Claude Code |
+| 2026-05-03 | Sync Phase 0 output with amended `BAB-1502`; validation now records CHG entries on `BAB-1103`, `BAB-1106`, and `BAB-1110` | Codex |

@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted (with v0.1 Amendments — see banner)
+**Status:** Accepted
 
 ---
 
@@ -185,3 +185,4 @@ If we *did* have multiple browsers viewing the same terminal simultaneously (rar
 |------|--------|----|
 | 2026-05-03 | Initial version — LiveView for state, Channels for bytes, no PubSub on terminal hot path | Claude Code |
 | 2026-05-03 | Add React-via-LiveView-hooks layer for complex widgets; explicitly name xterm.js as the browser terminal renderer | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Accepted`; v0.1 amendments and stale-body warning remain authoritative | Codex |

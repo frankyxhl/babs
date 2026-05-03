@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Accepted (Amended for v0.1 — see banner)
+**Status:** Accepted
 
 ---
 
@@ -128,3 +128,4 @@ Use gRPC + protobuf instead of HTTP JSON-RPC.
 |------|--------|----|
 | 2026-05-03 | Initial version — split intra/inter, HTTP for inter (not :erpc) | Claude Code |
 | 2026-05-03 | Reframe to from-scratch (drop "Python relay migration compatibility" justification) | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Accepted`; v0.1 amendment remains authoritative in the banner | Codex |

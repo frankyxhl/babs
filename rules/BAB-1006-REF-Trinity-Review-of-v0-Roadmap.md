@@ -3,7 +3,8 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Active (historical record)
+**Status:** Active
+**Role:** Historical review archive
 **Reviewers:** Codex (GPT-5.5) / Gemini 3 / DeepSeek V4
 
 ---
@@ -150,3 +151,4 @@ A second trinity review was run AFTER all first-round changes were integrated, t
 |------|--------|----|
 | 2026-05-03 | Initial archive of trinity review and resulting design changes | Claude Code |
 | 2026-05-03 | Second-round (post-integration) review added; 8 fixes applied across BAB-1106/1107/1110/1111/2201/2300; remaining 4 nice-to-have findings deferred to post-Phase-1 | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Active`; preserve historical-record role in a dedicated metadata field | Codex |

@@ -3,11 +3,11 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Partially Superseded
+**Status:** Active
 
 ---
 
-## ⚠️ Partially Superseded by v0.1 Scope Redefinition (2026-05-03)
+## ⚠️ v0.1 Scope Amendments — Substantial (2026-05-03)
 
 This document was authored under the original 5-phase scope. v0.1 narrows boundaries:
 
@@ -17,9 +17,7 @@ This document was authored under the original 5-phase scope. v0.1 narrows bounda
 - **Ticket filesystem (`tickets/`)** is a new boundary added in V0-M per `BAB-1111`
 - **Two OTP apps** (`:babs` web + `:babs_citizens` lifecycle) per `BAB-1110` is a new internal boundary
 
-Use this document for the boundaries still in scope (PTY → see `BAB-1110`; Phoenix Endpoint, SQLite, JSONL transcripts). For changed/added boundaries, see the linked ADRs.
-
-A full rewrite will be done by Babs Citizens themselves post-Phase 1.
+The amendments are **substantial** — Discord/Telegram boundaries removed, tmux re-classified, cross-node narrowed, Ticket filesystem and two-OTP-app boundaries added. Use this document for the boundaries still in scope (PTY → see `BAB-1110`; Phoenix Endpoint, SQLite, JSONL transcripts). For changed/added boundaries, see the linked ADRs. A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
 ---
 
@@ -154,3 +152,4 @@ When a future feature looks like it needs a new boundary, **first check this glo
 |------|--------|----|
 | 2026-05-03 | Initial version — six boundaries documented; "does NOT have" list seeded | Claude Code |
 | 2026-05-03 | Drop "Python relay migration compatibility" framing on A2A boundary | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |

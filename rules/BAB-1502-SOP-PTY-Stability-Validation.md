@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-03
 **Last reviewed:** 2026-05-03
-**Status:** Active (Amended for v0.1)
+**Status:** Active
 **Depends on:** BAB-1103 (PTY method choice; Method A primary, Method B fallback), BAB-1110 (β + γ live-reload-safety)
 **Gates:** Phase 1 implementation (`BAB-2201` Phase 1 SEED Flywheel Ignition)
 **Spike location:** `/Users/frank/Projects/babs/spikes/hardline/` (sub-mix-project inside the babs repo, per `BAB-2200` D8 amendment)
@@ -150,7 +150,7 @@ In all failure cases, file CHG entries on the affected ADRs and reread `BAB-2201
 
 ### Example 2 — Critical fail (the exact failure mode the SOP exists to catch)
 
-24-hour soak: 0 unprovoked crashes. 12-hour chaos: 8 port kills, **3 tmux session deaths** (one of them with the AI CLI exiting). **Method A fails.** Activate Method B. Update `BAB-1103` Status to "Accepted (Method B active)" and add a Change History entry citing this run.
+24-hour soak: 0 unprovoked crashes. 12-hour chaos: 8 port kills, **3 tmux session deaths** (one of them with the AI CLI exiting). **Method A fails.** Activate Method B. Keep `BAB-1103` Status as `Accepted`, add a Method B active note in the ADR body, and add a Change History entry citing this run.
 
 ### Example 3 — Marginal result (the hard case)
 
@@ -176,3 +176,5 @@ The spike produces, in order of priority:
 |------|--------|----|
 | 2026-05-03 | Initial version — gates Phase 1+ on empirical erlexec PTY validation | Claude Code |
 | 2026-05-03 | v0.1 amendments: spike location moved to `spikes/hardline/` inside babs repo (was throwaway sibling repo); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added step 7 (detach + reattach test per `BAB-1110` β + γ); added step 8 (Channel→xterm.js byte-path test per `BAB-1106` revision); pass/fail criteria expanded to cover both new tests; output artifacts now also CHG against `BAB-1106` and `BAB-1110`; Phase 0 → Phase 1 handoff artifact list added per Trinity 2nd-round review | Claude Code |
+| 2026-05-03 | Normalize Status metadata to `Active`; v0.1 amendment details remain in the change history and body metadata | Codex |
+| 2026-05-03 | Clarify Method B activation records a body note plus Change History entry while keeping ADR Status parseable | Codex |

@@ -91,7 +91,7 @@ Beyond the inherited COR guard rails:
 
 - **Never weaken supervision strategy** without an ADR. Changing `:rest_for_one` to `:one_for_one` on a CitizenSupervisor is an ADR-grade decision.
 - **Never introduce a new boundary** (new external service, new on-disk persistence, new wire protocol) via the evolve loop. Boundaries are defined in `BAB-1003` and changed via PRP+ADR.
-- **Never collapse the LiveView/Channel split** for the dashboard. The PubSub-bypass on terminal bytes (`BAB-1106`) is a perf decision, not stylistic; evolve-loop refactors that touch it must score against `BAB-1106` explicitly.
+- **Never collapse the LiveView/Channel split** for the dashboard. The Channel→PubSub→xterm.js byte path (`BAB-1106`) is a live-reload-safety decision, not stylistic; evolve-loop refactors that touch it must score against `BAB-1106` explicitly.
 
 ---
 
@@ -100,3 +100,4 @@ Beyond the inherited COR guard rails:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial PRJ override of COR-1800 for Babs runtime system | Claude Code |
+| 2026-05-03 | Update LiveView/Channel guard rail to match `BAB-1106` v0.1 PubSub byte-path amendment | Codex |

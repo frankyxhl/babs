@@ -52,7 +52,7 @@ Total wall-clock: ~3-4 days for a full pass with margin. Engineer attention: ~4-
 
 ### Output
 
-A single CHG appended to `BAB-1103`'s Change History recording: pass/fail + the run's `results/run-YYYY-MM-DD/SUMMARY.md` path. If pass, `BAB-1103` Method A is empirically validated. If fail, Method A status is downgraded and Method B becomes mandatory; downstream PRPs (`BAB-2201`+) get a CHG noting the implication.
+CHG entries appended to `BAB-1103`, `BAB-1106`, and `BAB-1110` recording each validated slice plus the run's `results/run-YYYY-MM-DD/SUMMARY.md` path. If pass, `BAB-1103` Method A is empirically validated, `BAB-1106`'s Channel→xterm.js byte path is validated, and `BAB-1110`'s β + γ detach/reattach path is validated. If fail, the failure mode determines which ADR and downstream PRPs (`BAB-2201`+) need follow-up CHGs.
 
 ### Implementation Plan
 
@@ -93,5 +93,6 @@ This PRP is "done" when:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial draft | Claude Code |
-| 2026-05-03 | Integral revision (D8): spike location moved to `spikes/hardline/` inside babs repo (option a, sub-mix-project); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added Channel→xterm.js byte-path validation as new step 6 + acceptance criterion (HIGH-severity review finding now covered); CHG output now files against both `BAB-1103` and `BAB-1106`. Naming origin: `BAB-1005`. **Note:** `BAB-1502` SOP still describes the original scope and should be amended in Round 0a to incorporate the byte-path scenario | Claude Code |
+| 2026-05-03 | Integral revision (D8): spike location moved to `spikes/hardline/` inside babs repo (option a, sub-mix-project); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added Channel→xterm.js byte-path validation as new step 6 + acceptance criterion (HIGH-severity review finding now covered); CHG output now files against both `BAB-1103` and `BAB-1106`. Naming origin: `BAB-1005` | Claude Code |
 | 2026-05-03 | Trinity-driven amendment (D13/D14): added step 7 = detach + reattach scenario (validates `BAB-1110` β + γ chicken-and-egg solution); added detach/reattach acceptance criterion; CHG output now also files against `BAB-1110` | Claude Code |
+| 2026-05-03 | Sync Output section and Change History wording with amended `BAB-1502`; Phase 0 now explicitly records CHG entries against `BAB-1103`, `BAB-1106`, and `BAB-1110` | Codex |
