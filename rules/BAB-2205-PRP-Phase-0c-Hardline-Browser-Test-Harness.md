@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-04
-**Status:** Draft
+**Status:** Implemented
 **Depends on:** `BAB-2203` Phase 0b Hardline Full-Window Mode
 **Does not replace:** `BAB-2200` official 24h+ full validation
 
@@ -159,16 +159,51 @@ Phase 0c is done when:
 - `af validate` passes.
 - No Phase 0 official validation-gate status is changed.
 
+## Implementation Result (2026-05-04)
+
+Phase 0c is implemented in `spikes/hardline/`.
+
+Implementation:
+
+- `index.html` now keeps structure/CSS/CDN library includes and loads
+  `/js/hardline_boot.js` as a module instead of carrying the bulk browser
+  manager JavaScript inline.
+- Pure browser logic lives in `priv/static/js/hardline_core.js`, covering URL
+  mode parsing, full-window URL construction, shell preset command selection,
+  command labels, slug suggestions, status-dot descriptors, stale-active
+  selection handling, and full-mode unavailable messages.
+- DOM/API/Phoenix Channel/xterm.js/lucide wiring lives in
+  `priv/static/js/hardline_manager.js`, with exported DOM helpers for tests.
+- Stable `data-testid` hooks were added to the create form, slug controls,
+  active-session actions, session rows/status dots, terminal, overlay, and
+  status surfaces.
+- `Plug.Static` now serves the `priv/static/js/` module directory.
+- A local Node/Playwright browser test toolchain was added under
+  `spikes/hardline/`.
+
+Validation evidence:
+
+- `npm run test:js` passed: 9 pure JavaScript tests.
+- `npm run test:e2e` passed: 10 Playwright DOM/E2E tests.
+- Playwright E2E starts `mix hardline.web` on localhost with a unique
+  `babs-e2e-*` tmux prefix and cleans up temporary managed sessions after each
+  run.
+- Browser E2E covers default-shell creation, zsh-fast fallback creation,
+  slug suggestion/reroll, select/connect/type with `dup:0`, full-window launch,
+  full-window refresh/reconnect to the same tmux session, stop without touching
+  another managed session, and missing-session full-mode overlay.
+- `mise exec -- mix test` passed: 59 tests, 0 failures.
+- The official Phase 0 full validation gate remains deferred and unchanged.
+
 ---
 
 ## Open Questions
 
-- Whether to use `vitest` plus Playwright, or Playwright's component/test runner
-  alone for both JS logic and browser E2E.
-- Whether browser tests should be invoked directly by npm scripts or wrapped in
-  a Mix task such as `mix hardline.browser_test`.
-- Whether Playwright browser binaries should be installed on demand or treated
-  as an explicit local prerequisite.
+- Resolved for Phase 0c: use Node's built-in test runner for pure JavaScript and
+  Playwright for DOM/E2E, invoked through npm scripts rather than a Mix wrapper.
+- Remaining operational prerequisite: Playwright uses local Google Chrome by
+  default. If a future CI environment lacks Chrome, install Playwright's
+  managed browser binaries and run with `HARDLINE_E2E_CHANNEL=managed`.
 
 ---
 
@@ -177,3 +212,4 @@ Phase 0c is done when:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-04 | Initial Phase 0c plan for Hardline browser test harness and JS refactor | Codex |
+| 2026-05-04 | Implemented Phase 0c JS extraction plus Node/Playwright browser tests; local JS, E2E, and ExUnit validation passed | Codex |
