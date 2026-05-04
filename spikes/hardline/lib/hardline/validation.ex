@@ -80,14 +80,16 @@ defmodule Hardline.Validation do
       |> step(:web_byte_path, fn ctx -> web_byte_path(ctx, web_confirmed?, log_path) end)
       |> cleanup(log_path)
 
+    status = overall_status(results)
     summary = write_summary!(run_dir, profile_name, profile, results, web_confirmed?)
 
     Observer.append_event(log_path, :validation_finish, %{
-      status: overall_status(results),
+      status: status,
       summary: summary
     })
 
-    {:ok, %{run_dir: run_dir, log_path: log_path, summary: summary, results: results}}
+    {:ok,
+     %{run_dir: run_dir, log_path: log_path, summary: summary, results: results, status: status}}
   end
 
   def create_run_dir!(root \\ Path.expand("results", File.cwd!())) do

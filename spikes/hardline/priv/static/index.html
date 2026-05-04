@@ -626,8 +626,14 @@
         suggestSlugIfEmpty();
 
         if (active) {
-          active = sessions.find((session) => session.slug === active.slug) || active;
-          renderActive();
+          const nextActive = sessions.find((session) => session.slug === active.slug);
+
+          if (nextActive) {
+            active = nextActive;
+            renderActive();
+          } else {
+            clearActiveSession(`Session not found: ${active.slug}`);
+          }
         }
 
         if (fullMode && !fullSelectionAttempted) {
@@ -730,6 +736,26 @@
         elements.metaCommand.textContent = commandLabel(active);
         elements.stop.disabled = false;
         elements.openFull.disabled = !active.alive;
+      }
+
+      function clearActiveSession(message) {
+        if (channel) {
+          channel.leave();
+          channel = null;
+        }
+
+        active = null;
+        joined = false;
+        term.clear();
+        renderSessions();
+        renderActive();
+        setSocketStatus("idle");
+
+        if (fullMode) {
+          showFullError(message);
+        } else {
+          setMessage(message);
+        }
       }
 
       function commandLabel(session) {

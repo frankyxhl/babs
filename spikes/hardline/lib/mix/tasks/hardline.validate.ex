@@ -52,5 +52,13 @@ defmodule Mix.Tasks.Hardline.Validate do
     Mix.shell().info("Run dir: #{result.run_dir}")
     Mix.shell().info("Summary: #{result.summary}")
     Mix.shell().info("Events: #{result.log_path}")
+
+    if exit_status(result) != 0 do
+      Mix.raise("Hardline validation status #{result.status}; see #{result.summary}")
+    end
   end
+
+  @doc false
+  def exit_status(%{status: "PASS"}), do: 0
+  def exit_status(_result), do: 1
 end

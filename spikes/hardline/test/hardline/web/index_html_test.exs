@@ -50,6 +50,16 @@ defmodule Hardline.Web.IndexHtmlTest do
     refute html =~ ">down<"
   end
 
+  test "drops stale active session after refresh removes it" do
+    html = index_html()
+
+    assert html =~ "const nextActive = sessions.find((session) => session.slug === active.slug);"
+    assert html =~ "clearActiveSession(`Session not found: ${active.slug}`)"
+    assert html =~ "function clearActiveSession(message)"
+    assert html =~ "channel.leave();"
+    refute html =~ "|| active"
+  end
+
   test "prefills session slugs from fruit and character suggestions" do
     html = index_html()
 
