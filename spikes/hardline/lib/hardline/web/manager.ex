@@ -99,13 +99,18 @@ defmodule Hardline.Web.Manager do
     |> Enum.reduce(state, fn session, acc ->
       slug = slug_from_session(session, acc.prefix)
 
-      if Map.has_key?(acc.sessions, slug) do
-        acc
-      else
-        case attach_existing(slug, session, acc) do
-          {:ok, next} -> next
-          {:error, _reason} -> acc
-        end
+      cond do
+        not valid_slug?(slug) ->
+          acc
+
+        Map.has_key?(acc.sessions, slug) ->
+          acc
+
+        true ->
+          case attach_existing(slug, session, acc) do
+            {:ok, next} -> next
+            {:error, _reason} -> acc
+          end
       end
     end)
   end

@@ -11,6 +11,45 @@ defmodule Hardline.ValidationTest do
                  end
   end
 
+  test "creates supplied run directory before writing validation logs" do
+    parent =
+      Path.join(
+        System.tmp_dir!(),
+        "hardline-validation-missing-run-dir-test-#{System.unique_integer([:positive])}"
+      )
+
+    run_dir = Path.join([parent, "nested", "run"])
+
+    on_exit(fn ->
+      File.rm_rf!(parent)
+    end)
+
+    profile = %{
+      fleet_count: 0,
+      soak_seconds: 0,
+      chaos_seconds: 0,
+      chaos_interval_seconds: 1,
+      resize_seconds: 0,
+      slow_reader_seconds: 0,
+      detach_count: 0,
+      detach_seconds: 0,
+      web_seconds: 0
+    }
+
+    {:ok, result} =
+      Validation.run(
+        profile: "smoke",
+        profile_config: profile,
+        prefix: "babs-validation-test-#{System.unique_integer([:positive])}",
+        run_dir: run_dir
+      )
+
+    assert File.dir?(run_dir)
+    assert result.log_path == Path.join(run_dir, "events.log")
+    assert File.read!(result.log_path) =~ "event=validation_start"
+    assert File.exists?(result.summary)
+  end
+
   test "cleans up tmux sessions when provision proof fails after attach" do
     prefix = "babs-validation-test-#{System.unique_integer([:positive])}"
 

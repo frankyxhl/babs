@@ -78,6 +78,16 @@ defmodule Hardline.Web.ManagerTest do
     assert [%{slug: "existing", session: ^session, alive: true}] = sessions
   end
 
+  test "skips existing prefixed tmux sessions with invalid derived slugs", %{prefix: prefix} do
+    invalid_session = "#{prefix}-foo_bar"
+    assert :ok = Runner.start_session(invalid_session, Runner.default_shell_command())
+
+    start_supervised!({Manager, prefix: prefix, command: Runner.default_shell_command()})
+
+    assert {:ok, []} = Manager.list_sessions()
+    assert Runner.tmux_session_alive?(invalid_session)
+  end
+
   test "does not list or kill unmanaged tmux sessions", %{prefix: prefix} do
     unmanaged = "operator-hardline-test-#{System.unique_integer([:positive])}"
 

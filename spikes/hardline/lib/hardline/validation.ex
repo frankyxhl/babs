@@ -61,6 +61,8 @@ defmodule Hardline.Validation do
     validate_web_confirmation!(profile_name, web_confirmed?)
 
     run_dir = Keyword.get_lazy(opts, :run_dir, fn -> create_run_dir!() end)
+    File.mkdir_p!(run_dir)
+
     log_path = Path.join(run_dir, "events.log")
 
     Observer.append_event(log_path, :validation_start, %{
