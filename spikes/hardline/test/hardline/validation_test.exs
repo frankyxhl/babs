@@ -103,4 +103,38 @@ defmodule Hardline.ValidationTest do
     assert details =~ "resize_port_downs"
     assert File.read!(result.log_path) =~ "phase=resize_storm"
   end
+
+  test "slow-reader drain leaves excluded stdout unread" do
+    run_dir =
+      Path.join(
+        System.tmp_dir!(),
+        "hardline-validation-drain-test-#{System.unique_integer([:positive])}"
+      )
+
+    File.mkdir_p!(run_dir)
+    log_path = Path.join(run_dir, "observer.log")
+
+    on_exit(fn ->
+      File.rm_rf!(run_dir)
+    end)
+
+    skipped_os_pid = 101
+    drained_os_pid = 202
+
+    send(self(), {:stdout, skipped_os_pid, "skipped"})
+    send(self(), {:stdout, drained_os_pid, "drained"})
+
+    deadline = System.monotonic_time(:second) + 1
+
+    assert Validation.drain_until(deadline, log_path, :slow_reader, %{drained_os_pid => true}) ==
+             0
+
+    assert_received {:stdout, ^skipped_os_pid, "skipped"}
+    refute_received {:stdout, ^drained_os_pid, _data}
+
+    log = File.read!(log_path)
+    assert log =~ "phase=slow_reader"
+    assert log =~ "os_pid=#{drained_os_pid}"
+    refute log =~ "os_pid=#{skipped_os_pid}"
+  end
 end

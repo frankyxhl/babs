@@ -46,6 +46,11 @@ defmodule Hardline.Web.ApiPlug do
 
   def call(conn, _opts), do: conn
 
+  @doc false
+  def normalize_manager_exit({:noproc, _call}), do: :manager_not_started
+  def normalize_manager_exit({:timeout, _call}), do: :manager_timeout
+  def normalize_manager_exit(reason), do: {:manager_exit, reason}
+
   defp call_manager(fun) do
     if Process.whereis(Manager) do
       fun.()
@@ -53,7 +58,7 @@ defmodule Hardline.Web.ApiPlug do
       {:error, :manager_not_started}
     end
   catch
-    :exit, {:noproc, _call} -> {:error, :manager_not_started}
+    :exit, reason -> {:error, normalize_manager_exit(reason)}
   end
 
   defp read_json(conn) do
@@ -83,6 +88,11 @@ defmodule Hardline.Web.ApiPlug do
 
   defp send_error(conn, :manager_not_started),
     do: send_json(conn, 503, %{error: "manager_not_started"})
+
+  defp send_error(conn, :manager_timeout), do: send_json(conn, 504, %{error: "manager_timeout"})
+
+  defp send_error(conn, {:manager_exit, reason}),
+    do: send_json(conn, 500, %{error: "manager_exit", reason: inspect(reason)})
 
   defp send_error(conn, reason), do: send_json(conn, 500, %{error: inspect(reason)})
 end

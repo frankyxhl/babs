@@ -187,7 +187,7 @@ defmodule Hardline.Validation do
   defp observe_for(ctx, phase, seconds, log_path) do
     memory_before = :erlang.memory(:total)
     deadline = monotonic_deadline(seconds)
-    port_downs = drain_until(deadline, log_path, phase, MapSet.new())
+    port_downs = drain_until(deadline, log_path, phase, :all)
     memory_after = :erlang.memory(:total)
     dead_sessions = dead_sessions(ctx.fleet)
     allowed_port_downs = allowed_unprovoked_port_downs(length(ctx.fleet), seconds)
@@ -328,8 +328,14 @@ defmodule Hardline.Validation do
 
     memory_before = :erlang.memory(:total)
 
+    drained_os_pids =
+      ctx.attachments
+      |> Enum.map(&Map.fetch!(&1, :os_pid))
+      |> Enum.reject(&(&1 == skip))
+      |> Map.new(&{&1, true})
+
     port_downs =
-      drain_until(monotonic_deadline(seconds), log_path, :slow_reader, MapSet.new([skip]))
+      drain_until(monotonic_deadline(seconds), log_path, :slow_reader, drained_os_pids)
 
     memory_after = :erlang.memory(:total)
     recovery_port_downs = drain_for(1, log_path, :slow_reader_recovery)
@@ -461,7 +467,7 @@ defmodule Hardline.Validation do
   end
 
   defp drain_for(seconds, log_path, phase) do
-    drain_until(monotonic_deadline(seconds), log_path, phase, MapSet.new())
+    drain_until(monotonic_deadline(seconds), log_path, phase, :all)
   end
 
   defp poll_messages(log_path, phase) do
@@ -492,32 +498,27 @@ defmodule Hardline.Validation do
     end
   end
 
-  defp drain_until(deadline, log_path, phase, skipped_os_pids) do
-    do_drain_until(deadline, log_path, phase, skipped_os_pids, [])
+  @doc false
+  def drain_until(deadline, log_path, phase, drained_os_pids) do
+    do_drain_until(deadline, log_path, phase, drained_os_pids)
   end
 
-  defp do_drain_until(deadline, log_path, phase, skipped_os_pids, stashed) do
+  defp do_drain_until(deadline, log_path, phase, drained_os_pids) do
     if System.monotonic_time(:second) >= deadline do
-      restore_messages(stashed)
       0
     else
       remaining = max(deadline - System.monotonic_time(:second), 0)
 
       receive do
-        {:stdout, os_pid, data} ->
-          if MapSet.member?(skipped_os_pids, os_pid) do
-            do_drain_until(deadline, log_path, phase, skipped_os_pids, [
-              {:stdout, os_pid, data} | stashed
-            ])
-          else
-            Observer.append_event(log_path, :stdout, %{
-              phase: phase,
-              os_pid: os_pid,
-              bytes: byte_size(data)
-            })
+        {:stdout, os_pid, data}
+        when drained_os_pids == :all or is_map_key(drained_os_pids, os_pid) ->
+          Observer.append_event(log_path, :stdout, %{
+            phase: phase,
+            os_pid: os_pid,
+            bytes: byte_size(data)
+          })
 
-            do_drain_until(deadline, log_path, phase, skipped_os_pids, stashed)
-          end
+          do_drain_until(deadline, log_path, phase, drained_os_pids)
 
         {:DOWN, _monitor_ref, :process, pid, reason} ->
           Observer.append_event(log_path, :port_down, %{
@@ -526,21 +527,12 @@ defmodule Hardline.Validation do
             reason: inspect(reason)
           })
 
-          1 + do_drain_until(deadline, log_path, phase, skipped_os_pids, stashed)
-
-        message ->
-          do_drain_until(deadline, log_path, phase, skipped_os_pids, [message | stashed])
+          1 + do_drain_until(deadline, log_path, phase, drained_os_pids)
       after
         min(1, remaining) * 1_000 ->
-          do_drain_until(deadline, log_path, phase, skipped_os_pids, stashed)
+          do_drain_until(deadline, log_path, phase, drained_os_pids)
       end
     end
-  end
-
-  defp restore_messages(stashed) do
-    stashed
-    |> Enum.reverse()
-    |> Enum.each(&send(self(), &1))
   end
 
   defp monotonic_deadline(seconds) do
