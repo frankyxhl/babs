@@ -1,8 +1,8 @@
 # REF-1003: Glossary of Boundaries
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Active
 
 ---
@@ -100,7 +100,7 @@ See `BAB-1106` for the LiveView vs Channel split rationale.
 ## 4. Browser ⇄ Terminal (Phoenix Channel, raw PTY bytes)
 
 > **🛑 v0.1 amendment (per `BAB-1106` revision and `BAB-1110`):** the wording in this section that says "direct messaging to PaneSession", "bypasses PubSub", and "Channel stores PaneSession PID in `socket.assigns`" is **REVERSED** in v0.1. Authoritative rules:
-> - `Hardline.Pane` (renamed from `PaneSession`, lives in `:babs_citizens` OTP app) publishes received PTY bytes to `Phoenix.PubSub` topic `pane:<name>`, chunked at ≤4 KB per message.
+> - `Hardline.Pane` (renamed from `PaneSession`, lives in `:babs_citizens` OTP app) publishes received PTY bytes to `Phoenix.PubSub` topic `pane:<slug>`, chunked at ≤4 KB per message.
 > - The Phoenix Channel subscribes that topic on `:join`, unsubscribes on terminate. **No persistent Channel PID held by `Hardline.Pane`.**
 > - On `:babs` reload, Channels die; LiveView auto-reconnects; new Channel re-subscribes the PubSub topic; `Hardline.Pane` (in `:babs_citizens`) is unaffected. This decoupling is what makes the flywheel safe.
 >
@@ -109,9 +109,9 @@ See `BAB-1106` for the LiveView vs Channel split rationale.
 | Field | Value |
 |---|---|
 | **Protocol** | Phoenix Channel over WebSocket. Topic `terminal:#{citizen_id}`. Inbound: `{"input": <utf-8 bytes>}`, `{"resize": [cols, rows]}`. Outbound: `{"output": <base64 bytes>}`. xterm.js handles terminal emulation client-side. |
-| **Owner** | `BabsWeb.TerminalChannel`. ~~Direct messaging to `Babs.Citizen.PaneSession` (no PubSub).~~ **REVERSED in v0.1**: subscribes to `Phoenix.PubSub` topic `pane:<name>` published by `Hardline.Pane` in `:babs_citizens`. |
+| **Owner** | `BabsWeb.TerminalChannel`. ~~Direct messaging to `Babs.Citizen.PaneSession` (no PubSub).~~ **REVERSED in v0.1**: subscribes to `Phoenix.PubSub` topic `pane:<slug>` published by `Hardline.Pane` in `:babs_citizens`. |
 | **Failure modes** | Browser disconnect, browser tab freeze (unbounded buffering), keystroke flooding, resize event storms, ~~PaneSession death mid-stream~~ (v0.1: PubSub topic survives independently of any single subscriber). |
-| **Contract** | ~~Channel join authenticates and stores PaneSession PID in `socket.assigns`. PaneSession monitors the Channel process so it can drop the registration if the browser disconnects. Output bytes are sent via direct Erlang messages, not PubSub broadcast. Per `BAB-1106`, this is the hot path that bypasses PubSub — keystroke latency is one BEAM hop.~~ **REVERSED in v0.1**: Channel join subscribes to `pane:<name>` PubSub topic; on terminate, unsubscribes. `Hardline.Pane` holds no PID handles. Bytes flow `Hardline.Pane → PubSub → Channel → WebSocket → xterm.js`, with PubSub publishes chunked ≤4 KB. The extra PubSub hop adds <1ms latency in practice and is the price of live-reload safety. |
+| **Contract** | ~~Channel join authenticates and stores PaneSession PID in `socket.assigns`. PaneSession monitors the Channel process so it can drop the registration if the browser disconnects. Output bytes are sent via direct Erlang messages, not PubSub broadcast. Per `BAB-1106`, this is the hot path that bypasses PubSub — keystroke latency is one BEAM hop.~~ **REVERSED in v0.1**: Channel join subscribes to `pane:<slug>` PubSub topic; on terminate, unsubscribes. `Hardline.Pane` holds no PID handles. Bytes flow `Hardline.Pane → PubSub → Channel → WebSocket → xterm.js`, with PubSub publishes chunked ≤4 KB. The extra PubSub hop adds <1ms latency in practice and is the price of live-reload safety. |
 | **Out of scope** | Multiple concurrent terminal viewers on the same citizen — in v0.1 this is **free** (any Channel that subscribes the PubSub topic gets the byte stream; no fan-out worker needed). |
 
 ---
@@ -160,3 +160,4 @@ When a future feature looks like it needs a new boundary, **first check this glo
 | 2026-05-03 | Initial version — six boundaries documented; "does NOT have" list seeded | Claude Code |
 | 2026-05-03 | Drop "Python relay migration compatibility" framing on A2A boundary | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |
+| 2026-05-04 | Trinity review follow-up: align terminal boundary amendment with authoritative `pane:<slug>` topic terminology | Codex |

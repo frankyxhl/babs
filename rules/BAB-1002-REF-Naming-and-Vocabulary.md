@@ -1,8 +1,8 @@
 # REF-1002: Naming & Vocabulary
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Active
 
 ---
@@ -13,9 +13,9 @@ The project's vocabulary. Defines the meaning of every term that appears in code
 
 ---
 
-## ⚠️ v0.1 Scope Notice (2026-05-03 update)
+## ⚠️ v0.1 Scope Notice (2026-05-04 update)
 
-This document was authored under the original 5-phase scope (with Discord/Telegram connectors and cross-node A2A). The v0.1 scope redefinition narrowed Babs significantly. **Read the "v0.1 Vocabulary (Authoritative)" section below first**; it supersedes terms in the legacy sections where they conflict. Terms still valid: `Babs`, `Citizen`, `*.bob/`, `Tmux.Core` (now generalized as `Hardline`), `Family Naming`. Terms partially superseded: `Citizen.Server`, `PaneSession`, `ChannelWorker`, `Connector`, `A2A`. See `BAB-1109` (UI federation only), `BAB-1110` (β + γ), `BAB-1111` (Ticket replaces A2A messaging), `BAB-1112` (multi-CLI).
+This document was authored under the original 5-phase scope (with Discord/Telegram connectors and cross-node A2A). The v0.1 scope redefinition narrowed Babs significantly. **Read the "v0.1 Vocabulary (Authoritative)" section below first**; it supersedes terms in the legacy sections where they conflict. Terms still valid: `Babs`, `Citizen`, `Hardline` (formerly `Tmux.Core`), `Family Naming`. Terms partially superseded: `Citizen.Server`, `PaneSession`, `ChannelWorker`, `Connector`, `A2A`. Legacy term: `*.bob/` is not used by Phase 1 runtime layout; current Phase 1 uses `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/`. See `BAB-1109` (UI federation only), `BAB-1110` (β + γ), `BAB-1111` (Ticket replaces A2A messaging), `BAB-1112` (multi-CLI).
 
 ---
 
@@ -27,7 +27,7 @@ These terms reflect the current v0.1 design. They take precedence over legacy se
 
 The PTY/byte channel between BEAM and a `tmux` pane. **1:1 with one Citizen execution** (one Citizen = one active Hardline; one Hardline owns one tmux session).
 
-Implemented as `Hardline.Pane` GenServer (in `:babs_citizens` OTP app — see `BAB-1110`). Holds an `erlexec` port. Publishes received bytes to `Phoenix.PubSub` topic `pane:<name>`; provides `inject/2` for input.
+Implemented as `Hardline.Pane` GenServer (in `:babs_citizens` OTP app — see `BAB-1110`). Holds an `erlexec` port. Publishes received bytes to `Phoenix.PubSub` topic `pane:<slug>`; provides `inject/2` for input.
 
 Replaces the old `Tmux.Core` + `PaneSession` split. Origin: *The Matrix* hardline phones (see `BAB-1005`).
 
@@ -69,9 +69,9 @@ The earlier design tried "Thread" for a unit-of-work; rejected because it collid
 ### Citizen (refined for v0.1)
 
 Same as legacy section, but: a Citizen now has at most ONE active Hardline (= one tmux session) at a time in v0.1 (serial execution); multiple parallel Tickets per Citizen is deferred to v0.2+. Each Citizen has:
-- A `<name>.bob/` directory (config + transcripts + AI-CLI workspace)
-- A `<name>.bob/citizen.toml` declaring `cli`, `cli_args`, `cwd`, `env`, optional `role` (see `BAB-1112`)
-- A SQLite `citizens` row with `name`, `cwd`, `cli`, `status`, `role` (nullable), `is_mayor`, `metadata`
+- A TOML config at `citizens/citizen-<slug>.toml` declaring `id`, `slug`, `cli`, `cli_args`, `cwd`, `env`, optional `role` (see `BAB-1112`)
+- A workspace directory at the configured `cwd`, conventionally `workspaces/<slug>/`
+- A SQLite `citizens` row with `slug`, `cwd`, `cli`, `status`, `role` (nullable), `is_mayor`, `metadata` starting in Phase 3
 - A supervised subtree in `:babs_citizens` OTP app
 
 ### Two OTP Apps: `:babs` and `:babs_citizens`
@@ -80,7 +80,12 @@ Same as legacy section, but: a Citizen now has at most ONE active Hardline (= on
 
 ### Multi-CLI
 
-Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `gh copilot`, plus future. Per-citizen `citizen.toml` declares `cli` + `cli_args` + `env`. See `BAB-1112`.
+Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `gh copilot`, plus future. Per-citizen `citizens/citizen-<slug>.toml` declares `cli` + `cli_args` + `env`. See `BAB-1112`.
+
+Phase 1 seed names are:
+- `clare` = Claude Code (`citizens/citizen-clare.toml`, `workspaces/clare/`)
+- `dylan` = Codex (`citizens/citizen-dylan.toml`, `workspaces/dylan/`)
+- `sentinel` = deterministic `/bin/zsh` reload-validation citizen (`citizens/citizen-sentinel.toml`, `workspaces/sentinel/`)
 
 ### Babs ↔ Alfred Boundary
 
@@ -102,11 +107,11 @@ The project itself. Named after **Barbara Gordon's** canonical Bat-Family nickna
 
 ### Bobs (`*.bob/`)
 
-A directory naming convention this project adopts: each citizen lives in `<name>.bob/`, e.g. `relay.bob/`, `dashboard.bob/`. The phonetic pun with **Babs** is intentional — **"Babs takes care of the Bobs"**. The runtime hosts a population of named, individually-supervised citizens.
+Legacy/deferred directory naming convention. Earlier drafts placed each citizen in `<name>.bob/`, e.g. `relay.bob/`, `dashboard.bob/`. Phase 1 does **not** use this layout; it uses `citizens/citizen-<slug>.toml` for config and `workspaces/<slug>/` for working files. Do not introduce new Phase 1 docs or code using `*.bob/` unless a later ADR deliberately reactivates the convention.
 
 ### Citizen
 
-A single AI-CLI-bearing identity hosted by Babs. Each citizen has:
+A single AI-CLI-bearing identity hosted by Babs. This legacy section describes the older layout; for Phase 1 use the authoritative v0.1 section above. In older drafts each citizen had:
 - A name (e.g. `dashboard`, `relay`, `transcript`)
 - A directory at `citizens/<name>.bob/` with its config, skills, transcripts
 - A tmux session running its AI CLI (Claude / Codex / etc.)
@@ -159,7 +164,7 @@ A module under `Babs.Connectors.*` that bridges Babs to a single external surfac
 | Use this term | Not this | Reason |
 |---|---|---|
 | Citizen | Agent | "Agent" is overloaded — it could mean an AI CLI, a Claude Code agent, a Bat-Family agent. "Citizen" is the project's specific term. |
-| `.bob/` directory | "agent dir", "bot dir" | Project convention; the pun matters. |
+| `workspaces/<slug>/` | `.bob/` directory, "agent dir", "bot dir" | Phase 1 workspace convention; `.bob/` is legacy/deferred. |
 | PaneSession | "PTY worker", "terminal process" | PaneSession is the role; PTY is the mechanism. |
 | Tmux.Core | "tmux wrapper", "erlexec module" | There is exactly one; name it definitively. |
 | Inter-node A2A | "Cross-machine A2A", "remote A2A" | Tailscale is just the network layer; "node" is the BEAM-correct term. |
@@ -191,3 +196,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 |------|--------|----|
 | 2026-05-03 | Initial version — vocabulary, family naming, anti-patterns | Claude Code |
 | 2026-05-03 | Drop legacy "inherited from prefrontal-cortex" framing for `.bob/` convention | Claude Code |
+| 2026-05-04 | Phase 1 cleanup: mark `*.bob/` as legacy/deferred, define `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`, switch Hardline topic naming to `pane:<slug>`, and record Clare/Dylan/Sentinel seed names | Codex |
