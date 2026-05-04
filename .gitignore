@@ -27,6 +27,7 @@ test-results/
 /cache/
 /state/
 /local/
+workspaces/*/transcript.jsonl
 *.dets
 
 # Phase 0 preflight logs; official full-run logs are review artifacts.

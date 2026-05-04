@@ -144,19 +144,24 @@ defmodule Babs.Citizens.Hardline.Pane do
 
   defp via(slug), do: {:via, Registry, {Babs.Citizens.PaneRegistry, slug}}
 
-  defp write_transcript(%{transcript_io: nil}, _record), do: :ok
-
-  defp write_transcript(%{transcript_io: io} = state, record) do
-    case Transcript.append(io, record) do
-      :ok ->
+  defp write_transcript(state, record) do
+    # During dev hot reload, pre-transcript Pane state can briefly run new code.
+    case Map.get(state, :transcript_io) do
+      nil ->
         :ok
 
-      {:error, reason} ->
-        Logger.warning(
-          "babs hardline transcript write failed for #{state.config.slug}: #{inspect(reason)}"
-        )
+      io ->
+        case Transcript.append(io, record) do
+          :ok ->
+            :ok
 
-        :ok
+          {:error, reason} ->
+            Logger.warning(
+              "babs hardline transcript write failed for #{state.config.slug}: #{inspect(reason)}"
+            )
+
+            :ok
+        end
     end
   end
 
