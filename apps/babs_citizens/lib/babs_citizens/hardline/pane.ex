@@ -5,7 +5,10 @@ defmodule Babs.Citizens.Hardline.Pane do
 
   use GenServer
 
+  alias Babs.Citizens.Hardline.Transcript
   alias Babs.Citizens.Runner
+
+  require Logger
 
   # PubSub payload ceiling from BAB-1106.
   @pubsub_chunk_size 4096
@@ -40,13 +43,28 @@ defmodule Babs.Citizens.Hardline.Pane do
 
     case Runner.attach(session) do
       {:ok, attach} ->
+        transcript_io =
+          case Transcript.open(config.cwd) do
+            {:ok, io} ->
+              io
+
+            {:error, reason} ->
+              Logger.warning(
+                "babs hardline transcript open failed for #{config.slug}: #{inspect(reason)}"
+              )
+
+              nil
+          end
+
         {:ok,
          %{
            config: config,
            session: session,
            attach: attach,
            stream_id: System.unique_integer([:positive]),
-           seq: 0
+           seq: 0,
+           input_seq: 0,
+           transcript_io: transcript_io
          }}
 
       {:error, reason} ->
@@ -57,7 +75,18 @@ defmodule Babs.Citizens.Hardline.Pane do
   @impl true
   def handle_cast({:inject, data}, state) do
     Runner.inject(state.attach, data)
-    {:noreply, state}
+
+    next_input_seq = state.input_seq + 1
+
+    write_transcript(state, %{
+      slug: state.config.slug,
+      direction: :input,
+      stream_id: state.stream_id,
+      seq: next_input_seq,
+      payload: data
+    })
+
+    {:noreply, %{state | input_seq: next_input_seq}}
   end
 
   @impl true
@@ -77,6 +106,14 @@ defmodule Babs.Citizens.Hardline.Pane do
           "pane:#{state.config.slug}",
           {:pane_bytes, state.stream_id, next_seq, chunk}
         )
+
+        write_transcript(state, %{
+          slug: state.config.slug,
+          direction: :output,
+          stream_id: state.stream_id,
+          seq: next_seq,
+          payload: chunk
+        })
 
         next_seq
       end)
@@ -101,10 +138,27 @@ defmodule Babs.Citizens.Hardline.Pane do
   @impl true
   def terminate(_reason, state) do
     Runner.detach(state.attach)
+    Transcript.close(state[:transcript_io])
     :ok
   end
 
   defp via(slug), do: {:via, Registry, {Babs.Citizens.PaneRegistry, slug}}
+
+  defp write_transcript(%{transcript_io: nil}, _record), do: :ok
+
+  defp write_transcript(%{transcript_io: io} = state, record) do
+    case Transcript.append(io, record) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "babs hardline transcript write failed for #{state.config.slug}: #{inspect(reason)}"
+        )
+
+        :ok
+    end
+  end
 
   defp do_chunk("", _max_size, acc), do: Enum.reverse(acc)
 
