@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-16): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~16-30 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
 
 ---
 
@@ -25,7 +25,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 | Milestone | Phases | Definition |
 |-----------|--------|------------|
-| **M0** | 0, optional 0a/0b | PTY substrate validated; optional browser manager console and full-window terminal mode available for easier hardline operation |
+| **M0** | 0, optional 0a/0b/0c | PTY substrate validated; optional browser manager console, full-window terminal mode, and browser test harness available for easier hardline operation |
 | **M1** | 1 | **Flywheel ignited** — single Citizen running in browser, can edit Babs and survive reload |
 | **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
 | **M2.5** | 6.5 | Manual ticket dogfood validation (Trinity-mandated) |
@@ -61,6 +61,15 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Estimate**: <1 day
 **Built by**: human
 **Gate status**: Optional browser usability spike. It does **not** replace Phase 0's official 24h+ validation and does **not** by itself authorize Phase 1 SEED.
+
+### Phase 0c — Hardline Browser Test Harness
+
+**Doc**: `BAB-2205` (proposed), `BAB-2206` CHG (proposed)
+**Output**: `spikes/hardline/` browser manager JavaScript is refactored out of inline HTML into testable static modules; JS/DOM tests and Playwright BDD-style E2E tests cover create/select/type/full/refresh/stop and missing-session workflows.
+**Acceptance**: `mix test`, JS/DOM tests, Playwright E2E tests, `git diff --check`, and `af validate` pass; E2E tests use isolated tmux prefixes and clean up all temporary sessions.
+**Estimate**: 1-2 days
+**Built by**: human
+**Gate status**: Optional test-hardening/refactor phase. It does **not** replace Phase 0's official 24h+ validation and does **not** by itself authorize Phase 1 SEED.
 
 ### Phase 1 — V0-S0 SEED (Flywheel Ignition)
 
