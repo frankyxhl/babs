@@ -13,7 +13,7 @@ Per-day session tracker for BAB project per **COR-1201**. Records discussion
 items raised within today's session(s), including the current Phase 0 spike
 state and any deferred validation work.
 
-`next_d` = **D6** (next new topic gets D6)
+`next_d` = **D7** (next new topic gets D7)
 
 ---
 
@@ -26,6 +26,7 @@ state and any deferred validation work.
 | D3 | Phase 0a Hardline Manager Console | Done | User wants a browser UI, not CLI commands, to manage multiple hardline tmux sessions over Tailscale: list running Babs-managed sessions, create new sessions, click to switch xterm view, and stop selected sessions. Captured as `BAB-2202` Phase 0a. It is an optional usability spike on `spikes/hardline/`, not a substitute for the deferred Phase 0 official 24h+ full validation and not an automatic authorization to start Phase 1. Trinity rules review with GLM/Gemini/DeepSeek passed in `.trinity/reviews/20260504-142316-rules`; non-blocking terminology findings were accepted and patched. Implemented in `spikes/hardline/`; Tailscale API smoke and Computer Use browser smoke passed, including UI stop of `demo-c` while `demo-b` survived. Final Trinity code review on `spikes/hardline/` passed with GLM, Gemini, and DeepSeek in `.trinity/reviews/20260504-153847-spikes-hardline` after fixing review findings; latest `mise exec -- mix test` passed with 36 tests, 0 failures. Current manager URL is `http://100.x.y.z:4010/`. |
 | D4 | Phase 0b Hardline Full-Window Mode | Done | User wanted one tmux hardline opened in a separate full-size browser window from the current manager at `http://100.x.y.z:4010/`. Captured as `BAB-2203` PRP and `BAB-2204` CHG. Trinity plan review with GLM/Gemini/DeepSeek passed in `.trinity/reviews/20260504-160652-phase0b-trinity-review-packet.md`; advisories were incorporated before implementation. Implemented browser-only `/?session=<slug>&full=1` mode in `spikes/hardline/priv/static/index.html`, with a single active-session `Open Full` control, full-viewport terminal CSS, invalid-session error overlay, back-to-manager link, status dots, lucide icons, generated fruit/character slug suggestions, and static regression tests. The manager Shell dropdown now defaults new browser-created sessions to tmux's own shell and keeps `/bin/zsh -f` selectable as a fallback; the custom command field was removed from the browser form for simplicity. Local `mix format --check-formatted` passed and `mix test` passed with 45 tests, 0 failures. Tailscale Chrome smoke passed at `http://100.x.y.z:4010/?session=demo-a&full=1`, showing a full-viewport terminal and live tmux size `243x53`. Tailscale API smoke created temporary `shell-smoke` with blank command, confirmed tmux selected `zsh` with empty `pane_start_command`, then stopped the temporary session. |
 | D5 | Phase 0c Hardline Browser Test Harness | Done | User flagged that `index.html` had too much inline JavaScript and asked to improve BDD/E2E coverage. Captured as `BAB-2205` PRP and `BAB-2206` CHG. Implemented as a testing/refactor-only phase: manager browser logic moved into `priv/static/js/hardline_core.js`, `hardline_manager.js`, and `hardline_boot.js`; stable `data-testid` hooks were added; Node pure-JS tests and Playwright DOM/E2E tests cover create/select/type/full/refresh/stop/missing-session workflows with isolated `babs-e2e-*` tmux prefixes. Local validation passed: `npm run test:js` 9 tests, `npm run test:e2e` 10 Playwright tests, and `mise exec -- mix test` 59 tests. No new UI features and no Phase 0 official validation gate change. |
+| D6 | Phase 1 readiness document sync | Done | User cannot run the official 24-hour Phase 0 validation now, so Phase 1 production code remains blocked, but safe prep continued. The previously discussed Phase 1 decisions were applied to the authoritative docs: Clare/Dylan/Sentinel replace Alex/Morgan; Phase 1 reads `citizens/citizen-<slug>.toml` and uses configured `workspaces/<slug>/`; SQLite remains Phase 3 authority; `Babs.DevReloader` lives in `:babs` outside the `:babs_citizens` target app; Channel/PubSub topic is `pane:<slug>` and Channels must not duplicate-subscribe; reload/BEAM restart detach and reattach only, while explicit stop is the tmux kill path. No Phase 1 implementation was started. |
 
 ---
 
@@ -63,6 +64,9 @@ state and any deferred validation work.
   refactoring only, with JavaScript extraction, JS/DOM tests, and Playwright
   BDD-style E2E coverage. It does not replace the official Phase 0 full-run
   validation gate.
+- Phase 1 readiness docs are synchronized for later implementation, but
+  production Phase 1 code remains blocked until the official Phase 0 gate is
+  resolved or explicitly waived in a future decision.
 
 ---
 
@@ -88,3 +92,4 @@ state and any deferred validation work.
 | 2026-05-04 | Refined Phase 0b manager UI with icon buttons, status dots, single active `Open Full`, and generated slug suggestions | Codex |
 | 2026-05-04 | Added D5 and `BAB-2205`/`BAB-2206` proposed Phase 0c browser test harness plan | Codex |
 | 2026-05-04 | Marked D5 done after Phase 0c JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and 59-test ExUnit validation passed | Codex |
+| 2026-05-04 | Added D6 Phase 1 readiness document sync and reiterated that Phase 1 implementation remains blocked by the deferred official Phase 0 gate | Codex |

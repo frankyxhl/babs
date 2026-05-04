@@ -1,8 +1,8 @@
 # ADR-1110: Two OTP Applications + Tmux Detach (β + γ Live-Reload-Safe Lifecycle)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Accepted
 **Sources:** `BAB-1006` (Trinity Review), v0.1 design session 2026-05-03
 
@@ -74,22 +74,26 @@ Choice: **Umbrella project** — Mix's first-class support for two apps in one r
 On `:babs_citizens` `Application.start/2`:
 
 1. List all tmux sessions matching `^babs-(.+)$`
-2. For each session, look up the citizen name in SQLite `citizens` table
-3. If citizen `:status` ∈ {`:running`, `:stopped`}:
-   - Open `erlexec` port that runs `tmux attach-session -t babs-<name>` (or `pipe-pane` — see Phase 0 spike for which works)
+2. For Phase 1, derive `<slug>` from the session name and read `citizens/citizen-<slug>.toml` directly. SQLite lookup starts in Phase 3.
+3. If a matching config exists:
+   - Open `erlexec` port that runs `tmux attach-session -t babs-<slug>` (or `pipe-pane` — see Phase 0 spike for which works)
    - Spawn fresh `Hardline.Pane` GenServer with the new port
-   - Subscribe to PubSub topic `pane:<name>` for browser Channel reconnection
-4. Record reattach event in `<name>.bob/transcript.jsonl` with timestamp
+   - Publish received bytes to PubSub topic `pane:<slug>` for browser Channel reconnection
+4. Record a `:reattached` event in the Phase 1 in-memory lifecycle log. Phase 2 appends it to `<cwd>/transcript.jsonl`; Phase 3 also updates SQLite state.
 
 ### Channel re-registration (cross-cutting concern)
 
-When `:babs` reloads, all Channel processes die. `Hardline.Pane` (in `:babs_citizens`) holds no PIDs to dead Channels — instead it publishes bytes to `Phoenix.PubSub` topic `pane:<name>`. Channels subscribe on connect, no permanent registration. This decoupling is captured in `BAB-1106` revision.
+When `:babs` reloads, all Channel processes die. `Hardline.Pane` (in `:babs_citizens`) holds no PIDs to dead Channels — instead it publishes bytes to `Phoenix.PubSub` topic `pane:<slug>`.
+
+In Phase 1 the Phoenix Channel topic is also `pane:<slug>`. Phoenix already subscribes the joined Channel process to its topic, so the Channel MUST NOT call `Phoenix.PubSub.subscribe/2` again for that same topic. Explicit PubSub subscription is only valid if a future design uses a distinct Channel topic and PubSub topic.
+
+This decoupling is captured in the `BAB-1106` revision.
 
 ### Reload Mechanism (custom file watcher for `:babs_citizens`)
 
 Phoenix's standard `live_reload` is **NOT** suitable for `:babs_citizens` because it works at the module level (recompile + reload modules in place) rather than at the OTP-application level (stop + start the supervision tree). Module reload of `Hardline.Pane` while it holds an open `erlexec` port is undefined behavior.
 
-Babs ships a custom watcher process `Babs.Citizens.SourceWatcher` (in `:babs_citizens` itself):
+Babs ships a dev-only watcher process `Babs.DevReloader` (in `:babs`, outside the target app):
 
 1. Watches `apps/babs_citizens/lib/**/*.ex` via [FileSystem](https://hex.pm/packages/file_system) (FSEvents on macOS, inotify on Linux)
 2. On change: runs `mix compile` for `:babs_citizens` only
@@ -97,7 +101,9 @@ Babs ships a custom watcher process `Babs.Citizens.SourceWatcher` (in `:babs_cit
 4. The stop+start cycle triggers γ — tmux sessions stay running; ReattachScanner re-acquires them on start
 5. The brief BEAM-side blindness window (~3-5s) is documented as expected per the trade-offs section
 
-**Phoenix `live_reload` watches ONLY `apps/babs/lib/**`** — leave it as-is for `:babs` (the web app); SourceWatcher handles `:babs_citizens` separately.
+`Babs.DevReloader` must live outside `:babs_citizens`; otherwise the watcher kills itself when it stops the target application.
+
+**Phoenix `live_reload` watches ONLY `apps/babs/lib/**`** — leave it as-is for `:babs` (the web app); `Babs.DevReloader` handles `:babs_citizens` separately.
 
 This watcher is part of the Phase 1 SEED scope (`BAB-2201`); without it, the Flywheel Test cannot pass.
 
@@ -108,8 +114,8 @@ This watcher is part of the Phase 1 SEED scope (`BAB-2201`); without it, the Fly
 - **`Hardline.Pane` cannot hold Channel PIDs** — must publish to PubSub. `BAB-1106` updated.
 - **`:babs_citizens` startup includes reattach scan** — adds 1-2s to BEAM startup but unavoidable.
 - **Operator-facing: `mix phx.server` starts both apps** — no extra commands.
-- **Live reload split**: Phoenix `live_reload` for `:babs` (modules); `Babs.Citizens.SourceWatcher` for `:babs_citizens` (Application stop+start). See "Reload Mechanism" section above.
-- **`:babs_citizens` reload is a stop+start cycle** (not module reload) — each cycle is ~3-5s of BEAM-side blindness, but tmux + AI process + ticket files are unaffected. This is the safety boundary that makes self-hosting Phase 2+ possible.
+- **Live reload split**: Phoenix `live_reload` for `:babs` (modules); `Babs.DevReloader` for `:babs_citizens` (Application stop+start). See "Reload Mechanism" section above.
+- **`:babs_citizens` reload is a detach+reattach cycle, not a kill** — each cycle is ~3-5s of BEAM-side blindness, but tmux + AI process + ticket files are unaffected. Only an explicit citizen `stop` may call `tmux kill-session`. This is the safety boundary that makes self-hosting Phase 2+ possible.
 
 ## Trade-offs Accepted
 
@@ -123,3 +129,4 @@ This watcher is part of the Phase 1 SEED scope (`BAB-2201`); without it, the Fly
 |------|--------|----|
 | 2026-05-03 | Initial decision; β + γ adopted after Trinity review | Claude Code |
 | 2026-05-03 | Trinity 2nd-round fix: added "Reload Mechanism" section specifying `Babs.Citizens.SourceWatcher` (custom FileSystem watcher → `Application.stop`/`start`); resolves contradiction between BAB-1110's "live_reload watches only `apps/babs/lib/**`" and BAB-2201 Flywheel Test requiring `:babs_citizens` reload | Claude Code |
+| 2026-05-04 | Phase 1 cleanup: TOML config is read from `citizens/citizen-<slug>.toml` until SQLite starts in Phase 3; reload watcher moved to `Babs.DevReloader` in `:babs`; Channel/PubSub no-duplicate-subscribe rule and detach-vs-stop kill semantics clarified | Codex |

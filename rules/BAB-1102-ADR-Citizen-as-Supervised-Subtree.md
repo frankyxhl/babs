@@ -1,8 +1,8 @@
 # ADR-1102: Citizen as Supervised Subtree, Not a Single GenServer
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Accepted
 
 ---
@@ -14,7 +14,7 @@ The core decision (citizen = supervised subtree, not a single GenServer) **stand
 1. **OTP application housing**: This subtree now lives in the `:babs_citizens` OTP app, not the main `:babs` web app. See `BAB-1110` (β + γ live-reload-safety).
 2. **`Tmux.Core` is replaced by `Hardline.Pane`** (see `BAB-1005` naming history, `BAB-1110`). Functionally similar; renamed.
 3. **`ChannelWorker` is removed from v0.1** — no Discord/Telegram connectors per `BAB-1109`. Cross-citizen coordination happens via Tickets per `BAB-1111`.
-4. **`Hardline.Pane` does NOT hold Channel PIDs** — it publishes to `Phoenix.PubSub` topic `pane:<name>`; Channels subscribe on connect. See `BAB-1106` revision and `BAB-1110`.
+4. **`Hardline.Pane` does NOT hold Channel PIDs** — it publishes to `Phoenix.PubSub` topic `pane:<slug>`; Channels subscribe on connect. See `BAB-1106` revision and `BAB-1110`.
 5. **Restart strategy `:rest_for_one` retained** as documented.
 6. **Known issues to fix during post-Phase-1 rewrite**: (a) line ~52 syntax error `Registry.lookup({:via, ...})` should be `Registry.lookup(Babs.Registry, citizen_name)`; (b) `Babs.CitizenSupervisor` typo should be `Babs.Citizen.Supervisor`; (c) Registry naming drift (`Babs.Registry` vs `Babs.Citizens.Registry`) needs unification.
 
@@ -124,3 +124,4 @@ Use `Application.start/2` for each citizen, giving it its own application superv
 |------|--------|----|
 | 2026-05-03 | Initial version — codifies the subtree-per-citizen pattern | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Accepted`; v0.1 amendments remain authoritative in the banner | Codex |
+| 2026-05-04 | Trinity review follow-up: align PubSub topic to authoritative `pane:<slug>` terminology | Codex |

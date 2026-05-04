@@ -1,8 +1,8 @@
 # ADR-1112: Multi-AI-CLI Citizen Configuration
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Accepted
 
 ---
@@ -26,15 +26,17 @@ A v0.1 Babs that hardcodes `claude` is artificially narrow. The user explicitly 
 
 ### Citizen Configuration
 
-Per-citizen config lives in `<name>.bob/citizen.toml`:
+Per-citizen config lives in `citizens/citizen-<slug>.toml`:
 
 ```toml
-# alex.bob/citizen.toml
-name = "alex"
-cli = "claude"               # required: the binary to invoke
-cli_args = ["--continue"]    # optional: argv passed to the CLI
-cwd = "."                    # optional, default ".": working directory for tmux session
-description = "Backend dev"  # optional human-readable
+# citizens/citizen-clare.toml
+id = "BAB-CIT-0001"
+slug = "clare"
+display_name = "Clare"
+cli = "claude"                  # required: the binary to invoke
+cli_args = ["--continue"]       # optional: argv passed to the CLI
+cwd = "workspaces/clare"        # required: working directory for tmux session
+description = "Claude Code seed citizen"
 
 [env]
 # Environment variables injected into the erlexec child process
@@ -47,16 +49,29 @@ name = "developer"           # nullable
 skills = ["elixir", "phoenix"]
 ```
 
+Gate A also uses a deterministic sentinel config:
+
+```toml
+# citizens/citizen-sentinel.toml
+id = "BAB-CIT-0000"
+slug = "sentinel"
+display_name = "Sentinel"
+cli = "/bin/zsh"
+cli_args = ["-f"]
+cwd = "workspaces/sentinel"
+description = "Deterministic shell citizen for reload validation"
+```
+
 ### Spawn Flow (Phase 1)
 
-1. Read `<name>.bob/citizen.toml`
+1. Read `citizens/citizen-<slug>.toml`
 2. Resolve `[env]` interpolations from Babs node environment
-3. `tmux new-session -d -s babs-<name> -c <cwd>` (detached)
+3. `tmux new-session -d -s babs-<slug> -c <cwd>` (detached)
 4. `erlexec` opens a port that runs the citizen's CLI inside the tmux pane:
    - Process: `<cli>` with `<cli_args>`
    - Working dir: `<cwd>`
    - Env: merged (Babs node env + `[env]` overrides)
-5. `Hardline.Pane` GenServer spawned to manage the port; PubSub topic `pane:<name>` published
+5. `Hardline.Pane` GenServer spawned to manage the port; PubSub topic `pane:<slug>` published
 
 ### CLI Compatibility Matrix (v0.1 day-1 expectations)
 
@@ -79,14 +94,14 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 
 ### Failure Modes
 
-- CLI missing from PATH → spawn fails; SQLite citizen row marked `:failed` per `BAB-1107`
+- CLI missing from PATH → spawn fails; Phase 1 in-memory status marks `:failed`; Phase 3 SQLite citizen row marks `:failed` per `BAB-1107`
 - CLI authenticates but quota exhausted → CLI itself errors in pane; Babs sees the bytes, doesn't intercept
 - CLI version mismatch / breaking change → operator's responsibility to upgrade or pin
 
 ## Why Config-File-Driven (vs UI-only)
 
 1. **Phase 1 has no UI to configure citizens** (spawn UI is Phase 4); the config file is the only handle
-2. **Operators can edit configs offline** — `vim alex.bob/citizen.toml` works even when Babs is down
+2. **Operators can edit configs offline** — `vim citizens/citizen-clare.toml` works even when Babs is down
 3. **Configs are git-trackable** — diffs are reviewable history of how a citizen was set up
 4. **Phase 4 spawn UI just writes the config file** — UI and CLI agree on the format
 
@@ -98,7 +113,7 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 
 ## Consequences
 
-- Phase 1 SEED includes a TOML parser dep + `<name>.bob/citizen.toml` reader
+- Phase 1 SEED includes a TOML parser dep + `citizens/citizen-<slug>.toml` reader
 - Phase 4 NewCitizenLive form writes citizen.toml + database row (form fields → TOML)
 - New CLI support = no Babs code changes, just a new `cli = "..."` value (assuming the binary works as an interactive TTY process)
 - Operator who wants to test a Citizen with a different CLI doesn't need to redeploy Babs — just edits `citizen.toml` and restarts
@@ -108,3 +123,4 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial decision; multi-CLI agnostic from Phase 1 | Claude Code |
+| 2026-05-04 | Phase 1 cleanup: move config to `citizens/citizen-<slug>.toml`, add required `id`/`slug`/`cwd`, switch examples to Clare and deterministic Sentinel, and defer SQLite failure state to Phase 3 | Codex |

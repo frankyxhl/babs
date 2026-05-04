@@ -1,8 +1,8 @@
 # REF-1001: Architecture Overview
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Active
 
 ---
@@ -57,7 +57,7 @@ Babs OTP release  (CLI: bb)
    │
    └─ BabsWeb.Endpoint
        ├─ LiveView      → state UI (dashboard / status / ops / diagram)
-       └─ Channels      → raw PTY byte streams (subscribe `pane:<name>` PubSub topic published by Hardline.Pane — see `BAB-1106` v0.1 amendment; the "direct to PaneSession; bypasses PubSub" wording in earlier drafts is REVERSED)
+       └─ Channels      → raw PTY byte streams (subscribe `pane:<slug>` PubSub topic published by Hardline.Pane — see `BAB-1106` v0.1 amendment; the "direct to PaneSession; bypasses PubSub" wording in earlier drafts is REVERSED)
 ```
 
 ---
@@ -181,3 +181,4 @@ Babs is a from-scratch project. The build is sequenced to surface high-risk bets
 | 2026-05-03 | Initial version — captures the architecture decided in the design discussion | Claude Code |
 | 2026-05-03 | Drop migration framing; reframe Phase plan as from-scratch build phases | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |
+| 2026-05-04 | Trinity review follow-up: align PubSub topic to authoritative `pane:<slug>` terminology | Codex |
