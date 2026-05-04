@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hardline Manager</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111318;
+        --panel: #181b22;
+        --panel-2: #20242d;
+        --line: #303642;
+        --text: #e7eaf0;
+        --muted: #9aa3b2;
+        --accent: #4fb3a5;
+        --danger: #dc6b6b;
+        --warn: #d7a84f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+        min-height: 100%;
+      }
+
+      body.full-mode {
+        display: block;
+        min-height: 100%;
+        overflow: hidden;
+      }
+
+      body.full-mode aside,
+      body.full-mode .toolbar,
+      body.full-mode .meta-grid,
+      body.full-mode .statusbar {
+        display: none;
+      }
+
+      body.full-mode main {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+        min-height: 100vh;
+      }
+
+      body.full-mode #terminal {
+        width: 100vw;
+        height: 100vh;
+      }
+
+      aside {
+        min-width: 0;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 48px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 650;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        min-height: 32px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        color: #626a78;
+        border-color: #292f3a;
+      }
+
+      button.with-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+      }
+
+      .with-icon svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+      }
+
+      .danger:hover {
+        border-color: var(--danger);
+        color: #ffb8b8;
+      }
+
+      form {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .slug-control {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 34px;
+        gap: 6px;
+        align-items: end;
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      input,
+      select {
+        width: 100%;
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f1116;
+        color: var(--text);
+        padding: 7px 9px;
+      }
+
+      .icon-button {
+        width: 34px;
+        padding: 0;
+      }
+
+      .session-list {
+        overflow: auto;
+        padding: 8px;
+      }
+
+      .session-row {
+        margin: 0 0 6px;
+      }
+
+      .session-select {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px;
+        min-width: 0;
+        width: 100%;
+        text-align: left;
+      }
+
+      .session-select.active {
+        border-color: var(--accent);
+        background: #17302f;
+      }
+
+      .session-name,
+      .session-meta,
+      .meta-value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-name {
+        font-weight: 650;
+      }
+
+      .session-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .status-dot {
+        align-self: center;
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #5b6370;
+        box-shadow: 0 0 0 3px rgba(91, 99, 112, 0.14);
+      }
+
+      .status-dot.up {
+        background: #43d17d;
+        box-shadow: 0 0 0 3px rgba(67, 209, 125, 0.16);
+      }
+
+      .status-dot.down {
+        background: var(--danger);
+        box-shadow: 0 0 0 3px rgba(220, 107, 107, 0.16);
+      }
+
+      main {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        min-height: 48px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .title {
+        min-width: 0;
+      }
+
+      .title strong,
+      .title span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .title span {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #terminal {
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: #101014;
+      }
+
+      .statusbar {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, auto)) minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        min-height: 32px;
+        padding: 6px 12px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1px;
+        background: var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .meta-cell {
+        min-width: 0;
+        padding: 7px 10px;
+        background: var(--panel);
+      }
+
+      .meta-label {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 2px;
+      }
+
+      .empty {
+        padding: 14px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .full-back {
+        display: none;
+        position: fixed;
+        top: 8px;
+        right: 10px;
+        z-index: 20;
+        color: var(--muted);
+        background: rgba(16, 16, 20, 0.82);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 5px 8px;
+        font-size: 12px;
+        text-decoration: none;
+      }
+
+      body.full-mode .full-back {
+        display: block;
+      }
+
+      .full-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        place-items: center;
+        padding: 24px;
+        background: rgba(17, 19, 24, 0.94);
+        color: var(--text);
+        text-align: center;
+      }
+
+      body.full-mode .full-overlay:not([hidden]) {
+        display: grid;
+      }
+
+      .full-overlay strong {
+        display: block;
+        margin-bottom: 10px;
+        font-size: 16px;
+      }
+
+      .full-overlay a {
+        color: var(--accent);
+      }
+
+      @media (max-width: 760px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+
+        aside {
+          max-height: 42vh;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .meta-grid,
+        .statusbar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <header>
+        <h1>Hardline</h1>
+        <button id="refresh" class="with-icon" type="button">
+          <i data-lucide="refresh-cw" aria-hidden="true"></i>
+          <span>Refresh</span>
+        </button>
+      </header>
+
+      <form id="create-form">
+        <div class="slug-control">
+          <label>
+            Slug
+            <input id="slug" name="slug" autocomplete="off" spellcheck="false" placeholder="mango-scout" />
+          </label>
+          <button id="slug-reroll" class="icon-button with-icon" type="button" title="Suggest slug" aria-label="Suggest slug">
+            <i data-lucide="shuffle" aria-hidden="true"></i>
+          </button>
+        </div>
+        <label>
+          Shell
+          <select id="command-preset" name="command-preset">
+            <option value="" selected>Default tmux shell</option>
+            <option value="/bin/zsh -l">zsh login shell</option>
+            <option value="/bin/zsh">zsh</option>
+            <option value="/bin/zsh -f">zsh fast shell</option>
+          </select>
+        </label>
+        <button class="with-icon" type="submit">
+          <i data-lucide="plus" aria-hidden="true"></i>
+          <span>New</span>
+        </button>
+      </form>
+
+      <div id="session-list" class="session-list"></div>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <div class="title">
+          <strong id="active-title">No session selected</strong>
+          <span id="active-subtitle">Create or select a hardline session</span>
+        </div>
+        <div class="toolbar-actions">
+          <button id="open-full" class="with-icon" type="button" disabled>
+            <i data-lucide="external-link" aria-hidden="true"></i>
+            <span>Open Full</span>
+          </button>
+          <button id="stop" class="danger with-icon" type="button" disabled>
+            <i data-lucide="square" aria-hidden="true"></i>
+            <span>Stop</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-cell">
+          <div class="meta-label">tmux</div>
+          <div id="meta-session" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">session id</div>
+          <div id="meta-session-id" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">pane pid</div>
+          <div id="meta-pane-pid" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">command</div>
+          <div id="meta-command" class="meta-value">-</div>
+        </div>
+      </div>
+
+      <div id="terminal"></div>
+      <a id="full-back" class="full-back" href="/">Manager</a>
+      <div id="full-overlay" class="full-overlay" hidden>
+        <div>
+          <strong id="full-overlay-title">Session unavailable</strong>
+          <div id="full-overlay-message"></div>
+          <p><a href="/">Back to manager</a></p>
+        </div>
+      </div>
+
+      <div class="statusbar">
+        <span id="socket-status">socket: idle</span>
+        <span id="size-status">size:100x32</span>
+        <span id="input-status">in:0</span>
+        <span id="output-status">out:0/0B</span>
+        <span id="dup-status">dup:0</span>
+        <span id="message-status"></span>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/phoenix@1.8.5/priv/static/phoenix.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script>
+      const elements = {
+        list: document.getElementById("session-list"),
+        form: document.getElementById("create-form"),
+        slug: document.getElementById("slug"),
+        slugReroll: document.getElementById("slug-reroll"),
+        commandPreset: document.getElementById("command-preset"),
+        refresh: document.getElementById("refresh"),
+        stop: document.getElementById("stop"),
+        openFull: document.getElementById("open-full"),
+        title: document.getElementById("active-title"),
+        subtitle: document.getElementById("active-subtitle"),
+        metaSession: document.getElementById("meta-session"),
+        metaSessionId: document.getElementById("meta-session-id"),
+        metaPanePid: document.getElementById("meta-pane-pid"),
+        metaCommand: document.getElementById("meta-command"),
+        socketStatus: document.getElementById("socket-status"),
+        sizeStatus: document.getElementById("size-status"),
+        inputStatus: document.getElementById("input-status"),
+        outputStatus: document.getElementById("output-status"),
+        dupStatus: document.getElementById("dup-status"),
+        messageStatus: document.getElementById("message-status"),
+        fullBack: document.getElementById("full-back"),
+        fullOverlay: document.getElementById("full-overlay"),
+        fullOverlayTitle: document.getElementById("full-overlay-title"),
+        fullOverlayMessage: document.getElementById("full-overlay-message")
+      };
+
+      const params = new URLSearchParams(window.location.search);
+      const requestedFullMode = params.get("full") === "1";
+      const requestedSession = params.get("session") || "";
+      const fullMode = requestedFullMode && requestedSession !== "";
+
+      if (fullMode) {
+        document.body.classList.add("full-mode");
+      }
+
+      let sessions = [];
+      let active = null;
+      let socket = null;
+      let channel = null;
+      let joined = false;
+      let resizeTimer = null;
+      let lastSize = { cols: 100, rows: 32 };
+      let outputEvents = 0;
+      let outputBytes = 0;
+      let inputEvents = 0;
+      let duplicateOutputs = 0;
+      let currentStreamId = null;
+      let outputDecoder = new TextDecoder();
+      let fullSelectionAttempted = false;
+      const seenOutputSeqs = new Set();
+      const seenOutputSeqQueue = [];
+      const maxSeenOutputSeqs = 4096;
+      const slugFruits = [
+        "apricot",
+        "clementine",
+        "dragonfruit",
+        "fig",
+        "kiwi",
+        "kumquat",
+        "lychee",
+        "mango",
+        "papaya",
+        "peach",
+        "persimmon",
+        "plum",
+        "rambutan",
+        "starfruit",
+        "yuzu"
+      ];
+      const slugCharacters = [
+        "artist",
+        "captain",
+        "keeper",
+        "pilot",
+        "ranger",
+        "scout",
+        "scribe",
+        "smith",
+        "spark",
+        "voyager"
+      ];
+
+      const term = new Terminal({
+        cols: 100,
+        rows: 32,
+        cursorBlink: true,
+        fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+        fontSize: 13,
+        theme: {
+          background: "#101014",
+          foreground: "#e5e7eb",
+          cursor: "#f3c969",
+          selectionBackground: "#3d3d45"
+        }
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById("terminal"));
+      term.focus();
+
+      function setMessage(text) {
+        elements.messageStatus.textContent = text;
+      }
+
+      function showFullError(text) {
+        elements.fullOverlayTitle.textContent = "Session unavailable";
+        elements.fullOverlayMessage.textContent = text;
+        elements.fullOverlay.hidden = false;
+      }
+
+      function hideFullError() {
+        elements.fullOverlay.hidden = true;
+        elements.fullOverlayMessage.textContent = "";
+      }
+
+      function renderStatus() {
+        elements.sizeStatus.textContent = `size:${lastSize.cols}x${lastSize.rows}`;
+        elements.inputStatus.textContent = `in:${inputEvents}`;
+        elements.outputStatus.textContent = `out:${outputEvents}/${outputBytes}B`;
+        elements.dupStatus.textContent = `dup:${duplicateOutputs}`;
+      }
+
+      function setSocketStatus(text) {
+        elements.socketStatus.textContent = `socket: ${text}`;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...options
+        });
+
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(body.error || response.statusText);
+        }
+
+        return body;
+      }
+
+      async function loadSessions() {
+        const body = await api("/api/sessions");
+        sessions = body.sessions || [];
+        renderSessions();
+        suggestSlugIfEmpty();
+
+        if (active) {
+          const nextActive = sessions.find((session) => session.slug === active.slug);
+
+          if (nextActive) {
+            active = nextActive;
+            renderActive();
+          } else {
+            clearActiveSession(`Session not found: ${active.slug}`);
+          }
+        }
+
+        if (fullMode && !fullSelectionAttempted) {
+          fullSelectionAttempted = true;
+          await selectSession(requestedSession);
+        }
+
+        return sessions;
+      }
+
+      function renderSessions() {
+        elements.list.innerHTML = "";
+
+        if (sessions.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "No managed sessions";
+          elements.list.appendChild(empty);
+          return;
+        }
+
+        for (const session of sessions) {
+          const row = document.createElement("div");
+          row.className = "session-row";
+
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `session-select${active && active.slug === session.slug ? " active" : ""}`;
+          button.addEventListener("click", () => selectSession(session.slug));
+
+          const label = document.createElement("div");
+          label.innerHTML = `<div class="session-name"></div><div class="session-meta"></div>`;
+          label.querySelector(".session-name").textContent = session.slug;
+          label.querySelector(".session-meta").textContent = session.session;
+
+          const status = document.createElement("span");
+          status.className = `status-dot ${session.alive ? "up" : "down"}`;
+          status.title = session.alive ? "up" : "down";
+          status.setAttribute("aria-label", session.alive ? "up" : "down");
+
+          button.append(label, status);
+          row.append(button);
+          elements.list.appendChild(row);
+        }
+      }
+
+      function suggestSlug() {
+        const taken = new Set(sessions.map((session) => session.slug));
+        const maxAttempts = slugFruits.length * slugCharacters.length * 2;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const fruit = slugFruits[Math.floor(Math.random() * slugFruits.length)];
+          const character = slugCharacters[Math.floor(Math.random() * slugCharacters.length)];
+          const slug = `${fruit}-${character}`;
+
+          if (!taken.has(slug)) {
+            return slug;
+          }
+        }
+
+        for (let index = 1; index < 1000; index += 1) {
+          const slug = `mango-${index}`;
+
+          if (!taken.has(slug)) {
+            return slug;
+          }
+        }
+
+        return "mango";
+      }
+
+      function setSuggestedSlug() {
+        elements.slug.value = suggestSlug();
+      }
+
+      function suggestSlugIfEmpty() {
+        if (elements.slug.value.trim() === "") {
+          setSuggestedSlug();
+        }
+      }
+
+      function renderActive() {
+        if (!active) {
+          elements.title.textContent = "No session selected";
+          elements.subtitle.textContent = "Create or select a hardline session";
+          elements.metaSession.textContent = "-";
+          elements.metaSessionId.textContent = "-";
+          elements.metaPanePid.textContent = "-";
+          elements.metaCommand.textContent = "-";
+          elements.stop.disabled = true;
+          elements.openFull.disabled = true;
+          return;
+        }
+
+        elements.title.textContent = active.slug;
+        elements.subtitle.textContent = active.session;
+        elements.metaSession.textContent = active.session || "-";
+        elements.metaSessionId.textContent = active.session_id || "-";
+        elements.metaPanePid.textContent = active.pane_pid || "-";
+        elements.metaCommand.textContent = commandLabel(active);
+        elements.stop.disabled = false;
+        elements.openFull.disabled = !active.alive;
+      }
+
+      function clearActiveSession(message) {
+        if (channel) {
+          channel.leave();
+          channel = null;
+        }
+
+        active = null;
+        joined = false;
+        term.clear();
+        renderSessions();
+        renderActive();
+        setSocketStatus("idle");
+
+        if (fullMode) {
+          showFullError(message);
+        } else {
+          setMessage(message);
+        }
+      }
+
+      function commandLabel(session) {
+        if (session.command === "") {
+          return session.pane_command ? `tmux default (${session.pane_command})` : "tmux default";
+        }
+
+        return session.command || session.pane_command || "-";
+      }
+
+      async function selectSession(slug) {
+        const next = sessions.find((session) => session.slug === slug);
+
+        if (!next) {
+          const message = `Session not found: ${slug}`;
+
+          if (fullMode) {
+            showFullError(message);
+          } else {
+            setMessage(message);
+          }
+
+          return;
+        }
+
+        if (fullMode && !next.alive) {
+          showFullError(`Session is not alive: ${slug}`);
+          return;
+        }
+
+        hideFullError();
+        active = next;
+        renderSessions();
+        renderActive();
+        resetCounters();
+        await connectPane(next);
+      }
+
+      async function connectPane(session) {
+        joined = false;
+
+        if (channel) {
+          channel.leave();
+          channel = null;
+        }
+
+        term.clear();
+        setSocketStatus("connecting");
+        setMessage("");
+
+        try {
+          const capture = await api(`/api/sessions/${encodeURIComponent(session.slug)}/screen`);
+
+          if (capture.screen) {
+            term.write(capture.screen);
+          }
+        } catch (error) {
+          const message = `capture: ${error.message}`;
+          setMessage(message);
+          setSocketStatus("unavailable");
+
+          if (fullMode) {
+            showFullError(`Session unavailable: ${session.slug}`);
+          }
+
+          return;
+        }
+
+        if (!socket) {
+          socket = new Phoenix.Socket("/socket", {});
+          socket.onError(() => setSocketStatus("error"));
+          socket.onClose(() => setSocketStatus("closed"));
+          socket.connect();
+        }
+
+        channel = socket.channel(`pane:${session.slug}`, {});
+
+        channel
+          .join()
+          .receive("ok", () => {
+            joined = true;
+            fitTerminal(true);
+            setSocketStatus(`connected ${session.slug}`);
+            term.focus();
+          })
+          .receive("error", () => {
+            setSocketStatus("join failed");
+
+            if (fullMode) {
+              showFullError(`Could not connect to ${session.slug}`);
+            }
+          });
+
+        channel.on("output", handleOutput);
+      }
+
+      function fullUrl(slug) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("session", slug);
+        url.searchParams.set("full", "1");
+        return url.toString();
+      }
+
+      function openFullSession(slug) {
+        const opened = window.open(fullUrl(slug), "_blank");
+
+        if (!opened) {
+          setMessage(`open full blocked: ${slug}`);
+        }
+      }
+
+      function handleOutput({ stream_id, seq, base64 }) {
+        if (stream_id !== currentStreamId) {
+          currentStreamId = stream_id;
+          seenOutputSeqs.clear();
+          seenOutputSeqQueue.length = 0;
+          outputDecoder = new TextDecoder();
+        }
+
+        const seqKey = seq === null ? null : `${stream_id ?? "legacy"}:${seq}`;
+
+        if (seqKey !== null && seenOutputSeqs.has(seqKey)) {
+          duplicateOutputs += 1;
+          renderStatus();
+          return;
+        }
+
+        if (seqKey !== null) {
+          seenOutputSeqs.add(seqKey);
+          seenOutputSeqQueue.push(seqKey);
+
+          while (seenOutputSeqQueue.length > maxSeenOutputSeqs) {
+            seenOutputSeqs.delete(seenOutputSeqQueue.shift());
+          }
+        }
+
+        const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+        outputEvents += 1;
+        outputBytes += bytes.length;
+        renderStatus();
+        term.write(outputDecoder.decode(bytes, { stream: true }));
+      }
+
+      function resetCounters() {
+        outputEvents = 0;
+        outputBytes = 0;
+        inputEvents = 0;
+        duplicateOutputs = 0;
+        currentStreamId = null;
+        seenOutputSeqs.clear();
+        seenOutputSeqQueue.length = 0;
+        outputDecoder = new TextDecoder();
+        renderStatus();
+      }
+
+      function fitTerminal(forceNotify = false) {
+        fitAddon.fit();
+        const nextSize = { cols: term.cols, rows: term.rows };
+        const changed = nextSize.cols !== lastSize.cols || nextSize.rows !== lastSize.rows;
+
+        if (!changed && !forceNotify) {
+          return;
+        }
+
+        lastSize = nextSize;
+        renderStatus();
+
+        if (joined && channel) {
+          channel.push("resize", nextSize);
+        }
+      }
+
+      function scheduleFit() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(fitTerminal, 50);
+      }
+
+      function selectedCommand() {
+        return elements.commandPreset.value;
+      }
+
+      elements.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setMessage("");
+
+        try {
+          const body = await api("/api/sessions", {
+            method: "POST",
+            body: JSON.stringify({
+              slug: elements.slug.value.trim(),
+              command: selectedCommand()
+            })
+          });
+
+          elements.slug.value = "";
+          await loadSessions();
+          await selectSession(body.session.slug);
+          setSuggestedSlug();
+        } catch (error) {
+          setMessage(`create: ${error.message}`);
+        }
+      });
+
+      elements.refresh.addEventListener("click", async () => {
+        try {
+          await loadSessions();
+          setMessage("refreshed");
+        } catch (error) {
+          setMessage(`refresh: ${error.message}`);
+        }
+      });
+
+      elements.openFull.addEventListener("click", () => {
+        if (active && active.alive) {
+          openFullSession(active.slug);
+        }
+      });
+
+      elements.slugReroll.addEventListener("click", () => {
+        setSuggestedSlug();
+        elements.slug.focus();
+      });
+
+      elements.stop.addEventListener("click", async () => {
+        if (!active) {
+          return;
+        }
+
+        if (!confirm(`Stop ${active.session}?`)) {
+          return;
+        }
+
+        try {
+          const stopped = active.slug;
+          await api(`/api/sessions/${encodeURIComponent(stopped)}`, { method: "DELETE" });
+
+          if (channel) {
+            channel.leave();
+            channel = null;
+          }
+
+          active = null;
+          joined = false;
+          term.clear();
+          renderActive();
+          await loadSessions();
+          setSocketStatus("idle");
+          setMessage(`stopped ${stopped}`);
+        } catch (error) {
+          setMessage(`stop: ${error.message}`);
+        }
+      });
+
+      term.onData((data) => {
+        if (!channel || !joined) {
+          return;
+        }
+
+        inputEvents += 1;
+        renderStatus();
+        channel.push("input", { data });
+      });
+
+      window.addEventListener("resize", scheduleFit);
+      new ResizeObserver(scheduleFit).observe(document.getElementById("terminal"));
+      fitTerminal();
+
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+
+      renderStatus();
+      loadSessions().catch((error) => setMessage(`load: ${error.message}`));
+    </script>
+  </body>
+</html>

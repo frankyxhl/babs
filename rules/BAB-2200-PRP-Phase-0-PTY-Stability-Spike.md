@@ -1,8 +1,8 @@
 # PRP-2200: Phase 0 — PTY Stability Spike
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Draft
 
 ---
@@ -10,6 +10,8 @@
 ## What Is It?
 
 The first build phase. A self-contained sub-mix-project at `spikes/hardline/` (inside this repo) that runs the empirical erlexec PTY stability test defined in `BAB-1502`. This phase **gates everything else** — Phase 1 production code does not start until Phase 0 produces a pass/fail decision recorded against `BAB-1103`. The `hardline` name is from *The Matrix*'s wired cross-world phones; the full naming exploration is in `BAB-1005`.
+
+Phase 0a (`BAB-2202`) is a separate optional usability spike on the same `spikes/hardline/` codebase. It adds a browser manager console for multiple tmux-backed hardlines. Phase 0a can make manual operation easier, but it does **not** replace this PRP's official 24h+ validation gate.
 
 ---
 
@@ -96,3 +98,4 @@ This PRP is "done" when:
 | 2026-05-03 | Integral revision (D8): spike location moved to `spikes/hardline/` inside babs repo (option a, sub-mix-project); module namespace `Spike.*` → `Hardline.*`; erlexec dep `~> 2.3` → `~> 2.2` (Hex correction); added Channel→xterm.js byte-path validation as new step 6 + acceptance criterion (HIGH-severity review finding now covered); CHG output now files against both `BAB-1103` and `BAB-1106`. Naming origin: `BAB-1005` | Claude Code |
 | 2026-05-03 | Trinity-driven amendment (D13/D14): added step 7 = detach + reattach scenario (validates `BAB-1110` β + γ chicken-and-egg solution); added detach/reattach acceptance criterion; CHG output now also files against `BAB-1110` | Claude Code |
 | 2026-05-03 | Sync Output section and Change History wording with amended `BAB-1502`; Phase 0 now explicitly records CHG entries against `BAB-1103`, `BAB-1106`, and `BAB-1110` | Codex |
+| 2026-05-04 | Cross-reference optional Phase 0a (`BAB-2202`) Hardline Manager Console Spike and clarify it does not replace the official Phase 0 full validation gate | Codex |
