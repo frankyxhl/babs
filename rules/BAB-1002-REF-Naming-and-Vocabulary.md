@@ -165,8 +165,8 @@ A module under `Babs.Connectors.*` that bridges Babs to a single external surfac
 |---|---|---|
 | Citizen | Agent | "Agent" is overloaded — it could mean an AI CLI, a Claude Code agent, a Bat-Family agent. "Citizen" is the project's specific term. |
 | `workspaces/<slug>/` | `.bob/` directory, "agent dir", "bot dir" | Phase 1 workspace convention; `.bob/` is legacy/deferred. |
-| PaneSession | "PTY worker", "terminal process" | PaneSession is the role; PTY is the mechanism. |
-| Tmux.Core | "tmux wrapper", "erlexec module" | There is exactly one; name it definitively. |
+| Hardline.Pane | PaneSession, "PTY worker", "terminal process" | Current v0.1 module for one Citizen's PTY byte channel. |
+| Hardline | Tmux.Core, "tmux wrapper", "erlexec module" | Current v0.1 term for the PTY/byte channel boundary. |
 | Inter-node A2A | "Cross-machine A2A", "remote A2A" | Tailscale is just the network layer; "node" is the BEAM-correct term. |
 
 ---
@@ -197,3 +197,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-03 | Initial version — vocabulary, family naming, anti-patterns | Claude Code |
 | 2026-05-03 | Drop legacy "inherited from prefrontal-cortex" framing for `.bob/` convention | Claude Code |
 | 2026-05-04 | Phase 1 cleanup: mark `*.bob/` as legacy/deferred, define `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`, switch Hardline topic naming to `pane:<slug>`, and record Clare/Dylan/Sentinel seed names | Codex |
+| 2026-05-04 | Trinity review fix: update anti-pattern table to recommend `Hardline.Pane` and `Hardline` instead of legacy `PaneSession` and `Tmux.Core` terms | Codex |

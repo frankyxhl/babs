@@ -1,7 +1,7 @@
 # REF-1800: Evolution Philosophy
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
 **Status:** Active
 **Inherits from:** COR-1800 (full-replace per table; unspecified tables inherit COR defaults)
@@ -23,8 +23,8 @@ PRJ-layer override of COR-1800 for Babs. Babs is a **runtime system** — a long
 - **Scenario types** (each documented in `samples/regression-scenarios/<id>.md`):
   - **Relay scenarios**: inject a Discord-like message → expect a transcript line and an outbound reply within N seconds
   - **A2A scenarios**: dispatch an A2A call → expect a typed response payload
-  - **Lifecycle scenarios**: kill a PaneSession → expect supervised restart and citizen status to recover within N seconds
-  - **Backpressure scenarios**: flood a PaneSession with concurrent inject calls → expect serialized output and bounded mailbox growth
+  - **Lifecycle scenarios**: kill a `Hardline.Pane` → expect supervised restart and citizen status to recover within N seconds
+  - **Backpressure scenarios**: flood a `Hardline.Pane` with concurrent inject calls → expect serialized output, ≤4 KB PubSub byte chunks, and bounded mailbox growth
 - **When a scenario cannot be reproduced** (e.g., hardware-specific timing, real Discord rate limits): the baseline falls back to *PR diff + targeted-surface human review* — no synthetic claim of equivalence.
 
 ---
@@ -35,7 +35,7 @@ Replaces COR-1800 default code weights in full. Sums to 100%.
 
 | Dimension | Weight | Measures |
 |-----------|--------|----------|
-| Runtime safety | 30% | Does the change preserve supervision-tree semantics? Are crash boundaries intact? Are no-PubSub hot paths (terminal bytes) still hot? |
+| Runtime safety | 30% | Does the change preserve supervision-tree semantics? Are crash boundaries intact? Is the PubSub `pane:<slug>` terminal-byte path preserved with ≤4 KB chunks per `BAB-1106`? |
 | Behavior verifiability | 25% | Can the change be validated against an existing regression scenario, or does it ship with a new scenario? Untestable changes score low. |
 | Scope restraint | 20% | Change touches one logical surface (one supervisor's children / one ADR's domain / one boundary contract); does not bleed across boundary lines defined in `BAB-1003` |
 | Compression ratio | 15% | (chars deleted + chars merged) / (chars added). Net negative or neutral preferred; net positive must be justified by capability gained, not aesthetics |
@@ -64,11 +64,11 @@ Replaces COR-1800 default signal table in full. Default sources (test failures, 
 | Signal | Where to look | Cadence |
 |--------|---------------|---------|
 | Supervision-tree drift | `mix.exs` deps changes; `Babs.Application.start/2` children diff vs. `BAB-1001` | Per evolve cycle |
-| ADR drift | grep code for patterns explicitly rejected in `BAB-11xx` ADRs (e.g., DETS use, `:erpc` use, PubSub on terminal hot path) | Per evolve cycle |
-| Boundary leak | Any module outside `Babs.Tmux.Core` calling erlexec or `System.cmd("tmux", ...)`; any module outside `Babs.Connectors.*` doing direct Discord/Telegram HTTP | Per evolve cycle |
+| ADR drift | grep code for patterns explicitly rejected in `BAB-11xx` ADRs (e.g., DETS use, `:erpc` use, direct Channel↔pane PID coupling, PubSub terminal payloads larger than 4 KB) | Per evolve cycle |
+| Boundary leak | Any module outside the `Hardline` / `Hardline.Pane` boundary calling erlexec or `System.cmd("tmux", ...)`; any module outside `Babs.Connectors.*` doing direct Discord/Telegram HTTP | Per evolve cycle |
 | Persistence sprawl | Any new `:dets` open, any new external DB driver, any new `mnesia:*` call | Per evolve cycle |
 | Regression scenario coverage | `samples/regression-scenarios/` count vs. ADR-mandated scenario types (relay, A2A, lifecycle, backpressure) | Per evolve cycle |
-| Production incident frequency | Babs logs grep for crashes, restart loops, A2A timeouts, PaneSession OOM | Continuous (when noticed) |
+| Production incident frequency | Babs logs grep for crashes, restart loops, A2A timeouts, `Hardline.Pane` OOM | Continuous (when noticed) |
 | Latency / memory regression | BabsWeb metrics page or external Grafana over the last week vs. baseline | Per evolve cycle |
 | Repeated corrections | Same operator/user correction across multiple sessions | Continuous (when noticed) |
 | `af validate` output | Structural issues in `rules/` BAB docs | Per evolve cycle |
@@ -101,3 +101,4 @@ Beyond the inherited COR guard rails:
 |------|--------|----|
 | 2026-05-03 | Initial PRJ override of COR-1800 for Babs runtime system | Claude Code |
 | 2026-05-03 | Update LiveView/Channel guard rail to match `BAB-1106` v0.1 PubSub byte-path amendment | Codex |
+| 2026-05-04 | Update evolve weights and signals for authoritative `Hardline.Pane` and PubSub `pane:<slug>` terminal-byte path | Codex |

@@ -1,9 +1,21 @@
 # ADR-1103: PTY via erlexec; tmux send-keys Polling as Fallback
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
 **Status:** Accepted
+
+---
+
+## ⚠️ v0.1 Terminology Amendment (2026-05-04)
+
+The functional decision in this ADR remains accepted: `erlexec` PTY attach is primary, and `tmux send-keys`/`capture-pane` polling is the fallback if Phase 0 stability validation fails.
+
+Current v0.1 naming supersedes older terms in the body:
+
+- `PaneSession` / `Babs.Citizen.PaneSession` → `Hardline.Pane`
+- `Tmux.Core` / `Babs.Tmux.Core` → `Hardline` boundary in `:babs_citizens`
+- terminal bytes publish through PubSub topic `pane:<slug>` per `BAB-1106`; direct Channel↔pane PID coupling is not the v0.1 design
 
 ---
 
@@ -56,7 +68,7 @@ receive do
 end
 ```
 
-Owned by `Babs.Citizen.PaneSession` (one per citizen). Serialized writes; reads dispatched via PubSub or direct messaging.
+Owned by `Hardline.Pane` (one per active Citizen). Serialized writes; received bytes publish to PubSub topic `pane:<slug>` per `BAB-1106`.
 
 ### Why A Beats B for the Primary Path
 
@@ -77,7 +89,7 @@ Owned by `Babs.Citizen.PaneSession` (one per citizen). Serialized writes; reads 
 ### Method B Fallback Trigger
 
 If Phase 0 fails the criterion:
-1. Switch `PaneSession` to wrap `System.cmd("tmux", ["send-keys", session, "-l", payload])` for inject
+1. Switch `Hardline.Pane` to wrap `System.cmd("tmux", ["send-keys", session, "-l", payload])` for inject
 2. Switch terminal-byte read path to `tmux capture-pane -p` polling at 150-250ms (browser terminal latency budget)
 3. Switch death detection to `tmux has-session` polling at 1s
 4. Browser terminal Channel still receives bytes, just delayed by polling cadence
@@ -91,7 +103,7 @@ This costs latency and CPU but eliminates the BEAM-side PTY dependency entirely.
 **Positive (Method A):**
 - Real-time terminal experience, matching today's xterm.js dashboard
 - Event-driven CPU profile (idle citizens cost nothing)
-- Single ownership semantics (`PaneSession` owns the port; restart-coupled to the citizen)
+- Single ownership semantics (`Hardline.Pane` owns the port; restart-coupled to the citizen)
 
 **Negative (Method A):**
 - C++ build dependency
@@ -122,7 +134,7 @@ This costs latency and CPU but eliminates the BEAM-side PTY dependency entirely.
 
 ### Method D — No tmux at all; spawn AI CLI directly under erlexec
 
-Skip tmux entirely; `Babs.Citizen.PaneSession` runs the AI CLI as a direct child of erlexec.
+Skip tmux entirely; `Hardline.Pane` runs the AI CLI as a direct child of erlexec.
 
 **Rejected because:**
 - Loses tmux's session persistence (Babs restart wouldn't lose the AI CLI's state)
@@ -137,3 +149,4 @@ Skip tmux entirely; `Babs.Citizen.PaneSession` runs the AI CLI as a direct child
 |------|--------|----|
 | 2026-05-03 | Initial version — Method A primary, Method B fallback, Method C reserved | Claude Code |
 | 2026-05-03 | Drop "Python implementation" / "migration research" framing | Claude Code |
+| 2026-05-04 | Add v0.1 terminology amendment: `PaneSession` → `Hardline.Pane`, `Tmux.Core` → `Hardline`, terminal bytes via PubSub `pane:<slug>` | Codex |

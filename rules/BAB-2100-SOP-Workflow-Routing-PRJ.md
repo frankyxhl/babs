@@ -1,7 +1,7 @@
 # SOP-2100: Workflow Routing PRJ
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
 **Status:** Active
 
@@ -17,7 +17,7 @@ Babs's project-specific workflow routing. Tells AI agents (and humans) which COR
 
 Babs has its own document set (`BAB-10xx` foundational REFs, `BAB-11xx` ADRs, `BAB-22xx` Phase PRPs, etc.) and its own lifecycle (phased build on a clean slate). Generic COR routing doesn't know any of this. This SOP closes that gap so an agent dropped into the Babs repo can route correctly without reading every doc first.
 
-It also enforces a discipline specific to Babs: the seven foundational ADRs (`BAB-1100`–`BAB-1106`) record decisions that should not be casually reopened. Routing through this SOP makes "did you read the relevant ADR?" a step, not an afterthought.
+It also enforces a discipline specific to Babs: the current foundational ADR set (`BAB-1100`–`BAB-1112`) records decisions that should not be casually reopened. Routing through this SOP makes "did you read the relevant ADR?" a step, not an afterthought.
 
 ---
 
@@ -48,7 +48,7 @@ Inherits all of COR-1103 §"ALWAYS":
 
 ## Babs-specific Always
 
-- **Cross-reference ADRs before architecture work.** Babs has 7 foundational ADRs (`BAB-1100`–`BAB-1106`). When a task touches architecture (citizens, A2A, persistence, PTY, web framework choice), read the relevant ADR(s) first. Rejected alternatives in those ADRs are not invitations to reopen; they are documented reasons.
+- **Cross-reference ADRs before architecture work.** Babs's foundational ADRs currently span `BAB-1100`–`BAB-1112`. When a task touches architecture (citizens, coordination, persistence, PTY, web framework choice, v0.1 scope, OTP app boundaries, or AI CLI configuration), read the relevant ADR(s) first. Rejected alternatives in those ADRs are not invitations to reopen; they are documented reasons.
 - **Read `BAB-1001` (Architecture Overview) and `BAB-1002` (Naming) on first session in this repo.** They define the vocabulary and shape of the system.
 
 ---
@@ -75,8 +75,9 @@ Inherits all of COR-1103 §"ALWAYS":
 | Sub-task | Route |
 |---|---|
 | Net-new architecture decision (not covered by existing ADRs) | PRP (COR-1102) → review (COR-1602) → ADR (COR-1100) → file as `BAB-11xx` |
-| Phase implementation spec (Phase 0/1/2/3/4) | PRP (COR-1102) → file as `BAB-22xx` |
-| New citizen archetype (not covered by `BAB-1500`) | PRP (COR-1102) first if structurally novel; otherwise follow `BAB-1500` |
+| Phase implementation spec | PRP (COR-1102) → file as `BAB-22xx`; Phase 2+ sequencing follows `BAB-2300` |
+| Phase 1 citizen seed | Follow `BAB-2201` and `BAB-1002` (`citizens/citizen-<slug>.toml` + `workspaces/<slug>/`) |
+| New citizen archetype beyond Phase 1 seed layout | PRP (COR-1102) first if structurally novel; legacy `BAB-1500` is deferred |
 
 ### 4. Execution coordination for approved work
 
@@ -120,9 +121,11 @@ Fall back to COR-1103 §"None of the above" branch.
 - Triggers method-A-vs-method-B selection per `BAB-1103`
 - Pass criterion: ≤1 erlexec port crash per 48h AND any crash leaves the underlying tmux session alive
 
-### Add a new citizen `.bob`
+### Add a Phase 1 citizen seed
 
-Follow `BAB-1500`.
+Follow `BAB-2201` and `BAB-1002`: create/update `citizens/citizen-<slug>.toml`, allocate `workspaces/<slug>/`, and route the active terminal byte channel through `Hardline.Pane` + PubSub topic `pane:<slug>`.
+
+`BAB-1500` is deferred legacy guidance for the old `*.bob/` workflow. Do not route Phase 1 citizen creation there.
 
 ---
 
@@ -164,7 +167,7 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 
 1. Read `BAB-1001` (Architecture) → confirms Connectors live under `Babs.Connectors.Supervisor`
 2. §"Primary Route" branch 3 (new capability) → PRP path
-3. Check `BAB-1100`–`BAB-1106` ADRs — Slack connector is additive, no ADR conflict
+3. Check `BAB-1100`–`BAB-1112` ADRs — Slack connector is additive, no ADR conflict
 4. `af plan COR-1102 COR-1602 COR-1101` → PRP → review → CHG checklist
 5. Declare 📋 COR-1102 active; draft `BAB-22xx-PRP-Slack-Connector.md`
 
@@ -190,3 +193,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-03 | Initial version — Babs project-specific routing | Claude Code |
 | 2026-05-03 | Drop "Migration cutover" routes (Babs is from-scratch); collapse SOP "(when written)" notes for docs that now exist | Claude Code |
 | 2026-05-03 | Self-review fixes: Phase 0/1/2/3 → 0/1/2/3/4; remove "(when written)" on BAB-2200 | Claude Code |
+| 2026-05-04 | Expand architecture ADR range to `BAB-1100`–`BAB-1112`; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` and mark `BAB-1500` deferred | Codex |

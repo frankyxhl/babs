@@ -1,9 +1,15 @@
 # ADR-1108: Citizens Use Alfred for SOP Composition (Convention Only)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
 **Status:** Accepted
+
+---
+
+## ⚠️ v0.1 Layout Amendment (2026-05-04)
+
+The convention-only Alfred decision remains accepted. Current Phase 1 Citizen configuration lives in `citizens/citizen-<slug>.toml`, and working files live in `workspaces/<slug>/` per `BAB-1002`, `BAB-1112`, and `BAB-2201`. Any legacy `<name>.bob/` references in this ADR should be read as historical examples of "Citizen-owned prompt/config text," not as the Phase 1 file layout.
 
 ---
 
@@ -30,7 +36,7 @@ Babs explicitly does NOT:
 What Babs DOES guarantee:
 - `af` CLI is callable from inside the tmux pane (PATH inheritance from spawn env)
 - The Citizen's working directory has Alfred PRJ docs accessible (typically `<repo>/rules/`)
-- The Citizen's AI prompt configuration (its own `<name>.bob/` files) MAY reference SOP IDs as a hint, but Babs treats those references as opaque text
+- The Citizen's AI prompt configuration (Phase 1: `citizens/citizen-<slug>.toml`; legacy/deferred: `<name>.bob/` files) MAY reference SOP IDs as a hint, but Babs treats those references as opaque text
 
 ## Why Convention (Not Integration)
 
@@ -41,12 +47,12 @@ What Babs DOES guarantee:
 
 ## What This Means in Practice
 
-A Citizen `alex` is given a Ticket with body "Refactor the auth module per `COR-1500` and `BAB-1102`." When alex's AI processes this:
+A Citizen `dylan` is given a Ticket with body "Refactor the auth module per `COR-1500` and `BAB-1102`." When dylan's AI processes this:
 
-1. alex's AI sees the SOP IDs as **plain text** in the prompt
-2. alex's AI decides "I should look these up" and types `af read COR-1500` in the tmux pane
-3. The shell runs `af` (which is in PATH); alex's AI sees the SOP body in its context
-4. alex's AI follows the SOP
+1. dylan's AI sees the SOP IDs as **plain text** in the prompt
+2. dylan's AI decides "I should look these up" and types `af read COR-1500` in the tmux pane
+3. The shell runs `af` (which is in PATH); dylan's AI sees the SOP body in its context
+4. dylan's AI follows the SOP
 
 Babs is not involved beyond PATH inheritance and pane I/O.
 
@@ -67,3 +73,4 @@ If, after meaningful production use, we discover that Citizens consistently fail
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial decision; convention-only Alfred integration | Claude Code |
+| 2026-05-04 | Add v0.1 layout amendment for `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`; update example seed name to Dylan | Codex |

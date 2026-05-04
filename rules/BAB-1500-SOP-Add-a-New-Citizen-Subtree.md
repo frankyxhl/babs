@@ -1,16 +1,26 @@
 # SOP-1500: Add a New Citizen Subtree
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
-**Status:** Active
+**Status:** Deprecated
 **Depends on:** BAB-1001 (Architecture), BAB-1002 (Naming), BAB-1102 (Citizen-as-subtree ADR)
+
+---
+
+## ⚠️ v0.1 Phase 1 Status — Deprecated (2026-05-04)
+
+This SOP describes the legacy `*.bob/` citizen-subtree procedure from the pre-v0.1 roadmap. **Do not use it for Phase 1.**
+
+Phase 1 citizen seeds follow `BAB-2201` and `BAB-1002`: configuration lives in `citizens/citizen-<slug>.toml`, working files live in `workspaces/<slug>/`, the active terminal byte channel is `Hardline.Pane`, browser output flows through PubSub topic `pane:<slug>`, and Discord/Telegram Connector registration is not part of Phase 1.
+
+Keep this SOP only as deprecated historical guidance. If a later PRP/ADR reintroduces the `*.bob/` archetype workflow, create a new active SOP or rewrite this one through the document lifecycle first.
 
 ---
 
 ## What Is It?
 
-The end-to-end procedure for adding a new citizen `<name>.bob/` to a running Babs node. Covers: directory layout, supervision-tree wiring, Connectors registration, A2A registration, and verification.
+The legacy end-to-end procedure for adding a new citizen `<name>.bob/` to a running Babs node. Covers: directory layout, supervision-tree wiring, Connectors registration, A2A registration, and verification.
 
 ---
 
@@ -27,6 +37,7 @@ A citizen is not a single config entry — it is a coherent subtree of processes
 
 ## When NOT to Use
 
+- Phase 1 citizen seeds; use `BAB-2201` plus `BAB-1002` instead
 - Re-attaching an existing citizen after a Babs restart (Babs's DynamicSupervisor handles this on boot from the SQLite registry)
 - Architecturally novel citizen patterns (e.g., a citizen that needs more than one tmux session) — file a PRP first
 
@@ -139,3 +150,4 @@ Tempting shortcut: just copy `relay.bob` to `relay2.bob`. **Don't.** A citizen h
 | 2026-05-03 | Initial version — covers the create-tmux → directory → register → wire → verify path | Claude Code |
 | 2026-05-03 | Drop hybrid/migration sub-bullet (Babs is from-scratch; no Python-era citizen.db) | Claude Code |
 | 2026-05-03 | Step 5 reworded to drop unsupported "30s registry refresh tick" claim; clarified DynamicSupervisor relationship | Claude Code |
+| 2026-05-04 | Mark SOP deferred for Phase 1; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` with `citizens/citizen-<slug>.toml`, `workspaces/<slug>/`, `Hardline.Pane`, and PubSub `pane:<slug>` semantics | Codex |
