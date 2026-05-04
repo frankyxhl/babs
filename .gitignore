@@ -3,6 +3,8 @@
 /cover/
 /deps/
 /doc/
+**/_build/
+**/deps/
 /.fetch
 erl_crash.dump
 *.ez
@@ -24,6 +26,9 @@ npm-debug.log
 /local/
 *.dets
 
+# Phase 0 preflight logs; official full-run logs are review artifacts.
+spikes/hardline/results/*/events.log
+
 # OS / editor
 .DS_Store
 .idea/
@@ -38,3 +43,4 @@ npm-debug.log
 
 # Trinity / multi-model tooling state
 trinity.json
+.trinity/

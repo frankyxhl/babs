@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hardline Manager</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111318;
+        --panel: #181b22;
+        --panel-2: #20242d;
+        --line: #303642;
+        --text: #e7eaf0;
+        --muted: #9aa3b2;
+        --accent: #4fb3a5;
+        --danger: #dc6b6b;
+        --warn: #d7a84f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+        min-height: 100%;
+      }
+
+      aside {
+        min-width: 0;
+        border-right: 1px solid var(--line);
+        background: var(--panel);
+        display: flex;
+        flex-direction: column;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-height: 48px;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 650;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        min-height: 32px;
+        padding: 6px 10px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--accent);
+      }
+
+      button:disabled {
+        cursor: not-allowed;
+        color: #626a78;
+        border-color: #292f3a;
+      }
+
+      .danger:hover {
+        border-color: var(--danger);
+        color: #ffb8b8;
+      }
+
+      form {
+        display: grid;
+        gap: 8px;
+        padding: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      label {
+        display: grid;
+        gap: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      input {
+        width: 100%;
+        min-height: 34px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #0f1116;
+        color: var(--text);
+        padding: 7px 9px;
+      }
+
+      .session-list {
+        overflow: auto;
+        padding: 8px;
+      }
+
+      .session-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 6px;
+        width: 100%;
+        margin: 0 0 6px;
+        text-align: left;
+      }
+
+      .session-row.active {
+        border-color: var(--accent);
+        background: #17302f;
+      }
+
+      .session-name,
+      .session-meta,
+      .meta-value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-name {
+        font-weight: 650;
+      }
+
+      .session-meta {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .alive {
+        color: var(--accent);
+        font-size: 12px;
+      }
+
+      main {
+        min-width: 0;
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: center;
+        min-height: 48px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .title {
+        min-width: 0;
+      }
+
+      .title strong,
+      .title span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .title span {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      #terminal {
+        min-width: 0;
+        min-height: 0;
+        overflow: hidden;
+        background: #101014;
+      }
+
+      .statusbar {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, auto)) minmax(0, 1fr);
+        gap: 12px;
+        align-items: center;
+        min-height: 32px;
+        padding: 6px 12px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 1px;
+        background: var(--line);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .meta-cell {
+        min-width: 0;
+        padding: 7px 10px;
+        background: var(--panel);
+      }
+
+      .meta-label {
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 2px;
+      }
+
+      .empty {
+        padding: 14px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 760px) {
+        body {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto minmax(0, 1fr);
+        }
+
+        aside {
+          max-height: 42vh;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .meta-grid,
+        .statusbar {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <aside>
+      <header>
+        <h1>Hardline</h1>
+        <button id="refresh" type="button">Refresh</button>
+      </header>
+
+      <form id="create-form">
+        <label>
+          Slug
+          <input id="slug" name="slug" autocomplete="off" spellcheck="false" placeholder="demo-a" />
+        </label>
+        <label>
+          Command
+          <input id="command" name="command" spellcheck="false" value="/bin/zsh -f" />
+        </label>
+        <button type="submit">New</button>
+      </form>
+
+      <div id="session-list" class="session-list"></div>
+    </aside>
+
+    <main>
+      <div class="toolbar">
+        <div class="title">
+          <strong id="active-title">No session selected</strong>
+          <span id="active-subtitle">Create or select a hardline session</span>
+        </div>
+        <button id="stop" class="danger" type="button" disabled>Stop</button>
+      </div>
+
+      <div class="meta-grid">
+        <div class="meta-cell">
+          <div class="meta-label">tmux</div>
+          <div id="meta-session" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">session id</div>
+          <div id="meta-session-id" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">pane pid</div>
+          <div id="meta-pane-pid" class="meta-value">-</div>
+        </div>
+        <div class="meta-cell">
+          <div class="meta-label">command</div>
+          <div id="meta-command" class="meta-value">-</div>
+        </div>
+      </div>
+
+      <div id="terminal"></div>
+
+      <div class="statusbar">
+        <span id="socket-status">socket: idle</span>
+        <span id="size-status">size:100x32</span>
+        <span id="input-status">in:0</span>
+        <span id="output-status">out:0/0B</span>
+        <span id="dup-status">dup:0</span>
+        <span id="message-status"></span>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/phoenix@1.8.5/priv/static/phoenix.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+    <script>
+      const elements = {
+        list: document.getElementById("session-list"),
+        form: document.getElementById("create-form"),
+        slug: document.getElementById("slug"),
+        command: document.getElementById("command"),
+        refresh: document.getElementById("refresh"),
+        stop: document.getElementById("stop"),
+        title: document.getElementById("active-title"),
+        subtitle: document.getElementById("active-subtitle"),
+        metaSession: document.getElementById("meta-session"),
+        metaSessionId: document.getElementById("meta-session-id"),
+        metaPanePid: document.getElementById("meta-pane-pid"),
+        metaCommand: document.getElementById("meta-command"),
+        socketStatus: document.getElementById("socket-status"),
+        sizeStatus: document.getElementById("size-status"),
+        inputStatus: document.getElementById("input-status"),
+        outputStatus: document.getElementById("output-status"),
+        dupStatus: document.getElementById("dup-status"),
+        messageStatus: document.getElementById("message-status")
+      };
+
+      let sessions = [];
+      let active = null;
+      let socket = null;
+      let channel = null;
+      let joined = false;
+      let resizeTimer = null;
+      let lastSize = { cols: 100, rows: 32 };
+      let outputEvents = 0;
+      let outputBytes = 0;
+      let inputEvents = 0;
+      let duplicateOutputs = 0;
+      let currentStreamId = null;
+      let outputDecoder = new TextDecoder();
+      const seenOutputSeqs = new Set();
+      const seenOutputSeqQueue = [];
+      const maxSeenOutputSeqs = 4096;
+
+      const term = new Terminal({
+        cols: 100,
+        rows: 32,
+        cursorBlink: true,
+        fontFamily: 'Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+        fontSize: 13,
+        theme: {
+          background: "#101014",
+          foreground: "#e5e7eb",
+          cursor: "#f3c969",
+          selectionBackground: "#3d3d45"
+        }
+      });
+
+      const fitAddon = new FitAddon.FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(document.getElementById("terminal"));
+      term.focus();
+
+      function setMessage(text) {
+        elements.messageStatus.textContent = text;
+      }
+
+      function renderStatus() {
+        elements.sizeStatus.textContent = `size:${lastSize.cols}x${lastSize.rows}`;
+        elements.inputStatus.textContent = `in:${inputEvents}`;
+        elements.outputStatus.textContent = `out:${outputEvents}/${outputBytes}B`;
+        elements.dupStatus.textContent = `dup:${duplicateOutputs}`;
+      }
+
+      function setSocketStatus(text) {
+        elements.socketStatus.textContent = `socket: ${text}`;
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          headers: { "content-type": "application/json" },
+          ...options
+        });
+
+        const body = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(body.error || response.statusText);
+        }
+
+        return body;
+      }
+
+      async function loadSessions() {
+        const body = await api("/api/sessions");
+        sessions = body.sessions || [];
+        renderSessions();
+
+        if (active) {
+          active = sessions.find((session) => session.slug === active.slug) || active;
+          renderActive();
+        }
+
+        return sessions;
+      }
+
+      function renderSessions() {
+        elements.list.innerHTML = "";
+
+        if (sessions.length === 0) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = "No managed sessions";
+          elements.list.appendChild(empty);
+          return;
+        }
+
+        for (const session of sessions) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `session-row${active && active.slug === session.slug ? " active" : ""}`;
+          button.addEventListener("click", () => selectSession(session.slug));
+
+          const label = document.createElement("div");
+          label.innerHTML = `<div class="session-name"></div><div class="session-meta"></div>`;
+          label.querySelector(".session-name").textContent = session.slug;
+          label.querySelector(".session-meta").textContent = session.session;
+
+          const alive = document.createElement("div");
+          alive.className = "alive";
+          alive.textContent = session.alive ? "up" : "down";
+
+          button.append(label, alive);
+          elements.list.appendChild(button);
+        }
+      }
+
+      function renderActive() {
+        if (!active) {
+          elements.title.textContent = "No session selected";
+          elements.subtitle.textContent = "Create or select a hardline session";
+          elements.metaSession.textContent = "-";
+          elements.metaSessionId.textContent = "-";
+          elements.metaPanePid.textContent = "-";
+          elements.metaCommand.textContent = "-";
+          elements.stop.disabled = true;
+          return;
+        }
+
+        elements.title.textContent = active.slug;
+        elements.subtitle.textContent = active.session;
+        elements.metaSession.textContent = active.session || "-";
+        elements.metaSessionId.textContent = active.session_id || "-";
+        elements.metaPanePid.textContent = active.pane_pid || "-";
+        elements.metaCommand.textContent = active.command || active.pane_command || "-";
+        elements.stop.disabled = false;
+      }
+
+      async function selectSession(slug) {
+        const next = sessions.find((session) => session.slug === slug);
+
+        if (!next) {
+          return;
+        }
+
+        active = next;
+        renderSessions();
+        renderActive();
+        resetCounters();
+        await connectPane(next);
+      }
+
+      async function connectPane(session) {
+        joined = false;
+
+        if (channel) {
+          channel.leave();
+          channel = null;
+        }
+
+        term.clear();
+        setSocketStatus("connecting");
+        setMessage("");
+
+        try {
+          const capture = await api(`/api/sessions/${encodeURIComponent(session.slug)}/screen`);
+
+          if (capture.screen) {
+            term.write(capture.screen);
+          }
+        } catch (error) {
+          setMessage(`capture: ${error.message}`);
+        }
+
+        if (!socket) {
+          socket = new Phoenix.Socket("/socket", {});
+          socket.onError(() => setSocketStatus("error"));
+          socket.onClose(() => setSocketStatus("closed"));
+          socket.connect();
+        }
+
+        channel = socket.channel(`pane:${session.slug}`, {});
+
+        channel
+          .join()
+          .receive("ok", () => {
+            joined = true;
+            fitTerminal(true);
+            setSocketStatus(`connected ${session.slug}`);
+            term.focus();
+          })
+          .receive("error", () => {
+            setSocketStatus("join failed");
+          });
+
+        channel.on("output", handleOutput);
+      }
+
+      function handleOutput({ stream_id, seq, base64 }) {
+        if (stream_id !== currentStreamId) {
+          currentStreamId = stream_id;
+          seenOutputSeqs.clear();
+          seenOutputSeqQueue.length = 0;
+          outputDecoder = new TextDecoder();
+        }
+
+        const seqKey = seq === null ? null : `${stream_id ?? "legacy"}:${seq}`;
+
+        if (seqKey !== null && seenOutputSeqs.has(seqKey)) {
+          duplicateOutputs += 1;
+          renderStatus();
+          return;
+        }
+
+        if (seqKey !== null) {
+          seenOutputSeqs.add(seqKey);
+          seenOutputSeqQueue.push(seqKey);
+
+          while (seenOutputSeqQueue.length > maxSeenOutputSeqs) {
+            seenOutputSeqs.delete(seenOutputSeqQueue.shift());
+          }
+        }
+
+        const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+        outputEvents += 1;
+        outputBytes += bytes.length;
+        renderStatus();
+        term.write(outputDecoder.decode(bytes, { stream: true }));
+      }
+
+      function resetCounters() {
+        outputEvents = 0;
+        outputBytes = 0;
+        inputEvents = 0;
+        duplicateOutputs = 0;
+        currentStreamId = null;
+        seenOutputSeqs.clear();
+        seenOutputSeqQueue.length = 0;
+        outputDecoder = new TextDecoder();
+        renderStatus();
+      }
+
+      function fitTerminal(forceNotify = false) {
+        fitAddon.fit();
+        const nextSize = { cols: term.cols, rows: term.rows };
+        const changed = nextSize.cols !== lastSize.cols || nextSize.rows !== lastSize.rows;
+
+        if (!changed && !forceNotify) {
+          return;
+        }
+
+        lastSize = nextSize;
+        renderStatus();
+
+        if (joined && channel) {
+          channel.push("resize", nextSize);
+        }
+      }
+
+      function scheduleFit() {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(fitTerminal, 50);
+      }
+
+      elements.form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        setMessage("");
+
+        try {
+          const body = await api("/api/sessions", {
+            method: "POST",
+            body: JSON.stringify({
+              slug: elements.slug.value.trim(),
+              command: elements.command.value.trim()
+            })
+          });
+
+          elements.slug.value = "";
+          await loadSessions();
+          await selectSession(body.session.slug);
+        } catch (error) {
+          setMessage(`create: ${error.message}`);
+        }
+      });
+
+      elements.refresh.addEventListener("click", async () => {
+        try {
+          await loadSessions();
+          setMessage("refreshed");
+        } catch (error) {
+          setMessage(`refresh: ${error.message}`);
+        }
+      });
+
+      elements.stop.addEventListener("click", async () => {
+        if (!active) {
+          return;
+        }
+
+        if (!confirm(`Stop ${active.session}?`)) {
+          return;
+        }
+
+        try {
+          const stopped = active.slug;
+          await api(`/api/sessions/${encodeURIComponent(stopped)}`, { method: "DELETE" });
+
+          if (channel) {
+            channel.leave();
+            channel = null;
+          }
+
+          active = null;
+          joined = false;
+          term.clear();
+          renderActive();
+          await loadSessions();
+          setSocketStatus("idle");
+          setMessage(`stopped ${stopped}`);
+        } catch (error) {
+          setMessage(`stop: ${error.message}`);
+        }
+      });
+
+      term.onData((data) => {
+        if (!channel || !joined) {
+          return;
+        }
+
+        inputEvents += 1;
+        renderStatus();
+        channel.push("input", { data });
+      });
+
+      window.addEventListener("resize", scheduleFit);
+      new ResizeObserver(scheduleFit).observe(document.getElementById("terminal"));
+      fitTerminal();
+      renderStatus();
+      loadSessions().catch((error) => setMessage(`load: ${error.message}`));
+    </script>
+  </body>
+</html>
