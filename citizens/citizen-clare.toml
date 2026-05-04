@@ -1,0 +1,7 @@
+id = "BAB-CIT-0001"
+slug = "clare"
+display_name = "Clare"
+cli = "claude"
+cli_args = []
+cwd = "workspaces/clare"
+description = "Claude Code seed citizen"

@@ -16,7 +16,10 @@ erl_crash.dump
 /priv/static/assets/
 /priv/static/cache_manifest.json
 /assets/node_modules/
+/node_modules/
 npm-debug.log
+playwright-report/
+test-results/
 
 # Babs runtime
 /sessions/

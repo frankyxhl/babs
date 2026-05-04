@@ -1,0 +1,25 @@
+defmodule Babs.Citizens.Application do
+  @moduledoc false
+
+  use Application
+
+  @impl true
+  def start(_type, _args) do
+    children =
+      [
+        {Phoenix.PubSub, name: Babs.Citizens.PubSub},
+        {Registry, keys: :unique, name: Babs.Citizens.PaneRegistry},
+        {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
+      ] ++ reattach_children()
+
+    Supervisor.start_link(children, strategy: :one_for_one, name: Babs.Citizens.Supervisor)
+  end
+
+  defp reattach_children do
+    if Application.get_env(:babs_citizens, :autostart, true) do
+      [Babs.Citizens.ReattachScanner]
+    else
+      []
+    end
+  end
+end
