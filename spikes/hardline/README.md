@@ -13,6 +13,8 @@ The harness now has:
 - `mix hardline.validate` for automated tmux / erlexec scenarios
 - `mix hardline.web` for the Phase 0a browser Hardline manager console and
   manual Phoenix Channel -> xterm.js byte-path check
+- `npm run test:browser` for the Phase 0c JavaScript, DOM, and Playwright E2E
+  browser harness
 - per-run artifacts under `results/run-YYYY-MM-DD-HHMMSS/`
 
 Local closeout status: implementation and short-run preflight are complete.
@@ -74,12 +76,22 @@ blank command reported `pane_current_command=zsh` and empty
 `pane_start_command`, proving tmux selected its own first-window shell. The
 temporary smoke session was stopped afterward.
 
+Phase 0c browser test-hardening work is complete. The manager JavaScript now
+lives in static ES modules under `priv/static/js/`; `index.html` keeps the HTML,
+CSS, CDN libraries, and module boot script. Local browser validation added pure
+JavaScript tests plus Playwright DOM/E2E coverage for create, select, type,
+full-window, refresh, stop, and missing-session workflows. This is still an
+optional testing/refactor phase and does not complete the official Phase 0
+24-hour validation gate.
+
 ## Current Toolchain
 
 - Erlang/OTP 28.5 via the repository `.mise.toml`
 - Elixir 1.19.5-otp-28 via the repository `.mise.toml`
 - tmux 3.6a
 - erlexec locked at 2.3.0 by `mix.lock`
+- Node.js 25.x for the Phase 0c browser test harness
+- Playwright 1.59.x using local Google Chrome
 - default automated validation workload shell: `/bin/zsh -f`
 - default browser-created manager session shell: tmux default shell
 
@@ -95,6 +107,24 @@ From this directory:
 mise exec -- mix deps.get
 mise exec -- mix compile
 mise exec -- mix test
+```
+
+Browser test harness:
+
+```sh
+npm install
+npm run test:js
+npm run test:e2e
+```
+
+`npm run test:browser` runs both browser layers. `test:e2e` starts
+`mix hardline.web` on `127.0.0.1:4110` by default with a unique
+`babs-e2e-*` tmux prefix, creates only temporary managed sessions under that
+prefix, and cleans them up after the run. Override the defaults only for local
+port conflicts:
+
+```sh
+HARDLINE_E2E_PORT=4111 npm run test:e2e
 ```
 
 Short smoke run:
@@ -267,3 +297,20 @@ GLM, Gemini, and DeepSeek after additional hardening:
 - `erlexec` is explicitly constrained to `~> 2.3`.
 - latest local checks after Phase 0b UI refinements: `mix format --check-formatted`
   passed and `mix test` passed with 45 tests, 0 failures.
+
+## Phase 0c Browser Harness
+
+Phase 0c extracted the browser manager from inline HTML into:
+
+- `priv/static/js/hardline_core.js` — pure URL, command, slug, status, and
+  full-mode helper logic
+- `priv/static/js/hardline_manager.js` — DOM, API, Phoenix Channel, xterm.js,
+  FitAddon, and lucide wiring
+- `priv/static/js/hardline_boot.js` — module boot entrypoint used by
+  `index.html`
+
+Validation:
+
+- `npm run test:js` passed: 9 pure JavaScript tests
+- `npm run test:e2e` passed: 10 Playwright DOM/E2E tests
+- `mise exec -- mix test` passed: 59 tests, 0 failures

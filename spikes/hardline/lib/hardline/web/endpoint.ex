@@ -11,7 +11,7 @@ defmodule Hardline.Web.Endpoint do
   plug(Plug.Static,
     at: "/",
     from: :hardline,
-    only: ~w(index.html)
+    only: ~w(index.html js)
   )
 
   plug(Hardline.Web.ApiPlug)

@@ -64,9 +64,9 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 0c — Hardline Browser Test Harness
 
-**Doc**: `BAB-2205` (proposed), `BAB-2206` CHG (proposed)
+**Doc**: `BAB-2205` (implemented), `BAB-2206` CHG (completed)
 **Output**: `spikes/hardline/` browser manager JavaScript is refactored out of inline HTML into testable static modules; JS/DOM tests and Playwright BDD-style E2E tests cover create/select/type/full/refresh/stop and missing-session workflows.
-**Acceptance**: `mix test`, JS/DOM tests, Playwright E2E tests, `git diff --check`, and `af validate` pass; E2E tests use isolated tmux prefixes and clean up all temporary sessions.
+**Acceptance**: Passed on 2026-05-04. `index.html` loads testable static modules under `priv/static/js/`; `npm run test:js` passed with 9 tests; `npm run test:e2e` passed with 10 Playwright DOM/E2E tests; `mise exec -- mix test` passed with 59 tests, 0 failures. E2E uses isolated `babs-e2e-*` tmux prefixes and cleans up temporary sessions.
 **Estimate**: 1-2 days
 **Built by**: human
 **Gate status**: Optional test-hardening/refactor phase. It does **not** replace Phase 0's official 24h+ validation and does **not** by itself authorize Phase 1 SEED.
@@ -260,3 +260,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-04 | Add optional Phase 0a Hardline Manager Console Spike (`BAB-2202`) between Phase 0 and Phase 1; clarify it improves browser operation but does not replace the official Phase 0 full validation gate | Codex |
 | 2026-05-04 | Mark Phase 0a implemented after manager console code, tests, Tailscale API smoke, browser smoke, and reattach verification passed | Codex |
 | 2026-05-04 | Add optional Phase 0b Hardline Full-Window Mode Spike (`BAB-2203`/`BAB-2204`) after Phase 0a; clarify it is browser-only usability work and not a Phase 0 gate substitute | Codex |
+| 2026-05-04 | Mark optional Phase 0c implemented after JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and ExUnit validation passed | Codex |
