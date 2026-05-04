@@ -99,7 +99,7 @@ defmodule Hardline.Validation do
       DateTime.utc_now()
       |> Calendar.strftime("%Y-%m-%d-%H%M%S")
 
-    Path.join(root, "run-#{timestamp}")
+    Path.join(root, "run-#{timestamp}-#{System.unique_integer([:positive])}")
     |> tap(&File.mkdir_p!/1)
   end
 
@@ -133,8 +133,7 @@ defmodule Hardline.Validation do
     end
   end
 
-  defp previous_failure?([%{status: :fail} | _results]), do: true
-  defp previous_failure?(_results), do: false
+  defp previous_failure?(results), do: Enum.any?(results, &(&1.status == :fail))
 
   defp context([]), do: %{}
   defp context([%{ctx: ctx} | _results]), do: ctx

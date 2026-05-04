@@ -50,6 +50,25 @@ defmodule Hardline.ValidationTest do
     assert File.exists?(result.summary)
   end
 
+  test "auto-generated run directories are unique within the same second" do
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "hardline-validation-unique-run-dir-test-#{System.unique_integer([:positive])}"
+      )
+
+    on_exit(fn ->
+      File.rm_rf!(root)
+    end)
+
+    first = Validation.create_run_dir!(root)
+    second = Validation.create_run_dir!(root)
+
+    assert first != second
+    assert File.dir?(first)
+    assert File.dir?(second)
+  end
+
   test "cleans up tmux sessions when provision proof fails after attach" do
     prefix = "babs-validation-test-#{System.unique_integer([:positive])}"
 
@@ -91,7 +110,17 @@ defmodule Hardline.ValidationTest do
       )
 
     assert %{status: :fail} = Enum.find(result.results, &(&1.name == :provision_fleet))
-    assert %{status: :skip} = Enum.find(result.results, &(&1.name == :soak))
+
+    assert Enum.map(result.results, &{&1.name, &1.status}) == [
+             {:provision_fleet, :fail},
+             {:soak, :skip},
+             {:chaos, :skip},
+             {:resize_storm, :skip},
+             {:slow_reader, :skip},
+             {:detach_reattach, :skip},
+             {:web_byte_path, :skip}
+           ]
+
     assert Runner.list_sessions(prefix) == []
   end
 
