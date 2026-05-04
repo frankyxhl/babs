@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-04
-**Status:** Proposed
+**Status:** Completed
 **Related:** `BAB-2205`, `BAB-2203`, `BAB-2204`, `BAB-2200`
 
 ---
@@ -82,8 +82,39 @@ Risk:
 
 ---
 
+## Result
+
+Implemented in `spikes/hardline/`.
+
+Outcome:
+
+- `priv/static/index.html` no longer carries the bulk manager JavaScript inline.
+- Pure browser behavior was extracted into
+  `priv/static/js/hardline_core.js`.
+- DOM/API/Phoenix Channel/xterm.js/lucide wiring was extracted into
+  `priv/static/js/hardline_manager.js`.
+- `priv/static/js/hardline_boot.js` is the module entrypoint loaded by
+  `index.html`.
+- Stable `data-testid` hooks were added for browser tests.
+- `Plug.Static` now serves the `js/` static module directory.
+- Node/Playwright test tooling was added with `npm run test:js`,
+  `npm run test:e2e`, and `npm run test:browser`.
+- Playwright E2E starts a local `mix hardline.web` server with an isolated
+  `babs-e2e-*` tmux prefix and cleans up temporary managed sessions.
+
+Validation:
+
+- `npm run test:js` passed: 9 tests.
+- `npm run test:e2e` passed: 10 Playwright tests.
+- `mise exec -- mix test` passed: 59 tests, 0 failures.
+- The official Phase 0 24-hour validation remains deferred and was not marked
+  complete.
+
+---
+
 ## Change History
 
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-04 | Initial proposed CHG for Phase 0c testing/refactor-only browser harness | Codex |
+| 2026-05-04 | Completed Phase 0c JS extraction and browser test harness; local JS, E2E, and ExUnit validation passed | Codex |
