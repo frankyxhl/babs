@@ -813,7 +813,15 @@
             term.write(capture.screen);
           }
         } catch (error) {
-          setMessage(`capture: ${error.message}`);
+          const message = `capture: ${error.message}`;
+          setMessage(message);
+          setSocketStatus("unavailable");
+
+          if (fullMode) {
+            showFullError(`Session unavailable: ${session.slug}`);
+          }
+
+          return;
         }
 
         if (!socket) {

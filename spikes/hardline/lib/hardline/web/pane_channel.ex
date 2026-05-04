@@ -7,7 +7,10 @@ defmodule Hardline.Web.PaneChannel do
   def join("pane:" <> name, _payload, socket) do
     # Phoenix subscribes the channel process to its joined topic. An explicit
     # PubSub.subscribe/2 here causes duplicate output delivery.
-    {:ok, assign(socket, :pane_name, name)}
+    case Registry.lookup(Hardline.Web.PaneRegistry, name) do
+      [{_pid, _value}] -> {:ok, assign(socket, :pane_name, name)}
+      [] -> {:error, %{reason: "not_found"}}
+    end
   end
 
   @impl true

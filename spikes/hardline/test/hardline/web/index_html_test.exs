@@ -88,6 +88,16 @@ defmodule Hardline.Web.IndexHtmlTest do
     assert html =~ "Back to manager"
   end
 
+  test "aborts pane channel connection after screen capture failure" do
+    html = index_html()
+
+    assert html =~ "const message = `capture: ${error.message}`;"
+    assert html =~ "setSocketStatus(\"unavailable\");"
+    assert html =~ "showFullError(`Session unavailable: ${session.slug}`);"
+    assert html =~ "return;"
+    assert html =~ "socket.channel(`pane:${session.slug}`, {})"
+  end
+
   defp index_html do
     :hardline
     |> :code.priv_dir()
