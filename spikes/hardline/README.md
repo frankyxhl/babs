@@ -53,13 +53,35 @@ Phase 0a manager-console work is complete in this spike. Official Phase 0 Step
 validation CHG entries, or Phase 1 SEED start until the future full run
 produces a pass/fail decision.
 
+Phase 0b full-window mode is also implemented. From the manager, click
+`Open Full` for a managed session, or open a URL directly:
+
+```text
+http://100.x.y.z:4010/?session=<slug>&full=1
+```
+
+Full-window mode is browser-only. It reuses the existing `pane:<slug>` Channel,
+does not create or stop tmux sessions, and keeps resize events on the existing
+`:exec.winsz/3` path.
+
+Current Tailscale smoke passed at
+`http://100.x.y.z:4010/?session=demo-a&full=1`; Chrome rendered the terminal
+as the full browser content area with only the `Manager` back link visible, and
+tmux reported the live zsh pane at `243x53`.
+
+Shell-preset smoke also passed: a temporary `shell-smoke` session created with
+blank command reported `pane_current_command=zsh` and empty
+`pane_start_command`, proving tmux selected its own first-window shell. The
+temporary smoke session was stopped afterward.
+
 ## Current Toolchain
 
 - Erlang/OTP 28.5 via the repository `.mise.toml`
 - Elixir 1.19.5-otp-28 via the repository `.mise.toml`
 - tmux 3.6a
 - erlexec locked at 2.3.0 by `mix.lock`
-- default interactive workload shell: `/bin/zsh -f`
+- default automated validation workload shell: `/bin/zsh -f`
+- default browser-created manager session shell: tmux default shell
 
 `BAB-2200` notes that `erlexec ~> 2.3` did not exist when the PRP was drafted.
 Hex now reports `erlexec 2.3.0` as published on 2026-04-23, so this spike is
@@ -121,6 +143,10 @@ The page is a browser manager for Babs-managed tmux sessions:
 
 - create a session with a slug such as `demo-a`
 - the tmux session name becomes `babs-hardline-demo-a`
+- the slug field is prefilled with an unused fruit/character suggestion, and
+  the shuffle button suggests another slug
+- the Shell dropdown defaults to tmux's own default shell, matching new tmux
+  windows; `/bin/zsh -f` remains available when a minimal shell is useful
 - create more sessions and click the left-side list to switch terminals
 - stop a selected session with the Stop button
 - browser refresh must not create a new tmux session or change the selected
@@ -160,7 +186,7 @@ When validating through Tailscale on this machine, the current pattern is:
 
 ```sh
 tmux new-session -d -s hardline-web-server \
-  'cd /Users/frank/Projects/babs/spikes/hardline && mise exec -- mix hardline.web --host 100.x.y.z --port 4010 --command "/bin/zsh -f"'
+  'cd /Users/frank/Projects/babs/spikes/hardline && mise exec -- mix hardline.web --host 100.x.y.z --port 4010'
 ```
 
 Then open `http://100.x.y.z:4010/` from the remote browser. Stop it with:
@@ -239,5 +265,5 @@ GLM, Gemini, and DeepSeek after additional hardening:
 - `Hardline.Web.Manager` prunes dead `PaneServer` processes and reattaches live
   managed tmux sessions.
 - `erlexec` is explicitly constrained to `~> 2.3`.
-- latest local checks: `mix format --check-formatted` passed and `mix test`
-  passed with 36 tests, 0 failures.
+- latest local checks after Phase 0b UI refinements: `mix format --check-formatted`
+  passed and `mix test` passed with 45 tests, 0 failures.

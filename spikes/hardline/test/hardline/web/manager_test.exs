@@ -52,6 +52,22 @@ defmodule Hardline.Web.ManagerTest do
     assert Runner.tmux_session_alive?(b.session)
   end
 
+  test "creates browser sessions with tmux default shell when command is blank", %{prefix: prefix} do
+    start_supervised!({Manager, prefix: prefix, command: Runner.default_shell_command()})
+
+    assert {:ok, session} = Manager.create_session("tmux-default", "")
+    assert session.command == ""
+    assert Runner.tmux_session_alive?(session.session)
+  end
+
+  test "defaults browser manager sessions to tmux default shell", %{prefix: prefix} do
+    start_supervised!({Manager, prefix: prefix})
+
+    assert {:ok, session} = Manager.create_session("tmux-default")
+    assert session.command == ""
+    assert Runner.tmux_session_alive?(session.session)
+  end
+
   test "reattaches existing prefixed tmux sessions on startup", %{prefix: prefix} do
     session = Runner.managed_session_name("existing", prefix)
     assert :ok = Runner.start_session(session, Runner.default_shell_command())

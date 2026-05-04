@@ -37,7 +37,12 @@ defmodule Hardline.Runner do
   end
 
   def new_session_args(session, command) when is_binary(session) and is_binary(command) do
-    ["new-session", "-d", "-s", session, command]
+    args = ["new-session", "-d", "-s", session]
+
+    case String.trim(command) do
+      "" -> args
+      command -> args ++ [command]
+    end
   end
 
   def attach_command(session) when is_binary(session) do

@@ -38,6 +38,15 @@ defmodule Hardline.RunnerTest do
              ]
     end
 
+    test "omits the command when using tmux's default shell" do
+      assert Hardline.Runner.new_session_args("babs-test-1", "") == [
+               "new-session",
+               "-d",
+               "-s",
+               "babs-test-1"
+             ]
+    end
+
     test "builds erlexec attach command as a charlist" do
       assert Hardline.Runner.attach_command("babs-test-1") ==
                ~c"tmux attach-session -t babs-test-1"

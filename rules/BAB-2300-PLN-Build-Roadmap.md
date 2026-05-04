@@ -1,8 +1,8 @@
 # PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-04
+**Last reviewed:** 2026-05-04
 **Status:** Active
 **Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
 **Sources:** v0.1 design session 2026-05-03; Trinity Review `BAB-1006`
@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-16): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~16-30 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
 
 ---
 
@@ -25,7 +25,7 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 
 | Milestone | Phases | Definition |
 |-----------|--------|------------|
-| **M0** | 0 | PTY substrate validated |
+| **M0** | 0, optional 0a/0b | PTY substrate validated; optional browser manager console and full-window terminal mode available for easier hardline operation |
 | **M1** | 1 | **Flywheel ignited** — single Citizen running in browser, can edit Babs and survive reload |
 | **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
 | **M2.5** | 6.5 | Manual ticket dogfood validation (Trinity-mandated) |
@@ -44,11 +44,29 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 **Estimate**: 3-5 days
 **Built by**: human
 
+### Phase 0a — Hardline Manager Console Spike
+
+**Doc**: `BAB-2202` (implemented)
+**Output**: `spikes/hardline/` web spike upgraded from one-pane validation page to one browser console that can create, list, switch between, and explicitly stop multiple Babs-managed tmux-backed hardlines using one web port.
+**Acceptance**: Passed on 2026-05-04. Browser at `http://100.x.y.z:4010/` can create two `babs-hardline-*` sessions, switch between them without creating new tmux sessions, refresh/restart without changing session ID / pane PID for existing sessions, stop one session without touching unmanaged tmux sessions, and reattach existing managed sessions after web server restart.
+**Estimate**: 1-2 days
+**Built by**: human
+**Gate status**: Optional but recommended usability spike. It does **not** replace Phase 0's official 24h+ validation and does **not** by itself authorize Phase 1 SEED.
+
+### Phase 0b — Hardline Full-Window Mode Spike
+
+**Doc**: `BAB-2203` (implemented), `BAB-2204` CHG (implemented)
+**Output**: `spikes/hardline/` manager UI gains `Open Full` controls and `/?session=<slug>&full=1`, a separate browser-window mode where one managed hardline fills the viewport.
+**Acceptance**: Passed on 2026-05-04. Full-window mode reuses an existing `pane:<slug>` session, does not create or kill tmux sessions, hides manager chrome, preserves resize through `:exec.winsz/3`, and shows visible errors for missing sessions.
+**Estimate**: <1 day
+**Built by**: human
+**Gate status**: Optional browser usability spike. It does **not** replace Phase 0's official 24h+ validation and does **not** by itself authorize Phase 1 SEED.
+
 ### Phase 1 — V0-S0 SEED (Flywheel Ignition)
 
 **Doc**: `BAB-2201` (full PRP, drafted)
-**Output**: Mix umbrella with `:babs` and `:babs_citizens` apps; **two seed Citizens** (`alex` running `claude`, `morgan` running `codex` — validates multi-CLI works at SEED time, not deferred); minimal LiveView terminal at `/citizens/<name>`; Channel re-registration; tmux detach + reattach; multi-CLI `citizen.toml`; `Babs.Citizens.SourceWatcher` for `:babs_citizens` reload (per `BAB-1110`); restricted keyboard set; PubSub chunk size ≤4KB (per `BAB-1106`)
-**Acceptance**: **Flywheel Test (Gate A scripted + Gate B dogfood)** — Gate A is a machine-verifiable sentinel reload test (alex survives `:babs_citizens` reload with tmux/CLI PID intact); Gate B is the human dogfood test (user implements Phase 2 entirely from browser, closes all terminals first). Both gates must pass.
+**Output**: Mix umbrella with `:babs` and `:babs_citizens` apps; **two AI seed Citizens** (`clare` running `claude`, `dylan` running `codex` — validates multi-CLI works at SEED time, not deferred) plus deterministic `sentinel` (`/bin/zsh`) for Gate A; minimal LiveView terminal at `/citizens/<slug>`; Channel re-registration; tmux detach + reattach; multi-CLI configs at `citizens/citizen-<slug>.toml`; `Babs.DevReloader` in `:babs` for `:babs_citizens` reload (per `BAB-1110`); restricted keyboard set; PubSub chunk payloads ≤4KB (per `BAB-1106`)
+**Acceptance**: **Flywheel Test (Gate A scripted + Gate B dogfood)** — Gate A is `mix babs.gate_a`, a machine-verifiable sentinel reload test (sentinel survives `:babs_citizens` reload with tmux session and pane PID intact); Gate B is the human dogfood test (clare implements Phase 2 entirely from browser, closes all terminals first). Both gates must pass.
 **Estimate**: 14-21 days (Trinity 2× multiplier from naive 7-10)
 **Built by**: human (last manual phase)
 
@@ -62,41 +80,41 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 
 ### Phase 2 — Transcript JSONL Persistence
 
-**Scope**: Every byte that flows through `Hardline.Pane` is appended to `<name>.bob/transcript.jsonl`. On browser reload, last N lines replayed to xterm.js for context.
+**Scope**: Every byte that flows through `Hardline.Pane` is appended to `<cwd>/transcript.jsonl`, for example `workspaces/clare/transcript.jsonl`. On browser reload, last N lines replayed to xterm.js for context.
 **Acceptance**: Close browser tab, re-open: see most recent 200 lines of transcript; tab restart is byte-loss-free
-**Note**: This phase is the first chicken-and-egg test for the flywheel — alex modifies the file (`Hardline.Pane`) that captures her own bytes. Per `BAB-1110`, tmux survives the reload; new Pane reattaches.
+**Note**: This phase is the first chicken-and-egg test for the flywheel — clare modifies the file (`Hardline.Pane`) that captures her own bytes. Per `BAB-1110`, tmux survives the reload; new Pane reattaches.
 **Estimate**: 3-5 days
 
 ### Phase 3 — SQLite Citizens Table + Auto-Respawn
 
-**Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table fields: `name`, `cwd`, `cli`, `cli_args`, `status` (`:running`/`:stopped`/`:failed`), `created_at`, `metadata` (JSONB), `role` (nullable), `is_mayor` (bool, default false). On Babs boot, scan SQLite + reattach.
+**Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table fields: `slug`, `display_name`, `cwd`, `cli`, `cli_args`, `status` (`:running`/`:stopped`/`:failed`), `created_at`, `metadata` (JSONB), `role` (nullable), `is_mayor` (bool, default false). On Babs boot, scan SQLite + reattach.
 **Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
-**Acceptance**: Restart Babs node; alex auto-respawns from SQLite; cwd preserved
+**Acceptance**: Restart Babs node; clare auto-respawns from SQLite; cwd preserved
 **Estimate**: 4-6 days
 
 ### Phase 4 — NewCitizenLive Spawn UI
 
-**Scope**: `/citizens/new` form (name + CLI radio: claude/codex/droid/pi/gh copilot + cwd field + optional env block). Submit → write `<name>.bob/citizen.toml` + SQLite row + start citizen + redirect to `/citizens/<name>`.
-**Acceptance**: Spawn morgan via UI; morgan reaches interactive prompt; SQLite row + citizen.toml exist; transcript starts persisting
+**Scope**: `/citizens/new` form (slug + display name + CLI radio: claude/codex/droid/pi/gh copilot + cwd field + optional env block). Submit → write `citizens/citizen-<slug>.toml` + SQLite row + start citizen + redirect to `/citizens/<slug>`.
+**Acceptance**: Spawn a new non-seed citizen via UI; it reaches interactive prompt; SQLite row + citizen TOML exist; transcript starts persisting
 **Estimate**: 4-6 days
 
 ### Phase 5 — Multi-Citizen Index + Tab Navigation
 
 **Scope**: `/citizens` index page (list all citizens with status badges); tab navigation between active citizens; ≥3 concurrent hardlines without PTY fd leak (verified via `lsof`).
-**Acceptance**: Spawn alex / morgan / kim simultaneously; each in own tab; 30 min concurrent run, fd count stable
+**Acceptance**: Spawn clare / dylan / one additional citizen simultaneously; each in own tab; 30 min concurrent run, fd count stable
 **Estimate**: 3-5 days
 
 ### Phase 6 — Stop / Start / Restart UI
 
-**Scope**: Buttons in citizen detail view: stop (`tmux kill-session` + SQLite `:stopped` + preserve `.bob/`), start (reuse `.bob/`, fresh tmux + erlexec, status `:running`), restart (atomic stop + start). Per `BAB-1107` semantics.
-**Acceptance**: Stop alex → restart alex; transcript continues with `:reattached` event in history; AI CLI starts fresh but `.bob/` files are intact
+**Scope**: Buttons in citizen detail view: stop (`tmux kill-session` + SQLite `:stopped` + preserve configured workspace), start (reuse config/workspace, fresh tmux + erlexec, status `:running`), restart (atomic stop + start). Per `BAB-1107` semantics.
+**Acceptance**: Stop clare → restart clare; transcript continues with `:reattached` event in history; AI CLI starts fresh but workspace files are intact
 **Estimate**: 2-4 days
 
 ### 🎯 M2 = V0-S complete (~3-5 weeks flywheel time)
 
 ### Phase 6.5 — Manual Ticket Dogfood (Trinity-mandated)
 
-**Scope**: Operator manually creates 1-2 ticket markdown files at `tickets/T-2026-XX-XX-001.md`; manually edits frontmatter to assign to alex; manually injects ticket body as alex's prompt; alex completes work; operator manually flips state to `closed`. **No automation.** Validates that the schema design (per `BAB-1111`) actually works end-to-end before infrastructure is built.
+**Scope**: Operator manually creates 1-2 ticket markdown files at `tickets/T-2026-XX-XX-001.md`; manually edits frontmatter to assign to clare; manually injects ticket body as clare's prompt; clare completes work; operator manually flips state to `closed`. **No automation.** Validates that the schema design (per `BAB-1111`) actually works end-to-end before infrastructure is built.
 **Why**: Trinity 3/3 reviewers flagged that Phase 7-12 is high-cost ticket infrastructure built without proving the workflow first. This 1-2 day phase validates the workflow.
 **Acceptance**: 2 tickets driven through full lifecycle; observed friction informs Phase 7-12 designs
 **Estimate**: 1-2 days
@@ -115,8 +133,8 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 
 ### Phase 9 — Ticket → Citizen Assignment
 
-**Scope**: UI button "Assign to alex" → ticket `assignee` field updated → ticket body **injected as alex's initial prompt** (via `bb` CLI write to alex's stdin); state transitions to `in_progress`; history event written.
-**Acceptance**: Create T-001 = "Add health check endpoint"; assign to alex; alex's terminal receives the body as input and starts working
+**Scope**: UI button "Assign to clare" → ticket `assignee` field updated → ticket body **injected as clare's initial prompt** (via `bb` CLI write to clare's stdin); state transitions to `in_progress`; history event written.
+**Acceptance**: Create T-001 = "Add health check endpoint"; assign to clare; clare's terminal receives the body as input and starts working
 **Estimate**: 4-6 days
 
 ### Phase 10 — Ticket 6-State Machine
@@ -128,13 +146,13 @@ Phase 0 has its own PRP (`BAB-2200`). Phase 1 has its own PRP (`BAB-2201`). Phas
 ### Phase 11 — Approval UI (Inspector = User in V0-M)
 
 **Scope**: Pending Approval tickets show "Approve" / "Reject" buttons. Reject requires feedback (modal). Approve transitions to Closed; Reject transitions back to In Progress with feedback comment injected into assignee's hardline.
-**Acceptance**: alex submits T-001 to Pending Approval; user rejects with feedback "missing docs"; alex receives feedback in terminal and continues; alex resubmits; user approves; ticket Closed
+**Acceptance**: clare submits T-001 to Pending Approval; user rejects with feedback "missing docs"; clare receives feedback in terminal and continues; clare resubmits; user approves; ticket Closed
 **Estimate**: 2-4 days
 
 ### Phase 12 — Cross-Citizen Ticket Comments
 
 **Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. All Citizens listed as `assignees` (multi-assignee allowed) receive the comment via PubSub injection into their hardline.
-**Acceptance**: T-001 assigned to alex + morgan; alex `bb ticket comment T-001 "Backend done"`; morgan sees the message in her terminal within 1s
+**Acceptance**: T-001 assigned to clare + dylan; clare `bb ticket comment T-001 "Backend done"`; dylan's terminal sees the message within 1s
 **Estimate**: 3-5 days
 
 ### 🎯 M3 = V0-M complete (~4-7 weeks flywheel time)
@@ -229,3 +247,7 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 |------|--------|----|
 | 2026-05-03 | Full rewrite from earlier 5-phase plan; new 17-phase (with 6.5) Bootstrap → Flywheel structure; incorporates Trinity review (`BAB-1006`); β + γ (`BAB-1110`); ticket-everything (`BAB-1111`); multi-CLI (`BAB-1112`); v0.1 scope narrowing (`BAB-1109`) | Claude Code |
 | 2026-05-03 | Sync Phase 0 output with amended `BAB-1502`; validation now records CHG entries on `BAB-1103`, `BAB-1106`, and `BAB-1110` | Codex |
+| 2026-05-04 | Phase 1 cleanup: switch seed names to Clare/Dylan plus Sentinel, move configs to `citizens/citizen-<slug>.toml`, use `Babs.DevReloader`, move transcripts to `<cwd>/transcript.jsonl`, and defer SQLite as Phase 3 authority | Codex |
+| 2026-05-04 | Add optional Phase 0a Hardline Manager Console Spike (`BAB-2202`) between Phase 0 and Phase 1; clarify it improves browser operation but does not replace the official Phase 0 full validation gate | Codex |
+| 2026-05-04 | Mark Phase 0a implemented after manager console code, tests, Tailscale API smoke, browser smoke, and reattach verification passed | Codex |
+| 2026-05-04 | Add optional Phase 0b Hardline Full-Window Mode Spike (`BAB-2203`/`BAB-2204`) after Phase 0a; clarify it is browser-only usability work and not a Phase 0 gate substitute | Codex |

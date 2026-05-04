@@ -22,7 +22,7 @@ defmodule Hardline.Web.Manager do
     GenServer.call(@name, :list_sessions)
   end
 
-  def create_session(slug, command \\ Runner.default_shell_command()) do
+  def create_session(slug, command \\ nil) do
     GenServer.call(@name, {:create_session, slug, command}, 15_000)
   end
 
@@ -45,7 +45,7 @@ defmodule Hardline.Web.Manager do
   def init(opts) do
     state = %{
       prefix: Keyword.get(opts, :prefix, Runner.managed_prefix()),
-      default_command: Keyword.get(opts, :command, Runner.default_shell_command()),
+      default_command: Keyword.get(opts, :command, ""),
       sessions: %{}
     }
 
@@ -254,9 +254,8 @@ defmodule Hardline.Web.Manager do
     if valid_slug?(slug), do: :ok, else: {:error, :invalid_slug}
   end
 
-  defp normalize_command(command, default_command) when is_binary(command) do
-    command = String.trim(command)
-    {:ok, if(command == "", do: default_command, else: command)}
+  defp normalize_command(command, _default_command) when is_binary(command) do
+    {:ok, String.trim(command)}
   end
 
   defp normalize_command(_command, default_command), do: {:ok, default_command}

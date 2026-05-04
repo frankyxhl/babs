@@ -17,7 +17,7 @@ defmodule Hardline.Web.ApiPlug do
   def call(%Plug.Conn{method: "POST", request_path: "/api/sessions"} = conn, _opts) do
     with {:ok, body, conn} <- read_json(conn),
          slug when is_binary(slug) <- Map.get(body, "slug"),
-         command <- Map.get(body, "command", "") do
+         command <- Map.get(body, "command") do
       case call_manager(fn -> Manager.create_session(slug, command) end) do
         {:ok, session} -> send_json(conn, 201, %{session: session})
         {:error, reason} -> send_error(conn, reason)

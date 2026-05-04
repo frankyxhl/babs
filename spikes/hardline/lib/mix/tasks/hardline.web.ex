@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Hardline.Web do
     host = Keyword.get(opts, :host, "127.0.0.1")
     ip = parse_ip!(host)
     prefix = Keyword.get(opts, :prefix, Hardline.Runner.managed_prefix())
-    command = Keyword.get(opts, :command, Hardline.Runner.default_shell_command())
+    command = Keyword.get(opts, :command, "")
 
     Application.put_env(:hardline, Hardline.Web.Endpoint,
       adapter: Bandit.PhoenixAdapter,
@@ -53,7 +53,7 @@ defmodule Mix.Tasks.Hardline.Web do
 
     Mix.shell().info("Hardline web validation running at http://#{host}:#{port}/")
     Mix.shell().info("Managed tmux prefix: #{prefix}-")
-    Mix.shell().info("Default command: #{command}")
+    Mix.shell().info("Default command: #{default_command_label(command)}")
     Mix.shell().info("Leave this process running for the browser Hardline manager console.")
 
     Process.sleep(:infinity)
@@ -68,4 +68,7 @@ defmodule Mix.Tasks.Hardline.Web do
       {:error, :einval} -> Mix.raise("host must be an IPv4/IPv6 address, got #{inspect(host)}")
     end
   end
+
+  defp default_command_label(""), do: "tmux default shell"
+  defp default_command_label(command), do: command
 end
