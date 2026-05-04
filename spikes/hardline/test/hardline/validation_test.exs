@@ -69,6 +69,15 @@ defmodule Hardline.ValidationTest do
     assert File.dir?(second)
   end
 
+  test "auto-generated tmux prefixes are unique within the same second" do
+    first = Validation.run_prefix("smoke")
+    second = Validation.run_prefix("smoke")
+
+    assert first != second
+    assert String.starts_with?(first, "babs-phase0-smoke-")
+    assert String.starts_with?(second, "babs-phase0-smoke-")
+  end
+
   test "cleans up tmux sessions when provision proof fails after attach" do
     prefix = "babs-validation-test-#{System.unique_integer([:positive])}"
 

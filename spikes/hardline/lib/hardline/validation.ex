@@ -540,8 +540,9 @@ defmodule Hardline.Validation do
     System.monotonic_time(:second) + max(seconds, 0)
   end
 
-  defp run_prefix(profile_name) do
-    "babs-phase0-#{profile_name}-#{System.system_time(:second)}"
+  @doc false
+  def run_prefix(profile_name) do
+    "babs-phase0-#{profile_name}-#{System.system_time(:second)}-#{System.unique_integer([:positive])}"
   end
 
   defp validation_workload do
