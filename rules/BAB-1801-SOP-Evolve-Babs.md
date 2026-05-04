@@ -1,7 +1,7 @@
 # SOP-1801: Evolve Babs
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-04
 **Last reviewed:** 2026-05-03
 **Status:** Active
 **Depends on:** BAB-1800 (weights, thresholds, signals), COR-1800 (philosophy + cycle)
@@ -46,10 +46,10 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
    # ADR drift — patterns explicitly rejected
    git grep -nE ':dets\.|:mnesia\.' lib/                     # BAB-1105 violations
    git grep -nE ':erpc\.|:rpc\.' lib/                        # BAB-1104 violation (cross-node)
-   git grep -nE 'Phoenix\.PubSub.*pty|pty.*PubSub' lib/      # BAB-1106 violation
+   git grep -nE 'PaneSession|bypasses PubSub|direct.*pane PID|socket\.assigns.*pane' lib/  # BAB-1106 code violation
 
    # Boundary leak — owners-only modules
-   git grep -nE 'erlexec|:exec\.' lib/ -- ':!lib/babs/tmux/'         # outside Tmux.Core
+   git grep -nE 'erlexec|:exec\.' lib/ -- ':!lib/babs_citizens/hardline/'  # outside Hardline boundary
    git grep -nE 'discord|telegram' lib/ -- ':!lib/babs/connectors/' # outside Connectors
 
    # Persistence sprawl
@@ -130,9 +130,9 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
 
 ### Example 1 — Boundary leak found
 
-**Signal**: `git grep` finds `:exec.run` in `lib/babs/citizen/pane_session.ex` (should be in `Tmux.Core` only).
-**Candidate C1**: Move erlexec call from PaneSession to Tmux.Core; expose a typed `Tmux.Core.attach/1` API.
-**Score**: Runtime safety 9, Behavior verifiability 8 (existing PaneSession scenarios cover it), Scope 9 (one boundary), Compression 5 (small net add for the Tmux.Core API), Necessity 8 (clear ADR `BAB-1003` violation). Composite ≈ 8.0.
+**Signal**: `git grep` finds `:exec.run` in `lib/babs_web/live/citizen_live.ex` (outside the Hardline boundary).
+**Candidate C1**: Move erlexec access into `Hardline.Pane`; expose typed attach/inject/resize calls from the Hardline boundary.
+**Score**: Runtime safety 9, Behavior verifiability 8 (existing `Hardline.Pane` scenarios cover it), Scope 9 (one boundary), Compression 5 (small net add for the Hardline API), Necessity 8 (clear ADR `BAB-1003` violation). Composite ≈ 8.0.
 **Pass.** Implement, regress, PR.
 
 ### Example 2 — Stale REF
@@ -155,7 +155,7 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
 - This SOP must not modify `BAB-1800`, `COR-1800`, or itself. Changes to these go through PRP/CHG.
 - Never delete files based on signal alone — every deletion needs evidence in the candidate record AND human reviewer sign-off.
 - Never merge two surfaces without verifying the merged surface still passes its regression scenarios.
-- Phase 0/1/2/3/4 implementation work is NOT eligible for evolve — it is forward design via PRP.
+- Phase implementation work is NOT eligible for evolve — it is forward design via PRP.
 
 ---
 
@@ -165,3 +165,4 @@ Babs accumulates entropy distinct from other project types: supervision-tree dri
 |------|--------|----|
 | 2026-05-03 | Initial version — adapted CLD-1801 for Babs runtime system | Claude Code |
 | 2026-05-03 | Self-review fix: Phase 0/1/2/3 → 0/1/2/3/4 in guard rails | Claude Code |
+| 2026-05-04 | Reverse stale terminal-byte PubSub violation check; update boundary examples to `Hardline.Pane` and current phase-roadmap wording | Codex |

@@ -9,7 +9,7 @@ Guidance for Claude Code (and other agents) working in the Babs repository.
 - **CLI**: `bb` (planned)
 - **PRJ document prefix**: `BAB`
 - **Pairs with**: Alfred (`af`) — same ecosystem, complementary scope. Alfred = per-agent runbook; Babs = multi-agent runtime.
-- **Naming**: Babs is Barbara Gordon's Bat-Family nickname. `*.bob/` citizen directories are the "Bobs" Babs takes care of.
+- **Naming**: Babs is Barbara Gordon's Bat-Family nickname. `*.bob/` citizen directories are a legacy/deferred "Bobs" convention; Phase 1 uses `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/`.
 
 ## Alfred Workflow (mandatory)
 
@@ -47,8 +47,8 @@ Babs is a greenfield Elixir/Phoenix runtime. Common tasks and their routes:
 | Task type | Route |
 |-----------|-------|
 | Architecture decision (already discussed in conversation) | ADR (COR-1100) → `BAB-11xx` |
-| New phase implementation (Phase 0/1/2/3/4) | PRP (COR-1102) → review → CHG → `BAB-22xx` |
-| Add a new citizen `.bob` | follow `BAB-1500` |
+| New phase implementation | PRP (COR-1102) → review → CHG → `BAB-22xx` |
+| Add a Phase 1 citizen seed | follow `BAB-2201` and `BAB-1002`; legacy `.bob` guidance in `BAB-1500` is deferred |
 | PTY stability validation (Phase 0) | follow `BAB-1502` |
 | Update existing BAB doc | COR-1300 |
 | Bug in running Babs node | INC + CHG (COR-1101) |
@@ -61,8 +61,8 @@ See **`BAB-2100`** (Workflow Routing PRJ) for the full project decision tree.
 The canonical architecture, naming, and decision history live in `rules/`:
 
 - **`BAB-1001`** — Architecture Overview (OTP supervision tree, persistence layering, external boundaries)
-- **`BAB-1002`** — Naming & Vocabulary (Babs / `*.bob/` / Citizen / PaneSession / etc.)
-- **`BAB-1100`–`BAB-1106`** — ADRs (Elixir choice, name, citizen subtree, PTY, A2A, persistence, LiveView/Channels)
+- **`BAB-1002`** — Naming & Vocabulary (Babs / Citizen / Hardline / Hardline.Pane / Phase 1 seed layout / etc.)
+- **`BAB-1100`–`BAB-1112`** — ADRs (Elixir choice, name, citizen lifecycle, PTY, LiveView/Channels, Phase 0/1 v0.1 scope, coordination, persistence, multi-CLI)
 
 When making changes that touch architecture, **always cross-reference the relevant ADR** before proposing alternatives. Rejected alternatives in those ADRs are not invitations to reopen — they are documented reasons.
 
@@ -78,4 +78,4 @@ When development starts, this section will document:
 
 ## Memory & Persistence
 
-This file is the project-level guide. Per-user memories and broader Claude Code conventions are inherited from `~/.claude/CLAUDE.md`. Babs-specific memories (the project name decision, the `*.bob/` resonance) are in `~/.claude/projects/-Users-frank-Projects-prefrontal-cortex/memory/` for now and may move to a Babs-specific memory namespace once active development begins.
+This file is the project-level guide. Per-user memories and broader Claude Code conventions are inherited from `~/.claude/CLAUDE.md`. Babs-specific memories (the project name decision and the legacy `*.bob/` resonance) are in `~/.claude/projects/-Users-frank-Projects-prefrontal-cortex/memory/` for now and may move to a Babs-specific memory namespace once active development begins.

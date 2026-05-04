@@ -7,7 +7,7 @@
 
 ---
 
-## ⚠️ v0.1 Scope Amendments — Substantial (2026-05-03)
+## ⚠️ v0.1 Scope Amendments — Substantial (2026-05-04)
 
 This document was authored under the original 5-phase scope. The v0.1 redefinition narrowed and restructured Babs significantly. **Refer to these documents first**; this doc remains for historical context and architectural pieces still valid (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination).
 
@@ -20,9 +20,9 @@ This document was authored under the original 5-phase scope. The v0.1 redefiniti
 | Coordination primitive | `BAB-1111` (unified Ticket replaces Mission/Assignment) |
 | AI CLI choice | `BAB-1112` (multi-CLI from day 1) |
 | Vocabulary | `BAB-1002` v0.1 section |
-| Naming for `*.bob/` | Still valid as written below |
+| Naming for `*.bob/` | Legacy/deferred per `BAB-1002`; Phase 1 uses `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/` |
 
-The amendments are **substantial** — the build-phase sequencing, OTP application structure, cross-machine model, and coordination primitive have all changed. The doc remains as historical context plus the still-valid pieces (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination, `*.bob/` convention). A full rewrite will be done by Babs Citizens themselves post-Phase 1.
+The amendments are **substantial** — the build-phase sequencing, OTP application structure, cross-machine model, coordination primitive, and Phase 1 runtime layout have all changed. The doc remains as historical context plus the still-valid pieces (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination). Legacy `*.bob/` naming below is not the Phase 1 runtime layout. A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
 ---
 
@@ -41,13 +41,13 @@ Babs OTP release  (CLI: bb)
    ├─ Babs.Cluster.Supervisor                (Tailscale node discovery + allowlist)
    │
    ├─ Babs.Citizens.Supervisor (DynamicSupervisor)
-   │   └─ Babs.CitizenSupervisor(name)        ← one .bob = one subtree
+   │   └─ Babs.CitizenSupervisor(name)        ← one citizen = one supervised subtree
    │       ├─ Babs.Citizen.Server             (identity, lifecycle, mailbox)
-   │       ├─ Babs.Citizen.PaneSession        (owns erlexec PTY; serializes send-keys)
+   │       ├─ Hardline.Pane                   (formerly PaneSession; owns erlexec PTY)
    │       ├─ Babs.Citizen.ChannelWorker(N)   (one per Discord/TG channel relay)
    │       └─ Babs.Citizen.TranscriptTailer   (read-only JSONL; incremental tail)
    │
-   ├─ Babs.Tmux.Core                          (★ the single tmux/erlexec boundary)
+   ├─ Hardline                                (formerly Babs.Tmux.Core; tmux/erlexec boundary)
    │
    ├─ Babs.A2A.Supervisor
    │   ├─ Babs.A2A.Router                     (intra-node: Registry + GenServer.call)
@@ -57,7 +57,7 @@ Babs OTP release  (CLI: bb)
    │
    └─ BabsWeb.Endpoint
        ├─ LiveView      → state UI (dashboard / status / ops / diagram)
-       └─ Channels      → raw PTY byte streams (subscribe `pane:<slug>` PubSub topic published by Hardline.Pane — see `BAB-1106` v0.1 amendment; the "direct to PaneSession; bypasses PubSub" wording in earlier drafts is REVERSED)
+       └─ Channels      → raw PTY byte streams (subscribe `pane:<slug>` PubSub topic published by Hardline.Pane — see `BAB-1106` v0.1 amendment; earlier direct-channel wording is REVERSED)
 ```
 
 ---
@@ -81,10 +81,10 @@ See **`BAB-1105`** for the full reasoning and the rejected alternatives.
 ## External Boundaries
 
 ```
-Discord  ⇄ Connectors ⇄ ChannelWorker ⇄ PaneSession ⇄ Tmux.Core ⇄ tmux/PTY
+Discord  ⇄ Connectors ⇄ ChannelWorker ⇄ Hardline.Pane ⇄ Hardline ⇄ tmux/PTY
 Telegram ⇄ Connectors ─────────────────────────────────────────────┘
 Claude/Codex JSONL ──read-only──► TranscriptTailer ──PubSub/ETS──► Web
-Browser  LiveView (state UI) + Channel (terminal bytes) ──────────► PaneSession
+Browser  LiveView (state UI) + Channel (terminal bytes) ──────────► PubSub `pane:<slug>` ─► Hardline.Pane
 Tailscale peers ─────────HTTP JSON-RPC──► A2A.HttpEndpoint
 ```
 
@@ -92,10 +92,10 @@ Tailscale peers ─────────HTTP JSON-RPC──► A2A.HttpEndpoi
 
 | Boundary | Protocol | Direction | Owner |
 |----------|----------|-----------|-------|
-| tmux / PTY | erlexec port (PTY mode) | bidirectional bytes | `Babs.Tmux.Core` exclusively; `PaneSession` holds the port |
+| tmux / PTY | erlexec port (PTY mode) | bidirectional bytes | `Hardline` boundary in `:babs_citizens`; `Hardline.Pane` holds the port |
 | Discord / Telegram | HTTPS REST + (Discord) Gateway | poll inbound, REST outbound | `Babs.Connectors.*` |
 | Browser ⇄ state UI | Phoenix LiveView (WebSocket) | bidirectional, declarative diffs | `BabsWeb.*Live` modules |
-| Browser ⇄ terminal | Phoenix Channel (raw bytes) | bidirectional, byte streams | `BabsWeb.TerminalChannel` ↔ `PaneSession` direct, no PubSub |
+| Browser ⇄ terminal | Phoenix Channel (raw bytes) + PubSub `pane:<slug>` | bidirectional, byte streams | `Hardline.Pane` publishes bytes; Channel joins `pane:<slug>` and forwards browser input |
 | Inter-node A2A | HTTP JSON-RPC (over Tailscale) | request/response | `Babs.A2A.HttpEndpoint` |
 | Intra-node A2A | `GenServer.call` via `Babs.A2A.Router` | direct OTP | Citizens directly |
 
@@ -106,14 +106,14 @@ Tailscale peers ─────────HTTP JSON-RPC──► A2A.HttpEndpoi
 ```
 1. Discord poller (Connectors)            → fetches new messages
 2. ChannelWorker                          → identifies target citizen, formats inject text
-3. PaneSession.inject(citizen, text)      → serialized send-keys via Tmux.Core
+3. Hardline.Pane.inject(citizen, text)   → serialized input via Hardline
 4. erlexec PTY                            → bytes hit tmux pane → AI CLI
 5. AI CLI writes JSONL                    → TranscriptTailer detects mtime, parses delta
 6. PubSub broadcast(citizen:<id>:reply)   → ChannelWorker subscribes
 7. ChannelWorker                          → POSTs reply to Discord REST API
 ```
 
-**Backpressure:** `PaneSession` is the single serialization point per citizen. ChannelWorker, web `agent-send`, and A2A delegations all queue at this GenServer's mailbox. The PTY is never accessed directly by anything else.
+**Backpressure:** `Hardline.Pane` is the single serialization point per citizen. ChannelWorker, web `agent-send`, and A2A delegations all queue at this GenServer's mailbox. The PTY is never accessed directly by anything else.
 
 ---
 
@@ -141,10 +141,10 @@ See **`BAB-1104`** for why HTTP JSON-RPC remains the inter-node primary (not `:e
 
 ## Concurrency Model — Why a Subtree per Citizen
 
-Each `.bob` citizen is a **supervised subtree**, not a single GenServer:
+Each Citizen is a **supervised subtree**, not a single GenServer:
 
 - `Citizen.Server` — identity, mailbox, lifecycle
-- `PaneSession` — owns the PTY; crashes restart only the pane attachment, not the citizen
+- `Hardline.Pane` — owns the PTY attachment; crashes restart only the pane attachment, not the citizen
 - `ChannelWorker(N)` — one per relay channel; isolated failure domains (Discord auth flaking ≠ pane dying)
 - `TranscriptTailer` — read-only file tail; restartable independently
 
@@ -167,10 +167,8 @@ See **`BAB-1102`**.
 Babs is a from-scratch project. The build is sequenced to surface high-risk bets early. Each phase has its own PRP under `BAB-22xx`; the overall sequencing lives in `BAB-2300` (Build Roadmap PLN).
 
 - **Phase 0** — PTY stability spike (`BAB-1502` SOP, `BAB-2200` PRP). Run before any production code is written. Validates erlexec PTY attach against the production-blocking risk in `BAB-1103`.
-- **Phase 1** — Core supervision tree skeleton: `Babs.Application`, `Babs.Tmux.Core`, `Babs.Citizen.PaneSession`. Naked PTY pipe-through, no Connectors, no Web.
-- **Phase 2** — A2A + SQLite registry + first end-to-end citizen. `Babs.Repo`, `Babs.Citizens.Supervisor`, `Babs.A2A.Router`, one real `*.bob/` running with PaneSession + Server + TranscriptTailer.
-- **Phase 3** — Connectors: Discord and Telegram inbound/outbound paths plus per-citizen ChannelWorkers.
-- **Phase 4** — BabsWeb: LiveView dashboard, terminal Channel, React-mounted complex components, xterm.js for terminal rendering.
+- **Phase 1** — V0-S0 SEED (`BAB-2201`): two OTP apps (`:babs`, `:babs_citizens`), `Hardline.Pane`, browser terminal at `/citizens/<slug>`, TOML seed configs, and Flywheel Gates A/B.
+- **Phase 2+** — See `BAB-2300` for the current 17-phase roadmap. The old Phase 2-4 sequence below the v0.1 decision point is superseded.
 
 ---
 
@@ -182,3 +180,5 @@ Babs is a from-scratch project. The build is sequenced to surface high-risk bets
 | 2026-05-03 | Drop migration framing; reframe Phase plan as from-scratch build phases | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |
 | 2026-05-04 | Trinity review follow-up: align PubSub topic to authoritative `pane:<slug>` terminology | Codex |
+| 2026-05-04 | Trinity review fix: mark `*.bob/` as legacy/deferred in the v0.1 amendments banner and point Phase 1 to `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/` | Codex |
+| 2026-05-04 | Trinity review fix: replace implementation-facing legacy `PaneSession`/`Tmux.Core`/direct-Channel wording with `Hardline.Pane`, `Hardline`, and PubSub `pane:<slug>` semantics | Codex |
