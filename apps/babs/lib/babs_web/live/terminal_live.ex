@@ -11,6 +11,7 @@ defmodule BabsWeb.TerminalLive do
 
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
+  alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
 
@@ -25,6 +26,7 @@ defmodule BabsWeb.TerminalLive do
       |> assign(:slug, slug)
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
+      |> assign(:lifecycle_inflight, %{})
       |> assign_tabs()
 
     {:ok, socket}
@@ -39,17 +41,30 @@ defmodule BabsWeb.TerminalLive do
 
   @impl true
   def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
+    case parse_action(action) do
+      {:ok, action} ->
+        {:noreply, start_lifecycle(socket, action, slug)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Unknown lifecycle action")}
+    end
+  end
+
+  @impl true
+  def handle_async({:lifecycle, slug, action}, {:ok, result}, socket) do
     socket =
-      case parse_action(action) do
-        {:ok, :stop} ->
-          handle_stop(slug, socket)
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> apply_lifecycle_result(action, slug, result)
 
-        {:ok, action} when action in [:start, :restart] ->
-          handle_start_or_restart(action, slug, socket)
+    {:noreply, socket}
+  end
 
-        :error ->
-          put_flash(socket, :error, "Unknown lifecycle action")
-      end
+  def handle_async({:lifecycle, slug, action}, {:exit, reason}, socket) do
+    socket =
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> apply_lifecycle_result(action, slug, {:error, reason})
 
     {:noreply, socket}
   end
@@ -126,6 +141,18 @@ defmodule BabsWeb.TerminalLive do
       .terminal-tab:hover {
         border-color: var(--accent);
         color: var(--text);
+      }
+
+      .terminal-link[disabled],
+      .terminal-link.is-disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .terminal-link[disabled]:hover,
+      .terminal-link.is-disabled:hover {
+        border-color: var(--line);
+        color: var(--muted);
       }
 
       .terminal-danger:hover {
@@ -263,14 +290,17 @@ defmodule BabsWeb.TerminalLive do
             <span class="terminal-tab-label">{citizen.slug}</span>
           </a>
         </div>
-        <div class="terminal-actions" data-testid="terminal-lifecycle-controls">
+        <div
+          class="terminal-actions"
+          data-testid="terminal-lifecycle-controls"
+          data-terminal-lifecycle-scope={@slug}
+        >
           <button
             :if={action?(active_tab(@tabs, @slug), :start)}
             type="button"
-            class="terminal-link"
-            phx-click="lifecycle"
-            phx-value-action="start"
-            phx-value-slug={@slug}
+            class={["terminal-link", lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"]}
+            phx-click={lifecycle_click(@slug, :start)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Starting"
             data-testid="terminal-start"
           >
@@ -279,10 +309,12 @@ defmodule BabsWeb.TerminalLive do
           <button
             :if={action?(active_tab(@tabs, @slug), :stop)}
             type="button"
-            class="terminal-link terminal-danger"
-            phx-click="lifecycle"
-            phx-value-action="stop"
-            phx-value-slug={@slug}
+            class={[
+              "terminal-link terminal-danger",
+              lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"
+            ]}
+            phx-click={lifecycle_click(@slug, :stop)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Stopping"
             data-testid="terminal-stop"
           >
@@ -291,10 +323,9 @@ defmodule BabsWeb.TerminalLive do
           <button
             :if={action?(active_tab(@tabs, @slug), :restart)}
             type="button"
-            class="terminal-link"
-            phx-click="lifecycle"
-            phx-value-action="restart"
-            phx-value-slug={@slug}
+            class={["terminal-link", lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"]}
+            phx-click={lifecycle_click(@slug, :restart)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Restarting"
             data-testid="terminal-restart"
           >
@@ -401,13 +432,39 @@ defmodule BabsWeb.TerminalLive do
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
 
+  defp lifecycle_click(slug, action) do
+    selector = lifecycle_button_selector(slug)
+
+    JS.set_attribute({"disabled", "disabled"}, to: selector)
+    |> JS.add_class("is-disabled", to: selector)
+    |> JS.push("lifecycle", value: %{"action" => Atom.to_string(action), "slug" => slug})
+  end
+
+  defp lifecycle_button_selector(slug), do: ~s([data-terminal-lifecycle-scope="#{slug}"] button)
+
+  defp lifecycle_busy?(inflight, slug), do: Map.has_key?(inflight, slug)
+
   defp parse_action("start"), do: {:ok, :start}
   defp parse_action("stop"), do: {:ok, :stop}
   defp parse_action("restart"), do: {:ok, :restart}
   defp parse_action(_action), do: :error
 
-  defp handle_stop(slug, socket) do
-    case lifecycle_action(:stop, slug) do
+  defp start_lifecycle(socket, action, slug) do
+    if lifecycle_busy?(socket.assigns.lifecycle_inflight, slug) do
+      put_flash(socket, :error, "Lifecycle action already running for #{slug}")
+    else
+      socket
+      |> assign(:lifecycle_inflight, Map.put(socket.assigns.lifecycle_inflight, slug, action))
+      |> start_async({:lifecycle, slug, action}, fn -> lifecycle_action(action, slug) end)
+    end
+  end
+
+  defp clear_lifecycle_inflight(socket, slug) do
+    assign(socket, :lifecycle_inflight, Map.delete(socket.assigns.lifecycle_inflight, slug))
+  end
+
+  defp apply_lifecycle_result(socket, :stop, slug, result) do
+    case result do
       :ok ->
         socket
         |> put_flash(:info, "Stopped #{slug}")
@@ -423,8 +480,8 @@ defmodule BabsWeb.TerminalLive do
     end
   end
 
-  defp handle_start_or_restart(action, slug, socket) do
-    case lifecycle_action(action, slug) do
+  defp apply_lifecycle_result(socket, action, slug, result) when action in [:start, :restart] do
+    case result do
       {:error, reason} when action == :restart ->
         {:error, reason}
         |> assign_lifecycle_result(socket, action, slug)

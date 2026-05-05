@@ -232,6 +232,8 @@ Implemented locally on branch `codex/phase-6-chg` on 2026-05-06:
   accepted action matrix.
 - Default `/citizens/<slug>` terminal chrome renders active-Citizen lifecycle
   controls; `?full=1` remains management-chrome-free.
+- Lifecycle buttons enter a per-slug in-flight state and disable sibling
+  lifecycle controls while Start/Stop/Restart is running.
 - Browser-harness BDD now covers browser stop/start/restart and managed server
   restart reconciliation for stopped versus running Citizens.
 
@@ -241,8 +243,8 @@ Local validation passed:
 - `mise exec -- mix compile --warnings-as-errors`
 - `mise exec -- mix test` — 127 `:babs_citizens` tests and 47 `:babs` tests
   after implementation, then refreshed through coverage after review fixes.
-- `mise exec -- mix test --cover` — `:babs_citizens` 83.88%, `:babs` 82.08%;
-  final coverage run executed 128 `:babs_citizens` tests and 49 `:babs` tests.
+- `mise exec -- mix test --cover` — `:babs_citizens` 83.88%, `:babs` 82.17%;
+  final coverage run executed 128 `:babs_citizens` tests and 51 `:babs` tests.
 - `npm run test:js`
 - `BU_CDP_URL=http://127.0.0.1:9333 npm run test:bdd` using an isolated
   browser-harness Chrome profile; all scenarios passed except the pre-existing
@@ -265,9 +267,13 @@ Implementation review:
   DeepSeek PASS on 2026-05-06:
   `.trinity/reviews/20260506-074611-apps`.
 - DeepSeek's conditional item, a missing `/citizens` Stop button click test,
-  was addressed after the review. Remaining findings are advisory follow-ups:
-  shared LiveView lifecycle-helper extraction, possible async lifecycle actions
-  instead of blocking LiveView handlers, and minor fallback-tab cleanup.
+  was addressed after the review.
+- GitHub Codex PR review R1 found a P2 sibling-control race for lifecycle
+  buttons; the fix moved browser lifecycle work to `start_async`, tracked
+  per-slug in-flight state, and added LiveView tests for `/citizens` and
+  terminal controls.
+- Remaining findings are advisory follow-ups: shared LiveView lifecycle-helper
+  extraction and minor fallback-tab cleanup.
 
 ## Acceptance Criteria
 
@@ -323,3 +329,4 @@ Implementation review:
 |------|--------|----|
 | 2026-05-06 | Initial Phase 6 CHG draft | Codex |
 | 2026-05-06 | Trinity fast-review approved CHG with GLM 9.05/10 and DeepSeek 9.0/10; fold in advisory clarifications and mark Approved | Codex |
+| 2026-05-06 | Address GitHub Codex R1 P2 by adding async in-flight lifecycle controls and sibling button disable tests | Codex |

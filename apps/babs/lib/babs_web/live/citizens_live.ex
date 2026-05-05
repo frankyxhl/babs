@@ -7,6 +7,7 @@ defmodule BabsWeb.CitizensLive do
 
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
+  alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
 
@@ -17,6 +18,7 @@ defmodule BabsWeb.CitizensLive do
     {:ok,
      socket
      |> assign(:socket_token, Map.get(session, "socket_token", ""))
+     |> assign(:lifecycle_inflight, %{})
      |> assign_snapshots()}
   end
 
@@ -29,18 +31,34 @@ defmodule BabsWeb.CitizensLive do
 
   @impl true
   def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
+    case parse_action(action) do
+      {:ok, action} ->
+        {:noreply, start_lifecycle(socket, action, slug)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Unknown lifecycle action")}
+    end
+  end
+
+  @impl true
+  def handle_async({:lifecycle, slug, action}, {:ok, result}, socket) do
     socket =
-      case parse_action(action) do
-        {:ok, action} ->
-          action
-          |> lifecycle_action(slug)
-          |> assign_lifecycle_result(socket, action, slug)
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> then(fn socket -> assign_lifecycle_result(result, socket, action, slug) end)
+      |> assign_snapshots()
 
-        :error ->
-          put_flash(socket, :error, "Unknown lifecycle action")
-      end
+    {:noreply, socket}
+  end
 
-    {:noreply, assign_snapshots(socket)}
+  def handle_async({:lifecycle, slug, action}, {:exit, reason}, socket) do
+    socket =
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> then(fn socket -> assign_lifecycle_result({:error, reason}, socket, action, slug) end)
+      |> assign_snapshots()
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -358,10 +376,10 @@ defmodule BabsWeb.CitizensLive do
               {citizen.last_error || citizen.cwd_label}
             </div>
 
-            <div class="citizen-actions">
-              <a
-                :if={action?(citizen, :open)}
-                class="button"
+             <div class="citizen-actions" data-lifecycle-scope={citizen.slug}>
+               <a
+                 :if={action?(citizen, :open)}
+                 class="button"
                 href={CitizenPath.terminal(citizen.slug, @socket_token)}
                 data-testid={"citizen-open-#{citizen.slug}"}
               >
@@ -391,40 +409,40 @@ defmodule BabsWeb.CitizensLive do
               >
                 Full
               </span>
-              <button
-                :if={action?(citizen, :start)}
-                type="button"
-                class="button"
-                phx-click="lifecycle"
-                phx-value-action="start"
-                phx-value-slug={citizen.slug}
-                phx-disable-with="Starting"
-                data-testid={"citizen-start-#{citizen.slug}"}
-              >
+               <button
+                 :if={action?(citizen, :start)}
+                 type="button"
+                 class={["button", lifecycle_busy?(@lifecycle_inflight, citizen.slug) && "button-disabled"]}
+                 phx-click={lifecycle_click(citizen.slug, :start)}
+                 disabled={lifecycle_busy?(@lifecycle_inflight, citizen.slug)}
+                 phx-disable-with="Starting"
+                 data-testid={"citizen-start-#{citizen.slug}"}
+               >
                 Start
               </button>
-              <button
-                :if={action?(citizen, :stop)}
-                type="button"
-                class="button button-danger"
-                phx-click="lifecycle"
-                phx-value-action="stop"
-                phx-value-slug={citizen.slug}
-                phx-disable-with="Stopping"
-                data-testid={"citizen-stop-#{citizen.slug}"}
-              >
+               <button
+                 :if={action?(citizen, :stop)}
+                 type="button"
+                 class={[
+                   "button button-danger",
+                   lifecycle_busy?(@lifecycle_inflight, citizen.slug) && "button-disabled"
+                 ]}
+                 phx-click={lifecycle_click(citizen.slug, :stop)}
+                 disabled={lifecycle_busy?(@lifecycle_inflight, citizen.slug)}
+                 phx-disable-with="Stopping"
+                 data-testid={"citizen-stop-#{citizen.slug}"}
+               >
                 Stop
               </button>
-              <button
-                :if={action?(citizen, :restart)}
-                type="button"
-                class="button"
-                phx-click="lifecycle"
-                phx-value-action="restart"
-                phx-value-slug={citizen.slug}
-                phx-disable-with="Restarting"
-                data-testid={"citizen-restart-#{citizen.slug}"}
-              >
+               <button
+                 :if={action?(citizen, :restart)}
+                 type="button"
+                 class={["button", lifecycle_busy?(@lifecycle_inflight, citizen.slug) && "button-disabled"]}
+                 phx-click={lifecycle_click(citizen.slug, :restart)}
+                 disabled={lifecycle_busy?(@lifecycle_inflight, citizen.slug)}
+                 phx-disable-with="Restarting"
+                 data-testid={"citizen-restart-#{citizen.slug}"}
+               >
                 Restart
               </button>
             </div>
@@ -456,10 +474,37 @@ defmodule BabsWeb.CitizensLive do
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
 
+  defp lifecycle_click(slug, action) do
+    selector = lifecycle_button_selector(slug)
+
+    JS.set_attribute({"disabled", "disabled"}, to: selector)
+    |> JS.add_class("button-disabled", to: selector)
+    |> JS.push("lifecycle", value: %{"action" => Atom.to_string(action), "slug" => slug})
+  end
+
+  defp lifecycle_button_selector(slug), do: ~s([data-lifecycle-scope="#{slug}"] button)
+
+  defp lifecycle_busy?(inflight, slug), do: Map.has_key?(inflight, slug)
+
   defp parse_action("start"), do: {:ok, :start}
   defp parse_action("stop"), do: {:ok, :stop}
   defp parse_action("restart"), do: {:ok, :restart}
   defp parse_action(_action), do: :error
+
+  defp start_lifecycle(socket, action, slug) do
+    if lifecycle_busy?(socket.assigns.lifecycle_inflight, slug) do
+      put_flash(socket, :error, "Lifecycle action already running for #{slug}")
+    else
+      socket
+      |> assign(:lifecycle_inflight, Map.put(socket.assigns.lifecycle_inflight, slug, action))
+      |> start_async({:lifecycle, slug, action}, fn -> lifecycle_action(action, slug) end)
+      |> assign_snapshots()
+    end
+  end
+
+  defp clear_lifecycle_inflight(socket, slug) do
+    assign(socket, :lifecycle_inflight, Map.delete(socket.assigns.lifecycle_inflight, slug))
+  end
 
   defp lifecycle_action(action, slug) do
     :babs

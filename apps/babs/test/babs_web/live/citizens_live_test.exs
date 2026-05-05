@@ -120,8 +120,18 @@ defmodule BabsWeb.CitizensLiveTest do
       lifecycle_action: fn :start, slug ->
         send(parent, {:lifecycle_action, :start, slug})
         Catalog.mark_running(slug)
-        Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
-        {:ok, self()}
+
+        pane_pid =
+          spawn(fn ->
+            Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
+            send(parent, {:pane_registered, slug, self()})
+
+            receive do
+              :stop -> :ok
+            end
+          end)
+
+        {:ok, pane_pid}
       end
     )
 
@@ -134,12 +144,14 @@ defmodule BabsWeb.CitizensLiveTest do
     |> render_click()
 
     assert_receive {:lifecycle_action, :start, "start-me"}
+    assert_receive {:pane_registered, "start-me", pane_pid}
+    html = render_async(view, 1_000)
     assert Repo.get!(CitizenRecord, record.id).status == "running"
 
-    html = render(view)
     assert html =~ "up"
     assert html =~ ~s(data-testid="citizen-stop-start-me")
     assert html =~ ~s(data-testid="citizen-restart-start-me")
+    send(pane_pid, :stop)
   end
 
   test "stop control invokes lifecycle boundary and refreshes the row" do
@@ -159,12 +171,12 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(data-testid="citizen-stop-stop-me")
     assert html =~ "up"
 
-    html =
-      view
-      |> element(~s(button[data-testid="citizen-stop-stop-me"]))
-      |> render_click()
+    view
+    |> element(~s(button[data-testid="citizen-stop-stop-me"]))
+    |> render_click()
 
     assert_receive {:lifecycle_action, :stop, "stop-me"}
+    html = render_async(view, 1_000)
     assert Repo.get!(CitizenRecord, record.id).status == "stopped"
     assert html =~ "Stopped stop-me"
     assert html =~ "stopped"
@@ -185,14 +197,50 @@ defmodule BabsWeb.CitizensLiveTest do
     {:ok, view, html} = live(build_conn(), "/citizens")
     assert html =~ ~s(data-testid="citizen-restart-restart-error")
 
-    html =
-      view
-      |> element(~s(button[data-testid="citizen-restart-restart-error"]))
-      |> render_click()
+    view
+    |> element(~s(button[data-testid="citizen-restart-restart-error"]))
+    |> render_click()
 
+    html = render_async(view, 1_000)
     assert html =~ "Restart failed for restart-error"
     assert html =~ "[REDACTED]"
     refute html =~ "super-secret"
+  end
+
+  test "lifecycle controls disable sibling controls while a request is in flight" do
+    record = insert_citizen!(%{slug: "busy-one", status: "running"})
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      lifecycle_action: fn :stop, slug ->
+        send(parent, {:lifecycle_started, self(), :stop, slug})
+
+        receive do
+          :release_stop ->
+            Catalog.mark_stopped(slug)
+            :ok
+        end
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens")
+
+    html =
+      view
+      |> element(~s(button[data-testid="citizen-stop-busy-one"]))
+      |> render_click()
+
+    assert_receive {:lifecycle_started, task_pid, :stop, "busy-one"}
+    assert disabled_button?(html, "citizen-stop-busy-one")
+    assert disabled_button?(html, "citizen-restart-busy-one")
+
+    send(task_pid, :release_stop)
+    html = render_async(view, 1_000)
+
+    assert Repo.get!(CitizenRecord, record.id).status == "stopped"
+    assert html =~ "Stopped busy-one"
+    assert html =~ "stopped"
   end
 
   test "refresh tick reflects status changes" do
@@ -263,5 +311,14 @@ defmodule BabsWeb.CitizensLiveTest do
     |> Enum.map(&(:binary.match(text, &1) |> elem(0)))
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.all?(fn [left, right] -> left < right end)
+  end
+
+  defp disabled_button?(html, testid) do
+    pattern =
+      Regex.compile!(
+        "<button(?=[^>]*data-testid=\"#{Regex.escape(testid)}\")(?=[^>]*disabled)[^>]*>"
+      )
+
+    Regex.match?(pattern, html)
   end
 end

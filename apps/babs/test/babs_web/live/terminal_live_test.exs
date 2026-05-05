@@ -21,7 +21,13 @@ defmodule BabsWeb.TerminalLiveTest do
 
   test "full mode renders the pure terminal shell and static browser modules" do
     html =
-      %{slug: "sentinel", socket_token: "secret", full?: true, tabs: [tab("sentinel")]}
+      %{
+        slug: "sentinel",
+        socket_token: "secret",
+        full?: true,
+        tabs: [tab("sentinel")],
+        lifecycle_inflight: %{}
+      }
       |> BabsWeb.TerminalLive.render()
       |> rendered_to_string()
 
@@ -50,6 +56,7 @@ defmodule BabsWeb.TerminalLiveTest do
         slug: "clare",
         socket_token: "socket-token",
         full?: false,
+        lifecycle_inflight: %{},
         tabs: [
           tab("clare", :up),
           tab("dylan", :up),
@@ -85,7 +92,13 @@ defmodule BabsWeb.TerminalLiveTest do
 
   test "single citizen default mode keeps stable chrome" do
     html =
-      %{slug: "solo", socket_token: "", full?: false, tabs: [tab("solo", :up)]}
+      %{
+        slug: "solo",
+        socket_token: "",
+        full?: false,
+        tabs: [tab("solo", :up)],
+        lifecycle_inflight: %{}
+      }
       |> BabsWeb.TerminalLive.render()
       |> rendered_to_string()
 
@@ -103,6 +116,7 @@ defmodule BabsWeb.TerminalLiveTest do
         slug: "active-one",
         socket_token: "",
         full?: false,
+        lifecycle_inflight: %{},
         tabs: [tab("active-one", :reattaching), tab("failed-one", :failed), tab("live-one", :up)]
       }
       |> BabsWeb.TerminalLive.render()
@@ -162,7 +176,7 @@ defmodule BabsWeb.TerminalLiveTest do
     |> render_click()
 
     assert_receive {:terminal_lifecycle_action, :restart, "clare"}
-    html = render(view)
+    html = render_async(view, 1_000)
     assert html =~ ~s(data-testid="terminal")
     assert html =~ ~s(data-testid="terminal-restart")
     assert html =~ "Restarted clare"
@@ -208,16 +222,50 @@ defmodule BabsWeb.TerminalLiveTest do
         session: %{"slug" => "clare", "socket_token" => "socket-token"}
       )
 
-    html =
-      view
-      |> element(~s(button[data-testid="terminal-start"]))
-      |> render_click()
+    view
+    |> element(~s(button[data-testid="terminal-start"]))
+    |> render_click()
 
     assert_receive {:terminal_lifecycle_action, :start, "clare"}
+    html = render_async(view, 1_000)
     assert html =~ ~s(data-testid="terminal")
     assert html =~ "Start failed for clare"
     assert html =~ "[REDACTED]"
     refute html =~ "super-secret"
+  end
+
+  test "terminal lifecycle controls disable siblings while a request is in flight" do
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.TerminalLive,
+      status_snapshot_provider: fn -> [tab("clare", :up)] end,
+      lifecycle_action: fn :restart, "clare" ->
+        send(parent, {:terminal_lifecycle_started, self(), :restart, "clare"})
+
+        receive do
+          :release_restart -> {:ok, self()}
+        end
+      end
+    )
+
+    {:ok, view, _html} =
+      live_isolated(build_conn(), BabsWeb.TerminalLive,
+        session: %{"slug" => "clare", "socket_token" => "socket-token"}
+      )
+
+    html =
+      view
+      |> element(~s(button[data-testid="terminal-restart"]))
+      |> render_click()
+
+    assert_receive {:terminal_lifecycle_started, task_pid, :restart, "clare"}
+    assert disabled_button?(html, "terminal-stop")
+    assert disabled_button?(html, "terminal-restart")
+
+    send(task_pid, :release_restart)
+    html = render_async(view, 1_000)
+
+    assert html =~ "Restarted clare"
   end
 
   test "mount assigns the citizen slug, mode, and tabs" do
@@ -237,6 +285,7 @@ defmodule BabsWeb.TerminalLiveTest do
     assert socket.assigns.slug == "clare"
     assert socket.assigns.socket_token == "token"
     assert socket.assigns.full? == true
+    assert socket.assigns.lifecycle_inflight == %{}
     assert [%{slug: "clare"}] = socket.assigns.tabs
   end
 
@@ -256,4 +305,13 @@ defmodule BabsWeb.TerminalLiveTest do
   defp actions(:reattaching), do: [:start, :stop]
   defp actions(:stopped), do: [:start]
   defp actions(:failed), do: [:start]
+
+  defp disabled_button?(html, testid) do
+    pattern =
+      Regex.compile!(
+        "<button(?=[^>]*data-testid=\"#{Regex.escape(testid)}\")(?=[^>]*disabled)[^>]*>"
+      )
+
+    Regex.match?(pattern, html)
+  end
 end
