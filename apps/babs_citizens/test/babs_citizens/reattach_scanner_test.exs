@@ -41,6 +41,49 @@ defmodule Babs.Citizens.ReattachScannerTest do
            ]
   end
 
+  test "plans SQLite rows by status and existing tmux sessions" do
+    clare = row("clare", status: "running")
+    dylan = row("dylan", status: "running")
+    elena = row("elena", status: "stopped")
+    sentinel = row("sentinel", status: "failed")
+
+    assert ReattachScanner.plan_rows(
+             [clare, dylan, elena, sentinel],
+             ["babs-clare", "personal-shell"]
+           ) == [
+             {:reattach, clare},
+             {:start, dylan},
+             {:skip, "elena", :stopped},
+             {:skip, "sentinel", :failed}
+           ]
+  end
+
+  test "plans missing cwd for running SQLite rows as a durable failure" do
+    cwd = Path.join(tmp_root(), "missing-workspace")
+    record = row("missing-cwd", status: "running", cwd: cwd)
+
+    assert ReattachScanner.plan_rows([record], []) == [
+             {:fail_missing_cwd, record, {:missing_cwd, cwd}}
+           ]
+  end
+
+  test "plans reattach before missing cwd failure for running SQLite rows" do
+    cwd = Path.join(tmp_root(), "missing-workspace")
+    record = row("reattach-missing-cwd", status: "running", cwd: cwd)
+
+    assert ReattachScanner.plan_rows([record], ["babs-reattach-missing-cwd"]) == [
+             {:reattach, record}
+           ]
+  end
+
+  test "plans unexpected raw SQLite status as skipped instead of starting" do
+    record = row("unknown-status", status: "paused")
+
+    assert ReattachScanner.plan_rows([record], []) == [
+             {:skip, "unknown-status", :unknown_status}
+           ]
+  end
+
   test "scan starts configured citizens from a temporary config directory" do
     slug = "scan-test-#{System.unique_integer([:positive])}"
     root = tmp_root()
@@ -117,6 +160,27 @@ defmodule Babs.Citizens.ReattachScannerTest do
                {:error, :tmux, {:tmux_executable_not_found, "/definitely/missing/babs-tmux"}}
              ] = ReattachScanner.scan(root: root, config_dir: "citizens")
     end)
+  end
+
+  defp row(slug, attrs) do
+    cwd =
+      Keyword.get_lazy(attrs, :cwd, fn ->
+        cwd = Path.join(tmp_root(), slug)
+        File.mkdir_p!(cwd)
+        cwd
+      end)
+
+    %Babs.Citizens.CitizenRecord{
+      id: "BAB-CIT-#{String.upcase(String.replace(slug, "-", "_"))}",
+      slug: slug,
+      display_name: String.capitalize(slug),
+      cli: "/bin/zsh",
+      cli_args: ["-f"],
+      cwd: cwd,
+      env: %{},
+      status: Keyword.get(attrs, :status, "running"),
+      metadata: %{}
+    }
   end
 
   defp config(slug) do

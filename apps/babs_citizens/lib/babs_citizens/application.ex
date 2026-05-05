@@ -9,6 +9,7 @@ defmodule Babs.Citizens.Application do
       [
         {Phoenix.PubSub, name: Babs.Citizens.PubSub},
         {Registry, keys: :unique, name: Babs.Citizens.PaneRegistry},
+        Babs.Citizens.Repo,
         {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
       ] ++ reattach_children()
 
@@ -17,7 +18,7 @@ defmodule Babs.Citizens.Application do
 
   defp reattach_children do
     if Application.get_env(:babs_citizens, :autostart, true) do
-      [Babs.Citizens.ReattachScanner]
+      [Babs.Citizens.Bootstrap]
     else
       []
     end

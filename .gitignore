@@ -30,6 +30,8 @@ __pycache__/
 /cache/
 /state/
 /local/
+/tmp/
+/var/
 workspaces/*/transcript.jsonl
 *.dets
 

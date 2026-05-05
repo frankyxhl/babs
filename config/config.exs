@@ -12,7 +12,13 @@ config :babs, BabsWeb.Endpoint,
 
 config :babs_citizens,
   config_dir: "citizens",
-  autostart: config_env() != :test
+  autostart: config_env() != :test,
+  auto_migrate: config_env() in [:dev, :test],
+  ecto_repos: [Babs.Citizens.Repo]
+
+config :babs_citizens, Babs.Citizens.Repo,
+  log: false,
+  stacktrace: config_env() == :dev
 
 config :babs, Babs.DevReloader,
   enabled: config_env() == :dev,

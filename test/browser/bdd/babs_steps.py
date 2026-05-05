@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import signal
+import sqlite3
 import subprocess
 import time
 import urllib.error
@@ -185,6 +186,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_transcript_replay_survives_tab_restart,
         ),
         Scenario(
+            name="sentinel is registered in SQLite",
+            given="sentinel is connected after Babs boot",
+            when="the Phase 3 citizen registry is inspected",
+            then="the SQLite row is running and preserves the resolved workspace cwd",
+            run=scenario_sentinel_is_registered_in_sqlite,
+        ),
+        Scenario(
             name="configured workspace root stores transcript outside app root",
             given="BABS_WORKSPACE_ROOT is configured",
             when="sentinel produces output while the browser tab is closed",
@@ -264,6 +272,17 @@ def scenario_transcript_replay_survives_tab_restart(context: BabsBddContext) -> 
         lambda: marker in terminal_text(),
         timeout=15,
     )
+
+
+def scenario_sentinel_is_registered_in_sqlite(context: BabsBddContext) -> None:
+    context.connect_citizen("sentinel")
+    row = sqlite_citizen_row("sentinel")
+
+    assert row is not None
+    assert row["status"] == "running"
+    assert row["cwd"] == str(workspace_root() / "sentinel")
+    assert json.loads(row["cli_args"]) == ["-f"]
+    assert json.loads(row["env"]) == {}
 
 
 def scenario_configured_workspace_root_stores_transcript(context: BabsBddContext) -> None:
@@ -444,6 +463,29 @@ def transcript_contains(slug: str, marker: str) -> bool:
 
 def transcript_path(slug: str) -> Path:
     return workspace_root() / slug / "transcript.jsonl"
+
+
+def sqlite_citizen_row(slug: str) -> sqlite3.Row | None:
+    db_path = citizens_db_path()
+
+    if not db_path.exists():
+        raise AssertionError(f"SQLite citizen registry does not exist: {db_path}")
+
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        return connection.execute("select * from citizens where slug = ?", (slug,)).fetchone()
+
+
+def citizens_db_path() -> Path:
+    raw = os.environ.get("BABS_CITIZENS_DB_PATH")
+
+    if raw and raw.strip():
+        path = Path(raw.strip()).expanduser()
+        if not path.is_absolute():
+            path = RUNTIME_ROOT / path
+        return path.resolve()
+
+    return (RUNTIME_ROOT / "var" / "babs_citizens.sqlite3").resolve()
 
 
 def workspace_root() -> Path:

@@ -185,6 +185,25 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     refute File.exists?(Path.join(workspace_root, "absolute"))
   end
 
+  test "create_cwd false resolves cwd without creating the directory" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-no-create.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-NO-CREATE"
+    slug = "no-create"
+    display_name = "No Create"
+    cli = "/bin/zsh"
+    cwd = "no-create"
+    """)
+
+    assert {:ok, config} = Config.load_file(path, root: root, create_cwd: false)
+    assert config.cwd == Path.join(root, "workspaces/no-create")
+    refute File.exists?(config.cwd)
+  end
+
   test "legacy workspaces-prefixed cwd values warn after workspace_root split" do
     root = tmp_root()
     File.mkdir_p!(Path.join(root, "citizens"))
@@ -372,7 +391,9 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
   end
 
   defp tmp_root do
-    Path.join(System.tmp_dir!(), "babs-config-test-#{System.unique_integer([:positive])}")
+    root = Path.join(System.tmp_dir!(), "babs-config-test-#{System.unique_integer([:positive])}")
+    File.rm_rf!(root)
+    root
   end
 
   defp unique, do: System.unique_integer([:positive])

@@ -32,6 +32,7 @@
 | 1502 | SOP | PTY Stability Validation |
 | 1503 | SOP | Phase Delivery Workflow |
 | 1504 | SOP | GitHub Codex PR Review Loop |
+| 1505 | SOP | Operate SQLite Citizen Registry |
 | 1800 | REF | Evolution Philosophy |
 | 1801 | SOP | Evolve Babs |
 | 2100 | SOP | Workflow Routing PRJ |
@@ -45,9 +46,12 @@
 | 2207 | CHG | Phase 1a Flywheel Hardening |
 | 2208 | PRP | Phase 2 Transcript JSONL Persistence |
 | 2209 | PRP | Phase 2a Configurable Workspace Root |
+| 2210 | PRP | Phase 3 SQLite Citizens Table and Auto Respawn |
+| 2211 | CHG | Implement Phase 3 SQLite Citizen Registry |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
+| 3002 | REF | Discussion Tracker 2026 05 05 |
 
 ---
 

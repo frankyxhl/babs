@@ -1,5 +1,5 @@
 defmodule Babs.Citizens.GateA.ValidatorTest do
-  use ExUnit.Case, async: false
+  use Babs.Citizens.RepoCase, async: false
 
   alias Babs.Citizens.GateA.Validator
 
