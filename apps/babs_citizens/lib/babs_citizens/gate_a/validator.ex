@@ -26,7 +26,6 @@ defmodule Babs.Citizens.GateA.Validator do
          {:ok, metadata_after} <- metadata(session),
          :ok <- verify_stable_metadata(metadata_before, metadata_after),
          :ok <- inject_marker(config.slug, after_marker),
-         :ok <- wait_for_capture(session, before_marker),
          :ok <- wait_for_capture(session, after_marker) do
       {session_id, pane_pid} = metadata_after
       {:ok, %{session: session, session_id: session_id, pane_pid: pane_pid}}

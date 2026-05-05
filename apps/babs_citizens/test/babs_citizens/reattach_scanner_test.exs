@@ -113,6 +113,13 @@ defmodule Babs.Citizens.ReattachScannerTest do
   end
 
   defp tmp_root do
-    Path.join(System.tmp_dir!(), "babs-reattach-scan-#{System.unique_integer([:positive])}")
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "babs-reattach-scan-#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+      )
+
+    File.rm_rf!(root)
+    root
   end
 end

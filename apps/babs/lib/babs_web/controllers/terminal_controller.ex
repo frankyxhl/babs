@@ -11,16 +11,29 @@ defmodule BabsWeb.TerminalController do
 
   def call(conn, action), do: apply(__MODULE__, action, [conn, conn.params])
 
-  def index(conn, _params) do
+  def index(conn, params) do
+    conn = fetch_query_params(conn)
+
+    location =
+      case socket_token(conn, params) do
+        token when is_binary(token) and token != "" ->
+          "/citizens/sentinel?socket_token=#{URI.encode(token)}"
+
+        _ ->
+          "/citizens/sentinel"
+      end
+
     conn
-    |> put_resp_header("location", "/citizens/sentinel")
+    |> put_resp_header("location", location)
     |> send_resp(302, "")
   end
 
-  def show(conn, %{"slug" => slug}) do
+  def show(conn, %{"slug" => slug} = params) do
+    conn = fetch_query_params(conn)
+
     case Lifecycle.lookup(slug) do
       {:ok, _pid} ->
-        send_terminal(conn, slug)
+        send_terminal(conn, slug, socket_token(conn, params))
 
       {:error, :not_found} ->
         conn
@@ -36,9 +49,15 @@ defmodule BabsWeb.TerminalController do
     end
   end
 
-  defp send_terminal(conn, slug) do
+  defp send_terminal(conn, slug, socket_token) do
     conn
     |> put_root_layout(html: {BabsWeb.Layouts, :root})
-    |> live_render(BabsWeb.TerminalLive, session: %{"slug" => slug})
+    |> live_render(BabsWeb.TerminalLive,
+      session: %{"slug" => slug, "socket_token" => socket_token || ""}
+    )
+  end
+
+  defp socket_token(conn, params) do
+    Map.get(conn.query_params, "socket_token") || Map.get(params, "socket_token", "")
   end
 end

@@ -294,10 +294,10 @@ Validation passed:
 
 - `mise exec -- mix format --check-formatted`
 - `mise exec -- mix compile --warnings-as-errors`
-- `mise exec -- mix test`: `:babs_citizens` 37 tests, `:babs` 16 tests
-- `mise exec -- mix test --cover`: `:babs_citizens` 81.38% against 80%;
-  `:babs` 75.64% against 70%
-- `npm run test:js`: 5 Node unit tests
+- `mise exec -- mix test`: `:babs_citizens` 37 tests, `:babs` 18 tests
+- `mise exec -- mix test --cover`: `:babs_citizens` 82.70% against 80%;
+  `:babs` 77.27% against 70%
+- `npm run test:js`: 6 Node unit tests
 - `npm run test:bdd`: 7 browser-harness BDD scenarios
 - `npm run test:e2e`: 6 preserved Playwright smoke tests
 - `mise exec -- mix babs.gate_a`: Gate A PASS
@@ -322,3 +322,4 @@ Validation passed:
 | 2026-05-05 | Add browser-harness BDD test tier: replace Playwright-specific BDD wording with explicit Given/When/Then terminal scenarios, `test:bdd`, attached-browser safety rules, and isolated-run documentation requirement | Codex |
 | 2026-05-05 | Begin Phase 1a implementation; add test-tier map and mark CHG In Progress | Codex |
 | 2026-05-05 | Complete Phase 1a implementation: coverage gates, browser JS extraction, browser-harness BDD, terminal UX parity, `BABS_HTTP_IP`, and validation results | Codex |
+| 2026-05-05 | Update validation results after PR review fixes for socket auth, runtime root config, streaming terminal decode, and Gate A capture robustness | Codex |

@@ -10,8 +10,13 @@ defmodule BabsWeb.TerminalLive do
   use Phoenix.LiveView
 
   @impl true
-  def mount(_params, %{"slug" => slug}, socket) do
-    {:ok, assign(socket, :slug, slug)}
+  def mount(_params, %{"slug" => slug} = session, socket) do
+    socket =
+      socket
+      |> assign(:slug, slug)
+      |> assign(:socket_token, Map.get(session, "socket_token", ""))
+
+    {:ok, socket}
   end
 
   @impl true
@@ -87,7 +92,13 @@ defmodule BabsWeb.TerminalLive do
       <div id="connection-status" data-testid="connection-status" data-state="connecting">
         connecting
       </div>
-      <div id="terminal" data-testid="terminal" data-slug={@slug}></div>
+      <div
+        id="terminal"
+        data-testid="terminal"
+        data-slug={@slug}
+        data-socket-token={@socket_token}
+      >
+      </div>
     </div>
     <script src="/js/xterm.js">
     </script>

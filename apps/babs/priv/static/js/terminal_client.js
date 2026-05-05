@@ -44,7 +44,7 @@ export function bootTerminal(options = {}) {
   terminal.open(root);
   fit.fit();
 
-  const socket = new SocketCtor("/socket", {});
+  const socket = new SocketCtor("/socket", { params: { token: root.dataset.socketToken || "" } });
   socket.connect();
   const channel = socket.channel(`pane:${root.dataset.slug}`, {});
 

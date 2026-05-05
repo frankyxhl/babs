@@ -24,11 +24,12 @@ defmodule BabsWeb.TerminalControllerTest do
     slug = "controller-test-#{System.unique_integer([:positive])}"
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
 
-    conn = get(build_conn(), "/citizens/#{slug}")
+    conn = get(build_conn(), "/citizens/#{slug}?socket_token=secret")
 
     assert conn.status == 200
     assert conn.resp_body =~ ~s(data-testid="terminal")
     assert conn.resp_body =~ ~s(data-slug="#{slug}")
+    assert conn.resp_body =~ ~s(data-socket-token="secret")
     assert conn.resp_body =~ "/js/terminal_boot.js"
   end
 
