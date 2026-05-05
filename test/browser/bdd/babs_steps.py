@@ -27,6 +27,11 @@ from browser_harness.helpers import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+RUNTIME_ROOT = (
+    Path(os.environ.get("BABS_ROOT") or os.environ.get("RELEASE_ROOT") or ROOT)
+    .expanduser()
+    .resolve()
+)
 PANE_SOURCE = ROOT / "apps/babs_citizens/lib/babs_citizens/hardline/pane.ex"
 WEB_SOURCE = ROOT / "apps/babs/lib/babs_web/channels/pane_channel.ex"
 SERVER_LOG = ROOT / "logs/bdd-server.log"
@@ -382,7 +387,7 @@ def send_tmux_output(slug: str, marker: str) -> None:
 
 
 def transcript_contains(slug: str, marker: str) -> bool:
-    transcript = ROOT / "workspaces" / slug / "transcript.jsonl"
+    transcript = RUNTIME_ROOT / "workspaces" / slug / "transcript.jsonl"
 
     if not transcript.exists():
         return False

@@ -173,7 +173,7 @@ Phase 2 implementation validation on 2026-05-05:
 - `mise exec -- mix test`: passed with `:babs_citizens` 55 tests and `:babs`
   20 tests
 - `mise exec -- mix test --cover`: passed with `:babs_citizens` 55 tests,
-  81.32% total coverage, and `Babs.Citizens.Hardline.Transcript` 85.00%;
+  80.79% total coverage, and `Babs.Citizens.Hardline.Transcript` 85.00%;
   `:babs` 20 tests and 78.00% total coverage
 - `npm run test:js`: passed with 6 Node tests
 - `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
@@ -198,6 +198,9 @@ Phase 2 implementation validation on 2026-05-05:
 - GitHub Codex P1 review finding about stale delayed transcript writes was
   addressed with live Pane transcript flush before replay and tmux fallback on
   flush failure
+- GitHub Codex P2 review finding about BDD transcript path assumptions was
+  addressed by resolving transcript checks from `BABS_ROOT` / `RELEASE_ROOT` /
+  repo root, matching runtime config
 
 ## Open Questions
 
@@ -230,3 +233,4 @@ Phase 2 implementation validation on 2026-05-05:
 | 2026-05-05 | Address GitHub Codex P2 review by changing transcript replay from full-file read to bounded-tail read with truncated-leading-line regression coverage | Codex |
 | 2026-05-05 | Address GitHub Codex P2 review by filtering transcript replay to the active citizen slug and adding Transcript/Channel regression coverage | Codex |
 | 2026-05-05 | Address GitHub Codex P1 review by flushing the live Pane transcript before replay and falling back to tmux when flush fails | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by making browser-harness BDD transcript checks resolve the same runtime root as Babs | Codex |
