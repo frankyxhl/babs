@@ -16,6 +16,7 @@ non_empty_env = fn name ->
 end
 
 socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
+workspace_root = non_empty_env.("BABS_WORKSPACE_ROOT")
 
 if config_env() == :prod and is_nil(socket_auth_token) do
   raise """
@@ -26,7 +27,12 @@ if config_env() == :prod and is_nil(socket_auth_token) do
   """
 end
 
-config :babs_citizens, root: babs_root
+if workspace_root do
+  config :babs_citizens, root: babs_root, workspace_root: workspace_root
+else
+  config :babs_citizens, root: babs_root
+end
+
 config :babs, Babs.DevReloader, root: babs_root
 config :babs, BabsWeb.UserSocket, auth_token: socket_auth_token
 

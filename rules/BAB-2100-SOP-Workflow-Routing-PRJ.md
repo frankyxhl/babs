@@ -77,7 +77,7 @@ Inherits all of COR-1103 §"ALWAYS":
 | Net-new architecture decision (not covered by existing ADRs) | PRP (COR-1102) → review (COR-1602) → ADR (COR-1100) → file as `BAB-11xx` |
 | Phase implementation spec | PRP (COR-1102) → file as `BAB-22xx`; Phase 2+ sequencing follows `BAB-2300` |
 | Phase delivery after scope is agreed | `BAB-1503` for plan review → TDD/BDD → validation → Trinity code review → PR |
-| Phase 1 citizen seed | Follow `BAB-2201` and `BAB-1002` (`citizens/citizen-<slug>.toml` + `workspaces/<slug>/`) |
+| Citizen seed config | Follow `BAB-2201`, `BAB-1002`, and `BAB-2209` (`citizens/citizen-<slug>.toml` + resolved `workspace_root/<slug>/`) |
 | New citizen archetype beyond Phase 1 seed layout | PRP (COR-1102) first if structurally novel; legacy `BAB-1500` is deferred |
 
 ### 4. Execution coordination for approved work
@@ -124,7 +124,7 @@ Fall back to COR-1103 §"None of the above" branch.
 
 ### Add a Phase 1 citizen seed
 
-Follow `BAB-2201` and `BAB-1002`: create/update `citizens/citizen-<slug>.toml`, allocate `workspaces/<slug>/`, and route the active terminal byte channel through `Hardline.Pane` + PubSub topic `pane:<slug>`.
+Follow `BAB-2201`, `BAB-1002`, and `BAB-2209`: create/update `citizens/citizen-<slug>.toml`, allocate or resolve the workspace under `workspace_root`, and route the active terminal byte channel through `Hardline.Pane` + PubSub topic `pane:<slug>`.
 
 `BAB-1500` is deferred legacy guidance for the old `*.bob/` workflow. Do not route Phase 1 citizen creation there.
 
@@ -212,3 +212,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-05 | Add `BAB-1503` as the standard roadmap phase delivery route | Codex |
 | 2026-05-05 | Route open-PR GitHub Codex review mechanics through `BAB-1504` | Codex |
 | 2026-05-05 | Replace active open-PR review routing with promoted `COR-1615` plus `COR-1612`; keep `BAB-1504` as deprecated source material | Codex |
+| 2026-05-05 | Phase 2a: route Citizen seed workspace references through configurable `workspace_root` from `BAB-2209` | Codex |

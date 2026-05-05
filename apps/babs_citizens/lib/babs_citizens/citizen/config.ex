@@ -3,16 +3,16 @@ defmodule Babs.Citizens.Citizen.Config do
   Loads Phase 1 `citizens/citizen-<slug>.toml` files.
   """
 
+  require Logger
+
   alias Babs.Citizens.CitizenConfig
 
   @slug_regex ~r/^[a-z][a-z0-9-]{0,47}$/
   @required ~w(id slug display_name cli cwd)
 
   def load_slug(slug, opts \\ []) when is_binary(slug) do
-    root = Keyword.get(opts, :root, Application.get_env(:babs_citizens, :root, File.cwd!()))
-
-    config_dir =
-      Keyword.get(opts, :config_dir, Application.get_env(:babs_citizens, :config_dir, "citizens"))
+    root = root(opts)
+    config_dir = config_dir(opts)
 
     root
     |> Path.join(config_dir)
@@ -21,14 +21,15 @@ defmodule Babs.Citizens.Citizen.Config do
   end
 
   def load_file(path, opts \\ []) when is_binary(path) do
-    root = Keyword.get(opts, :root, Application.get_env(:babs_citizens, :root, File.cwd!()))
+    root = root(opts)
+    workspace_root = workspace_root(opts, root)
 
     with {:ok, raw} <- decode_file(path),
          :ok <- validate_required(raw),
          :ok <- validate_slug(raw["slug"]),
          {:ok, cli_args} <- validate_cli_args(Map.get(raw, "cli_args", [])),
          {:ok, env} <- resolve_env(Map.get(raw, "env", %{})),
-         {:ok, cwd} <- resolve_cwd(root, raw["cwd"]) do
+         {:ok, cwd} <- resolve_cwd(workspace_root, raw["cwd"]) do
       {:ok,
        %CitizenConfig{
          id: raw["id"],
@@ -46,10 +47,8 @@ defmodule Babs.Citizens.Citizen.Config do
   end
 
   def list_configs(opts \\ []) do
-    root = Keyword.get(opts, :root, Application.get_env(:babs_citizens, :root, File.cwd!()))
-
-    config_dir =
-      Keyword.get(opts, :config_dir, Application.get_env(:babs_citizens, :config_dir, "citizens"))
+    root = root(opts)
+    config_dir = config_dir(opts)
 
     dir = Path.join(root, config_dir)
 
@@ -62,6 +61,43 @@ defmodule Babs.Citizens.Citizen.Config do
 
   def valid_slug?(slug) when is_binary(slug), do: Regex.match?(@slug_regex, slug)
   def valid_slug?(_slug), do: false
+
+  defp root(opts) do
+    opts
+    |> Keyword.get(:root, Application.get_env(:babs_citizens, :root, File.cwd!()))
+    |> Path.expand()
+  end
+
+  defp config_dir(opts) do
+    Keyword.get(opts, :config_dir, Application.get_env(:babs_citizens, :config_dir, "citizens"))
+  end
+
+  defp workspace_root(opts, root) do
+    default = default_workspace_root(root)
+
+    case Keyword.get(opts, :workspace_root, Application.get_env(:babs_citizens, :workspace_root)) do
+      value when is_binary(value) ->
+        value = String.trim(value)
+
+        if value == "" do
+          default
+        else
+          Path.expand(value, root)
+        end
+
+      nil ->
+        default
+
+      value ->
+        Logger.warning(
+          "Babs citizen workspace_root #{inspect(value)} is not a string; falling back to #{inspect(default)}"
+        )
+
+        default
+    end
+  end
+
+  defp default_workspace_root(root), do: Path.join(root, "workspaces")
 
   defp decode_file(path) do
     case Toml.decode_file(path) do
@@ -97,12 +133,28 @@ defmodule Babs.Citizens.Citizen.Config do
 
   defp validate_cli_args(args), do: {:error, {:invalid_cli_args, args}}
 
-  defp resolve_cwd(root, cwd) do
-    path = Path.expand(cwd, root)
+  defp resolve_cwd(workspace_root, cwd) do
+    maybe_warn_legacy_cwd(cwd)
+    path = Path.expand(cwd, workspace_root)
 
     case File.mkdir_p(path) do
       :ok -> {:ok, path}
       {:error, reason} -> {:error, {:cwd_mkdir_failed, path, reason}}
+    end
+  end
+
+  defp maybe_warn_legacy_cwd(cwd) when is_binary(cwd) do
+    unless Path.type(cwd) == :absolute do
+      normalized =
+        cwd
+        |> Path.split()
+        |> Enum.drop_while(&(&1 == "."))
+
+      if List.first(normalized) == "workspaces" do
+        Logger.warning(
+          "Babs citizen config uses legacy cwd #{inspect(cwd)}; Phase 2a resolves relative cwd values under workspace_root, so migrate seed-style configs to cwd = \"<slug>\" or use an absolute cwd for compatibility"
+        )
+      end
     end
   end
 

@@ -3,6 +3,6 @@ slug = "elena"
 display_name = "Elena"
 cli = "gh"
 cli_args = ["copilot"]
-cwd = "workspaces/elena"
+cwd = "elena"
 description = "GitHub Copilot CLI test citizen"
 role = "copilot-tester"

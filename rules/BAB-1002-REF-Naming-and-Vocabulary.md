@@ -15,7 +15,7 @@ The project's vocabulary. Defines the meaning of every term that appears in code
 
 ## ⚠️ v0.1 Scope Notice (2026-05-04 update)
 
-This document was authored under the original 5-phase scope (with Discord/Telegram connectors and cross-node A2A). The v0.1 scope redefinition narrowed Babs significantly. **Read the "v0.1 Vocabulary (Authoritative)" section below first**; it supersedes terms in the legacy sections where they conflict. Terms still valid: `Babs`, `Citizen`, `Hardline` (formerly `Tmux.Core`), `Family Naming`. Terms partially superseded: `Citizen.Server`, `PaneSession`, `ChannelWorker`, `Connector`, `A2A`. Legacy term: `*.bob/` is not used by Phase 1 runtime layout; current Phase 1 uses `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/`. See `BAB-1109` (UI federation only), `BAB-1110` (β + γ), `BAB-1111` (Ticket replaces A2A messaging), `BAB-1112` (multi-CLI).
+This document was authored under the original 5-phase scope (with Discord/Telegram connectors and cross-node A2A). The v0.1 scope redefinition narrowed Babs significantly. **Read the "v0.1 Vocabulary (Authoritative)" section below first**; it supersedes terms in the legacy sections where they conflict. Terms still valid: `Babs`, `Citizen`, `Hardline` (formerly `Tmux.Core`), `Family Naming`. Terms partially superseded: `Citizen.Server`, `PaneSession`, `ChannelWorker`, `Connector`, `A2A`. Legacy term: `*.bob/` is not used by the current runtime layout; Babs uses `citizens/citizen-<slug>.toml` plus resolved Citizen workspaces under `workspace_root`, defaulting to `<BABS_ROOT>/workspaces/<slug>`. See `BAB-1109` (UI federation only), `BAB-1110` (β + γ), `BAB-1111` (Ticket replaces A2A messaging), `BAB-1112` (multi-CLI).
 
 ---
 
@@ -70,7 +70,7 @@ The earlier design tried "Thread" for a unit-of-work; rejected because it collid
 
 Same as legacy section, but: a Citizen now has at most ONE active Hardline (= one tmux session) at a time in v0.1 (serial execution); multiple parallel Tickets per Citizen is deferred to v0.2+. Each Citizen has:
 - A TOML config at `citizens/citizen-<slug>.toml` declaring `id`, `slug`, `cli`, `cli_args`, `cwd`, `env`, optional `role` (see `BAB-1112`)
-- A workspace directory at the configured `cwd`, conventionally `workspaces/<slug>/`
+- A workspace directory at the resolved `cwd`; relative TOML `cwd` values resolve under `workspace_root`, which defaults to `<BABS_ROOT>/workspaces`
 - A SQLite `citizens` row with `slug`, `cwd`, `cli`, `status`, `role` (nullable), `is_mayor`, `metadata` starting in Phase 3
 - A supervised subtree in `:babs_citizens` OTP app
 
@@ -82,13 +82,13 @@ Same as legacy section, but: a Citizen now has at most ONE active Hardline (= on
 
 Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `gh copilot`, plus future. Per-citizen `citizens/citizen-<slug>.toml` declares `cli` + `cli_args` + `env`. See `BAB-1112`.
 
-Phase 1 seed names are:
-- `clare` = Claude Code (`citizens/citizen-clare.toml`, `workspaces/clare/`)
-- `dylan` = Codex (`citizens/citizen-dylan.toml`, `workspaces/dylan/`)
-- `sentinel` = deterministic `/bin/zsh` reload-validation citizen (`citizens/citizen-sentinel.toml`, `workspaces/sentinel/`)
+Seed names are:
+- `clare` = Claude Code (`citizens/citizen-clare.toml`, `cwd = "clare"`)
+- `dylan` = Codex (`citizens/citizen-dylan.toml`, `cwd = "dylan"`)
+- `sentinel` = deterministic `/bin/zsh` reload-validation citizen (`citizens/citizen-sentinel.toml`, `cwd = "sentinel"`)
 
 Post-Phase-1 experimental seed:
-- `elena` = GitHub Copilot CLI (`citizens/citizen-elena.toml`, `workspaces/elena/`) for validating `gh copilot` as a hosted Citizen CLI. Elena is not part of the Phase 1 flywheel gate.
+- `elena` = GitHub Copilot CLI (`citizens/citizen-elena.toml`, `cwd = "elena"`) for validating `gh copilot` as a hosted Citizen CLI. Elena is not part of the Phase 1 flywheel gate.
 
 ### Babs ↔ Alfred Boundary
 
@@ -110,7 +110,7 @@ The project itself. Named after **Barbara Gordon's** canonical Bat-Family nickna
 
 ### Bobs (`*.bob/`)
 
-Legacy/deferred directory naming convention. Earlier drafts placed each citizen in `<name>.bob/`, e.g. `relay.bob/`, `dashboard.bob/`. Phase 1 does **not** use this layout; it uses `citizens/citizen-<slug>.toml` for config and `workspaces/<slug>/` for working files. Do not introduce new Phase 1 docs or code using `*.bob/` unless a later ADR deliberately reactivates the convention.
+Legacy/deferred directory naming convention. Earlier drafts placed each citizen in `<name>.bob/`, e.g. `relay.bob/`, `dashboard.bob/`. The current runtime does **not** use this layout; it uses `citizens/citizen-<slug>.toml` for config and resolved `workspace_root/<slug>/` directories for working files by default. Do not introduce new docs or code using `*.bob/` unless a later ADR deliberately reactivates the convention.
 
 ### Citizen
 
@@ -167,7 +167,7 @@ A module under `Babs.Connectors.*` that bridges Babs to a single external surfac
 | Use this term | Not this | Reason |
 |---|---|---|
 | Citizen | Agent | "Agent" is overloaded — it could mean an AI CLI, a Claude Code agent, a Bat-Family agent. "Citizen" is the project's specific term. |
-| `workspaces/<slug>/` | `.bob/` directory, "agent dir", "bot dir" | Phase 1 workspace convention; `.bob/` is legacy/deferred. |
+| `workspace_root/<slug>/` | `.bob/` directory, "agent dir", "bot dir" | Current workspace convention; default resolved path is `<BABS_ROOT>/workspaces/<slug>`, and `.bob/` is legacy/deferred. |
 | Hardline.Pane | PaneSession, "PTY worker", "terminal process" | Current v0.1 module for one Citizen's PTY byte channel. |
 | Hardline | Tmux.Core, "tmux wrapper", "erlexec module" | Current v0.1 term for the PTY/byte channel boundary. |
 | Inter-node A2A | "Cross-machine A2A", "remote A2A" | Tailscale is just the network layer; "node" is the BEAM-correct term. |
@@ -202,3 +202,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-04 | Phase 1 cleanup: mark `*.bob/` as legacy/deferred, define `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`, switch Hardline topic naming to `pane:<slug>`, and record Clare/Dylan/Sentinel seed names | Codex |
 | 2026-05-05 | Record Elena as a post-Phase-1 GitHub Copilot CLI experimental seed, separate from Phase 1 gate seeds | Codex |
 | 2026-05-04 | Trinity review fix: update anti-pattern table to recommend `Hardline.Pane` and `Hardline` instead of legacy `PaneSession` and `Tmux.Core` terms | Codex |
+| 2026-05-05 | Phase 2a: introduce configurable `workspace_root`, migrate seed examples to `cwd = "<slug>"`, and clarify default resolved workspace paths | Codex |

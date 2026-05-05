@@ -1,7 +1,7 @@
 # SOP-1500: Add a New Citizen Subtree
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-03
 **Status:** Deprecated
 **Depends on:** BAB-1001 (Architecture), BAB-1002 (Naming), BAB-1102 (Citizen-as-subtree ADR)
@@ -12,7 +12,7 @@
 
 This SOP describes the legacy `*.bob/` citizen-subtree procedure from the pre-v0.1 roadmap. **Do not use it for Phase 1.**
 
-Phase 1 citizen seeds follow `BAB-2201` and `BAB-1002`: configuration lives in `citizens/citizen-<slug>.toml`, working files live in `workspaces/<slug>/`, the active terminal byte channel is `Hardline.Pane`, browser output flows through PubSub topic `pane:<slug>`, and Discord/Telegram Connector registration is not part of Phase 1.
+Current citizen seeds follow `BAB-2201`, `BAB-1002`, and `BAB-2209`: configuration lives in `citizens/citizen-<slug>.toml`, working files live under the resolved `workspace_root`, the active terminal byte channel is `Hardline.Pane`, browser output flows through PubSub topic `pane:<slug>`, and Discord/Telegram Connector registration is not part of Phase 1.
 
 Keep this SOP only as deprecated historical guidance. If a later PRP/ADR reintroduces the `*.bob/` archetype workflow, create a new active SOP or rewrite this one through the document lifecycle first.
 
@@ -151,3 +151,4 @@ Tempting shortcut: just copy `relay.bob` to `relay2.bob`. **Don't.** A citizen h
 | 2026-05-03 | Drop hybrid/migration sub-bullet (Babs is from-scratch; no Python-era citizen.db) | Claude Code |
 | 2026-05-03 | Step 5 reworded to drop unsupported "30s registry refresh tick" claim; clarified DynamicSupervisor relationship | Claude Code |
 | 2026-05-04 | Mark SOP deferred for Phase 1; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` with `citizens/citizen-<slug>.toml`, `workspaces/<slug>/`, `Hardline.Pane`, and PubSub `pane:<slug>` semantics | Codex |
+| 2026-05-05 | Phase 2a: clarify deprecated layout notice with configurable `workspace_root` | Codex |
