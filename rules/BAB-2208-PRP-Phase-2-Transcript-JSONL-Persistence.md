@@ -65,17 +65,20 @@ Complete Phase 2 as a small hardening phase on top of the landed dogfood slice.
    - parse JSONL records defensively
    - ignore malformed lines rather than crashing terminal reconnect
    - decode only `direction == "output"` for browser replay
-   - return the most recent replay payload capped to 200 newline-delimited
-     output lines where possible
+   - return the most recent replay payload by decoding output records, splitting
+     on `\n`, and keeping the newest 200 lines or fewer if fewer exist
+   - tolerate a final partial line if the file is read while the Pane is
+     appending; replay is a best-effort UX read, not a transactional boundary
 4. Change `BabsWeb.PaneChannel` snapshot behavior:
-   - on join, load the citizen config to locate `cwd`
+   - on join, ask the live `Hardline.Pane` for its configured `cwd`; prefer a
+     small `Pane.cwd(slug)` call over re-reading TOML on every browser reconnect
    - replay transcript output bytes first when available
    - keep `tmux capture-pane` as a best-effort fallback when transcript is
      missing or empty
 5. Add lifecycle event records for reattach boundaries if this can be done
    without widening the JSONL contract too much:
-   - at minimum, record a textual output marker such as
-     `[babs hardline reattached]` into the transcript on successful reattach
+   - at minimum, record a regular `direction == "output"` JSONL record whose
+     payload is a textual marker such as `[babs hardline reattached]`
    - do not introduce a full event schema unless the implementation needs it
 6. Update docs so Phase 2 clearly distinguishes:
    - **Babs Hardline transcript**: Babs-owned append-only byte log at
@@ -93,9 +96,13 @@ Phase 2 is complete when:
   `/citizens/<slug>` replays the recent output from `transcript.jsonl`.
 - Replayed browser context is sourced from transcript JSONL, with tmux
   `capture-pane` only as fallback.
-- The replay cap is deterministic and documented: recent output is limited to
-  the latest 200 newline-delimited output lines where possible.
+- The replay cap is deterministic and documented: replay decodes output records,
+  splits on `\n`, and returns the most recent 200 output lines, or fewer if the
+  transcript contains fewer.
 - Malformed transcript lines do not crash reconnect.
+- "Byte-loss-free tab restart" means bytes produced while the tab is closed are
+  appended to the transcript and the newest 200 output lines are replayed on
+  reconnect. It does not mean old output beyond the replay cap is re-rendered.
 - Existing Phase 1 Gate A still passes.
 - Existing Phase 1a test tiers still pass.
 
@@ -114,8 +121,9 @@ Expected test additions:
   - tmux capture fallback remains best-effort when transcript is absent
 - Browser-harness BDD:
   - sentinel connects
-  - command schedules delayed output
-  - browser tab closes before output appears
+  - browser tab closes
+  - the test appends a deterministic output record directly to sentinel's
+    transcript while the tab is closed, avoiding sleep/timing flake
   - browser reopens `/citizens/sentinel`
   - marker appears from transcript replay
 - Existing validation stack:
@@ -150,6 +158,10 @@ Expected test additions:
 - Should replay trim by records or lines? Proposed answer: lines. The roadmap
   says "last 200 lines"; implement a line cap over decoded output bytes, while
   preserving raw terminal bytes inside those lines as much as possible.
+- Does `{:delayed_write, 4096, 50}` weaken "byte-loss-free"? Proposed answer:
+  not for the Phase 2 tab-restart contract. A hard BEAM crash could lose or
+  delay the last few milliseconds of buffered writes; Phase 2 only claims
+  browser tab restart while the Pane continues running.
 
 ---
 
@@ -158,3 +170,4 @@ Expected test additions:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-05 | Initial reconciliation PRP: record Phase 1 dogfood slice, identify remaining transcript replay gap, and define Phase 2 completion criteria | Codex |
+| 2026-05-05 | Trinity fast-review PASS follow-up: make 200-line replay deterministic, prefer `Pane.cwd/1`, require reattach markers as normal output records, make BDD replay deterministic, and clarify byte-loss-free scope | Codex |
