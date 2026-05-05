@@ -37,6 +37,23 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     assert snapshots["failed-one"].last_error == "redacted boom"
   end
 
+  test "exposes lifecycle actions by live status" do
+    up = insert_citizen!(%{slug: "up-one", status: "running"})
+    insert_citizen!(%{slug: "reattaching-one", status: "running"})
+    insert_citizen!(%{slug: "stopped-one", status: "stopped"})
+    insert_citizen!(%{slug: "failed-one", status: "failed"})
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, up.slug, nil)
+
+    snapshots =
+      StatusSnapshot.list()
+      |> Map.new(&{&1.slug, &1.actions})
+
+    assert snapshots["up-one"] == [:open, :full, :stop, :restart]
+    assert snapshots["reattaching-one"] == [:start, :stop]
+    assert snapshots["stopped-one"] == [:start]
+    assert snapshots["failed-one"] == [:start]
+  end
+
   test "does not expose env values in display snapshots" do
     insert_citizen!(%{
       slug: "secret-env",

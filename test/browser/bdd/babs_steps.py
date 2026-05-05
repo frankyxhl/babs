@@ -247,6 +247,20 @@ def scenarios() -> list[Scenario]:
             run=scenario_multi_citizen_index_and_tab_navigation_stays_fd_bounded,
         ),
         Scenario(
+            name="citizen lifecycle controls stop start restart",
+            given="a shell citizen was created from the browser",
+            when="the operator stops, starts, and restarts it from Babs UI",
+            then="status, terminal access, workspace, and transcript continuity stay correct",
+            run=scenario_citizen_lifecycle_controls_stop_start_restart,
+        ),
+        Scenario(
+            name="stopped citizens stay stopped across managed server restart",
+            given="one browser-created citizen is stopped and one is running",
+            when="the managed BDD server restarts",
+            then="the stopped citizen stays stopped while the running citizen reattaches",
+            run=scenario_stopped_citizens_stay_stopped_across_managed_server_restart,
+        ),
+        Scenario(
             name="terminal fills viewport",
             given="a terminal page is open",
             when="the viewport is resized",
@@ -498,6 +512,108 @@ def scenario_multi_citizen_index_and_tab_navigation_stays_fd_bounded(context: Ba
             cleanup_spawned_citizen(slug)
 
 
+def scenario_citizen_lifecycle_controls_stop_start_restart(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-life")
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        transcript = transcript_path(slug)
+        before_marker = unique_marker("BABS_BDD_LIFECYCLE_BEFORE")
+        context.type_command_and_expect(before_marker, exactly_once=True)
+        wait_until(
+            f"{slug} transcript to contain {before_marker}",
+            lambda: transcript_contains(slug, before_marker),
+            timeout=10,
+        )
+
+        context.open_path("/citizens")
+        click_selector(f'[data-testid="citizen-stop-{slug}"]')
+        wait_for_index_status(slug, "stopped")
+        assert_control_disabled(f'[data-testid="citizen-open-{slug}"]', f"{slug} open link after stop")
+        assert_control_disabled(f'[data-testid="citizen-full-{slug}"]', f"{slug} full link after stop")
+        status, body = http_get_status(f"{context.base_url}/citizens/{slug}", timeout=5)
+        assert status == 404
+        assert f"citizen not found: {slug}" in body
+
+        click_selector(f'[data-testid="citizen-start-{slug}"]')
+        wait_for_index_status(slug, "up")
+        click_selector(f'[data-testid="citizen-open-{slug}"]')
+        wait_until(
+            f"browser to reopen /citizens/{slug}",
+            lambda: js("window.location.pathname") == f"/citizens/{slug}",
+            timeout=10,
+        )
+        wait_for_terminal_connection(slug)
+
+        after_start_marker = unique_marker("BABS_BDD_LIFECYCLE_AFTER_START")
+        context.type_command_and_expect(after_start_marker, exactly_once=True)
+        wait_until(
+            f"{slug} transcript to contain {after_start_marker}",
+            lambda: transcript_contains(slug, after_start_marker),
+            timeout=10,
+        )
+
+        click_selector('[data-testid="terminal-restart"]')
+        wait_until(
+            "terminal restart flash to render",
+            lambda: "Restarted" in js("document.body.innerText"),
+            timeout=15,
+        )
+        after_restart_marker = unique_marker("BABS_BDD_LIFECYCLE_AFTER_RESTART")
+        context.type_command_and_expect(after_restart_marker, exactly_once=True)
+        wait_until(
+            f"{slug} transcript to contain {after_restart_marker}",
+            lambda: transcript_contains(slug, after_restart_marker),
+            timeout=10,
+        )
+
+        assert transcript == transcript_path(slug)
+        assert transcript_contains(slug, before_marker)
+        assert transcript_contains(slug, after_start_marker)
+        assert transcript_contains(slug, after_restart_marker)
+    finally:
+        cleanup_spawned_citizen(slug)
+
+
+def scenario_stopped_citizens_stay_stopped_across_managed_server_restart(context: BabsBddContext) -> None:
+    if context.server_process is None:
+        raise SkipScenario("BDD is using an externally managed server, so managed restart is skipped")
+
+    stopped_slug = unique_slug("bdd-stopped")
+    running_slug = unique_slug("bdd-running")
+
+    try:
+        create_shell_citizen_from_ui(context, stopped_slug)
+        context.close_test_tab()
+        create_shell_citizen_from_ui(context, running_slug)
+        context.close_test_tab()
+
+        context.open_path("/citizens")
+        click_selector(f'[data-testid="citizen-stop-{stopped_slug}"]')
+        wait_for_index_status(stopped_slug, "stopped")
+        context.close_test_tab()
+
+        context.restart_server()
+
+        stopped_row = sqlite_citizen_row(stopped_slug)
+        running_row = sqlite_citizen_row(running_slug)
+        assert stopped_row is not None
+        assert running_row is not None
+        assert stopped_row["status"] == "stopped"
+        assert running_row["status"] == "running"
+        assert tmux_session_count(stopped_slug) == 0
+        assert tmux_session_count(running_slug) == 1
+
+        status, _body = http_get_status(f"{context.base_url}/citizens/{stopped_slug}", timeout=5)
+        assert status == 404
+
+        context.connect_citizen(running_slug)
+        context.type_command_and_expect(unique_marker("BABS_BDD_RUNNING_AFTER_RESTART"), exactly_once=True)
+    finally:
+        cleanup_spawned_citizen(stopped_slug)
+        cleanup_spawned_citizen(running_slug)
+
+
 def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
     context.connect_citizen("sentinel")
 
@@ -587,6 +703,28 @@ def click_selector(selector: str) -> None:
     if not rect:
         raise AssertionError(f"element not found for click: {selector}")
     click_at_xy(rect["x"], rect["y"])
+
+
+def assert_control_disabled(selector: str, label: str) -> None:
+    selector_json = json.dumps(selector)
+    disabled = js(
+        f"""
+        const e = document.querySelector({selector_json});
+        if (!e) return false;
+        return e.getAttribute("aria-disabled") === "true" && !e.hasAttribute("href");
+        """
+    )
+    if not disabled:
+        raise AssertionError(f"{label} was not disabled: {selector}")
+
+
+def wait_for_index_status(slug: str, status: str) -> None:
+    wait_until(
+        f"{slug} index status to be {status}",
+        lambda: status
+        in js(f"document.querySelector('[data-testid=\"citizen-status-{slug}\"]')?.innerText || ''"),
+        timeout=15,
+    )
 
 
 def click_terminal() -> None:

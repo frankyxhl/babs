@@ -9,8 +9,9 @@ defmodule BabsWeb.TerminalLive do
 
   use Phoenix.LiveView
 
-  alias Babs.Citizens.StatusSnapshot
+  alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
+  alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
 
@@ -25,6 +26,7 @@ defmodule BabsWeb.TerminalLive do
       |> assign(:slug, slug)
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
+      |> assign(:lifecycle_inflight, %{})
       |> assign_tabs()
 
     {:ok, socket}
@@ -35,6 +37,36 @@ defmodule BabsWeb.TerminalLive do
     if connected?(socket) and not socket.assigns.full?, do: schedule_refresh()
 
     {:noreply, assign_tabs(socket)}
+  end
+
+  @impl true
+  def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
+    case parse_action(action) do
+      {:ok, action} ->
+        {:noreply, start_lifecycle(socket, action, slug)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Unknown lifecycle action")}
+    end
+  end
+
+  @impl true
+  def handle_async({:lifecycle, slug, action}, {:ok, result}, socket) do
+    socket =
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> apply_lifecycle_result(action, slug, result)
+
+    {:noreply, socket}
+  end
+
+  def handle_async({:lifecycle, slug, action}, {:exit, reason}, socket) do
+    socket =
+      socket
+      |> clear_lifecycle_inflight(slug)
+      |> apply_lifecycle_result(action, slug, {:error, reason})
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -76,7 +108,7 @@ defmodule BabsWeb.TerminalLive do
       .terminal-chrome {
         height: var(--terminal-chrome-height);
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
         align-items: center;
         gap: 8px;
         border-bottom: 1px solid var(--line);
@@ -100,10 +132,31 @@ defmodule BabsWeb.TerminalLive do
         white-space: nowrap;
       }
 
+      button.terminal-link {
+        font: inherit;
+        cursor: pointer;
+      }
+
       .terminal-link:hover,
       .terminal-tab:hover {
         border-color: var(--accent);
         color: var(--text);
+      }
+
+      .terminal-link[disabled],
+      .terminal-link.is-disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .terminal-link[disabled]:hover,
+      .terminal-link.is-disabled:hover {
+        border-color: var(--line);
+        color: var(--muted);
+      }
+
+      .terminal-danger:hover {
+        border-color: var(--danger);
       }
 
       .terminal-tabs {
@@ -128,6 +181,21 @@ defmodule BabsWeb.TerminalLive do
         border-color: var(--accent);
         color: var(--text);
         background: #20252b;
+      }
+
+      .terminal-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .terminal-flash {
+        color: var(--muted);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .terminal-flash-error {
+        color: var(--danger);
       }
 
       .status-dot {
@@ -198,6 +266,9 @@ defmodule BabsWeb.TerminalLive do
           grid-template-rows: auto auto;
           align-items: stretch;
         }
+        .terminal-actions {
+          justify-content: flex-end;
+        }
         .terminal-tabs {
           grid-column: 1 / -1;
           grid-row: 2;
@@ -219,6 +290,48 @@ defmodule BabsWeb.TerminalLive do
             <span class="terminal-tab-label">{citizen.slug}</span>
           </a>
         </div>
+        <div
+          class="terminal-actions"
+          data-testid="terminal-lifecycle-controls"
+          data-terminal-lifecycle-scope={@slug}
+        >
+          <button
+            :if={action?(active_tab(@tabs, @slug), :start)}
+            type="button"
+            class={["terminal-link", lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"]}
+            phx-click={lifecycle_click(@slug, :start)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
+            phx-disable-with="Starting"
+            data-testid="terminal-start"
+          >
+            Start
+          </button>
+          <button
+            :if={action?(active_tab(@tabs, @slug), :stop)}
+            type="button"
+            class={[
+              "terminal-link terminal-danger",
+              lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"
+            ]}
+            phx-click={lifecycle_click(@slug, :stop)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
+            phx-disable-with="Stopping"
+            data-testid="terminal-stop"
+          >
+            Stop
+          </button>
+          <button
+            :if={action?(active_tab(@tabs, @slug), :restart)}
+            type="button"
+            class={["terminal-link", lifecycle_busy?(@lifecycle_inflight, @slug) && "is-disabled"]}
+            phx-click={lifecycle_click(@slug, :restart)}
+            disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
+            phx-disable-with="Restarting"
+            data-testid="terminal-restart"
+          >
+            Restart
+          </button>
+        </div>
         <a
           class="terminal-link"
           href={CitizenPath.terminal(@slug, @socket_token, full?: true)}
@@ -226,6 +339,20 @@ defmodule BabsWeb.TerminalLive do
         >
           Full
         </a>
+        <span
+          :if={flash(assigns, :info)}
+          class="terminal-flash"
+          data-testid="terminal-flash-info"
+        >
+          {flash(assigns, :info)}
+        </span>
+        <span
+          :if={flash(assigns, :error)}
+          class="terminal-flash terminal-flash-error"
+          data-testid="terminal-flash-error"
+        >
+          {flash(assigns, :error)}
+        </span>
       </nav>
       <div
         id="connection-status"
@@ -256,7 +383,9 @@ defmodule BabsWeb.TerminalLive do
   end
 
   defp assign_tabs(socket) do
-    assign(socket, :tabs, tab_provider().(socket.assigns.slug))
+    tabs = tab_provider().(socket.assigns.slug)
+
+    assign(socket, :tabs, tabs)
   end
 
   defp live_tabs(tabs, slug) do
@@ -274,11 +403,16 @@ defmodule BabsWeb.TerminalLive do
     end
   end
 
+  defp active_tab(tabs, slug) do
+    Enum.find(tabs, &(&1.slug == slug)) || fallback_tab(slug)
+  end
+
   defp fallback_tab(slug) do
     %{
       slug: slug,
       display_name: slug,
       live_status: :up,
+      actions: [:open, :full, :stop, :restart],
       cli_label: "",
       cwd_label: "",
       last_error: nil
@@ -294,6 +428,108 @@ defmodule BabsWeb.TerminalLive do
       end
 
     base <> " status-#{citizen.live_status}"
+  end
+
+  defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
+
+  defp lifecycle_click(slug, action) do
+    selector = lifecycle_button_selector(slug)
+
+    JS.set_attribute({"disabled", "disabled"}, to: selector)
+    |> JS.add_class("is-disabled", to: selector)
+    |> JS.push("lifecycle", value: %{"action" => Atom.to_string(action), "slug" => slug})
+  end
+
+  defp lifecycle_button_selector(slug), do: ~s([data-terminal-lifecycle-scope="#{slug}"] button)
+
+  defp lifecycle_busy?(inflight, slug), do: Map.has_key?(inflight, slug)
+
+  defp parse_action("start"), do: {:ok, :start}
+  defp parse_action("stop"), do: {:ok, :stop}
+  defp parse_action("restart"), do: {:ok, :restart}
+  defp parse_action(_action), do: :error
+
+  defp start_lifecycle(socket, action, slug) do
+    if lifecycle_busy?(socket.assigns.lifecycle_inflight, slug) do
+      put_flash(socket, :error, "Lifecycle action already running for #{slug}")
+    else
+      socket
+      |> assign(:lifecycle_inflight, Map.put(socket.assigns.lifecycle_inflight, slug, action))
+      |> start_async({:lifecycle, slug, action}, fn -> lifecycle_action(action, slug) end)
+    end
+  end
+
+  defp clear_lifecycle_inflight(socket, slug) do
+    assign(socket, :lifecycle_inflight, Map.delete(socket.assigns.lifecycle_inflight, slug))
+  end
+
+  defp apply_lifecycle_result(socket, :stop, slug, result) do
+    case result do
+      :ok ->
+        socket
+        |> put_flash(:info, "Stopped #{slug}")
+        |> redirect(to: CitizenPath.index(socket.assigns.socket_token))
+
+      {:ok, _pid} ->
+        socket
+        |> put_flash(:info, "Stopped #{slug}")
+        |> redirect(to: CitizenPath.index(socket.assigns.socket_token))
+
+      {:error, reason} ->
+        assign_lifecycle_result({:error, reason}, socket, :stop, slug)
+    end
+  end
+
+  defp apply_lifecycle_result(socket, action, slug, result) when action in [:start, :restart] do
+    case result do
+      {:error, reason} when action == :restart ->
+        {:error, reason}
+        |> assign_lifecycle_result(socket, action, slug)
+        |> redirect(to: CitizenPath.index(socket.assigns.socket_token))
+
+      result ->
+        result
+        |> assign_lifecycle_result(socket, action, slug)
+        |> assign_tabs()
+    end
+  end
+
+  defp lifecycle_action(action, slug) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:lifecycle_action, &default_lifecycle_action/2)
+    |> then(fn handler -> handler.(action, slug) end)
+  end
+
+  defp default_lifecycle_action(:start, slug), do: Lifecycle.start_registered_citizen(slug)
+  defp default_lifecycle_action(:stop, slug), do: Lifecycle.stop_citizen(slug)
+  defp default_lifecycle_action(:restart, slug), do: Lifecycle.restart_registered_citizen(slug)
+
+  defp assign_lifecycle_result(:ok, socket, action, slug) do
+    put_flash(socket, :info, "#{action_label(action)} #{slug}")
+  end
+
+  defp assign_lifecycle_result({:ok, _pid}, socket, action, slug) do
+    put_flash(socket, :info, "#{action_label(action)} #{slug}")
+  end
+
+  defp assign_lifecycle_result({:error, reason}, socket, action, slug) do
+    message = "#{action_error_label(action)} failed for #{slug}: #{Catalog.redact_reason(reason)}"
+    put_flash(socket, :error, message)
+  end
+
+  defp action_label(:start), do: "Started"
+  defp action_label(:stop), do: "Stopped"
+  defp action_label(:restart), do: "Restarted"
+
+  defp action_error_label(:start), do: "Start"
+  defp action_error_label(:stop), do: "Stop"
+  defp action_error_label(:restart), do: "Restart"
+
+  defp flash(assigns, kind) do
+    assigns
+    |> Map.get(:flash, %{})
+    |> Phoenix.Flash.get(kind)
   end
 
   defp tab_provider do
