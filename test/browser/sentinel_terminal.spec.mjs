@@ -29,8 +29,11 @@ async function connectSentinel(page) {
 }
 
 async function runCommandAndExpect(page, marker) {
-  await page.getByTestId("terminal").click();
-  await page.keyboard.type(`printf '${marker}\\n'`);
+  const command = `printf '\\033[2J\\033[H${marker}\\n'`;
+
+  await page.locator(".xterm-helper-textarea").click({ force: true });
+  await page.evaluate(() => window.__babsTerminalClient?.terminal.focus());
+  await page.keyboard.insertText(command);
   await page.keyboard.press("Enter");
 
   await expect

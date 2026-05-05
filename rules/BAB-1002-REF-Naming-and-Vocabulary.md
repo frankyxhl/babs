@@ -1,7 +1,7 @@
 # REF-1002: Naming & Vocabulary
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-04
 **Status:** Active
 
@@ -86,6 +86,9 @@ Phase 1 seed names are:
 - `clare` = Claude Code (`citizens/citizen-clare.toml`, `workspaces/clare/`)
 - `dylan` = Codex (`citizens/citizen-dylan.toml`, `workspaces/dylan/`)
 - `sentinel` = deterministic `/bin/zsh` reload-validation citizen (`citizens/citizen-sentinel.toml`, `workspaces/sentinel/`)
+
+Post-Phase-1 experimental seed:
+- `elena` = GitHub Copilot CLI (`citizens/citizen-elena.toml`, `workspaces/elena/`) for validating `gh copilot` as a hosted Citizen CLI. Elena is not part of the Phase 1 flywheel gate.
 
 ### Babs ↔ Alfred Boundary
 
@@ -197,4 +200,5 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-03 | Initial version — vocabulary, family naming, anti-patterns | Claude Code |
 | 2026-05-03 | Drop legacy "inherited from prefrontal-cortex" framing for `.bob/` convention | Claude Code |
 | 2026-05-04 | Phase 1 cleanup: mark `*.bob/` as legacy/deferred, define `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`, switch Hardline topic naming to `pane:<slug>`, and record Clare/Dylan/Sentinel seed names | Codex |
+| 2026-05-05 | Record Elena as a post-Phase-1 GitHub Copilot CLI experimental seed, separate from Phase 1 gate seeds | Codex |
 | 2026-05-04 | Trinity review fix: update anti-pattern table to recommend `Hardline.Pane` and `Hardline` instead of legacy `PaneSession` and `Tmux.Core` terms | Codex |

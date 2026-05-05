@@ -2,6 +2,7 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
   use ExUnit.Case, async: false
 
   alias Babs.Citizens.{CitizenConfig, Lifecycle, Runner}
+  alias Babs.Citizens.Hardline.Pane
 
   test "detaches and reattaches without killing the tmux session" do
     config = sentinel_config()
@@ -12,6 +13,12 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
     assert {:ok, pid} = Lifecycle.start_config(config)
     assert Runner.tmux_session_alive?(session)
     assert {:ok, ^pid} = Lifecycle.lookup(config.slug)
+    assert {:ok, ^pid} = Lifecycle.start_config(config)
+
+    marker = "BABS_LIFECYCLE_INJECT_#{System.unique_integer([:positive])}"
+    Pane.inject(config.slug, "printf '#{marker}\\n'\n")
+    wait_for_capture!(session, marker)
+    Pane.resize(config.slug, 33, 101)
 
     assert :ok = DynamicSupervisor.terminate_child(Babs.Citizens.DynamicSupervisor, pid)
     assert Runner.tmux_session_alive?(session)
@@ -39,5 +46,31 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
       cwd: cwd,
       env: %{}
     }
+  end
+
+  defp wait_for_capture!(session, marker) do
+    deadline = System.monotonic_time(:millisecond) + 5_000
+    do_wait_for_capture!(session, marker, deadline)
+  end
+
+  defp do_wait_for_capture!(session, marker, deadline) do
+    cond do
+      capture_contains?(session, marker) ->
+        :ok
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        flunk("timed out waiting for #{marker} in #{session}")
+
+      true ->
+        Process.sleep(100)
+        do_wait_for_capture!(session, marker, deadline)
+    end
+  end
+
+  defp capture_contains?(session, marker) do
+    case Runner.capture_pane(session) do
+      {:ok, capture} -> String.contains?(capture, marker)
+      {:error, _reason} -> false
+    end
   end
 end

@@ -1,6 +1,7 @@
 # Elixir / Mix
 /_build/
 /cover/
+**/cover/
 /deps/
 /doc/
 **/_build/
@@ -20,6 +21,8 @@ erl_crash.dump
 npm-debug.log
 playwright-report/
 test-results/
+__pycache__/
+*.py[cod]
 
 # Babs runtime
 /sessions/

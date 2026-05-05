@@ -54,4 +54,26 @@ defmodule BabsWeb.PaneChannelTest do
     refute PaneChannel.allowed_input?("\e]52;c;clipboard\a")
     refute PaneChannel.allowed_input?(:binary.copy("x", 4097))
   end
+
+  test "input and resize events tolerate invalid or unavailable panes" do
+    socket = %Phoenix.Socket{assigns: %{slug: "missing-pane"}}
+
+    assert {:noreply, ^socket} = PaneChannel.handle_in("input", %{"data" => "ok"}, socket)
+    assert {:noreply, ^socket} = PaneChannel.handle_in("input", %{"data" => <<0>>}, socket)
+
+    assert {:noreply, ^socket} =
+             PaneChannel.handle_in("resize", %{"cols" => 120, "rows" => 30}, socket)
+
+    assert {:noreply, ^socket} =
+             PaneChannel.handle_in("resize", %{"cols" => 0, "rows" => 30}, socket)
+
+    assert {:noreply, ^socket} =
+             PaneChannel.handle_in("resize", %{"cols" => "120", "rows" => 30}, socket)
+  end
+
+  test "snapshot send is best effort when tmux capture fails" do
+    socket = %Phoenix.Socket{assigns: %{slug: "missing-pane"}}
+
+    assert {:noreply, ^socket} = PaneChannel.handle_info(:send_snapshot, socket)
+  end
 end

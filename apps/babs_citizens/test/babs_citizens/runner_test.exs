@@ -32,4 +32,23 @@ defmodule Babs.Citizens.RunnerTest do
     assert Runner.managed_session?("babs-clare")
     refute Runner.managed_session?("personal-clare")
   end
+
+  test "maps between citizen slugs and managed tmux session names" do
+    assert Runner.session_name("clare") == "babs-clare"
+    assert Runner.slug_from_session("babs-clare") == {:ok, "clare"}
+    assert Runner.slug_from_session("personal-clare") == :error
+    assert Runner.attach_command("babs-clare") == ~c"tmux attach-session -t babs-clare"
+  end
+
+  test "refuses to kill unmanaged sessions" do
+    assert Runner.kill_session("personal-clare") == {:error, :unmanaged_session}
+  end
+
+  test "reports tmux metadata and capture failures for missing sessions" do
+    missing = "babs-missing-#{System.unique_integer([:positive])}"
+
+    refute Runner.tmux_session_alive?(missing)
+    assert {:error, :invalid_pane_pid} = Runner.tmux_pane_pid(missing)
+    assert {:error, {:tmux_capture_pane_failed, _status, _output}} = Runner.capture_pane(missing)
+  end
 end

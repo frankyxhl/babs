@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "vendor:browser": "node test/browser/vendor_assets.mjs",
-    "test:e2e": "playwright test"
+    "test:bdd": "browser-harness -c 'import runpy; runpy.run_path(\"test/browser/bdd/run.py\", run_name=\"__main__\")'",
+    "test:e2e": "playwright test",
+    "test:js": "node --test test/browser/*.test.mjs"
   },
   "dependencies": {
     "@xterm/addon-fit": "0.10.0",

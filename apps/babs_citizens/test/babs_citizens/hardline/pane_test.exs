@@ -43,4 +43,35 @@ defmodule Babs.Citizens.Hardline.PaneTest do
     assert {:noreply, %{seq: 1}} = Pane.handle_info({:stdout, 456, "legacy"}, state)
     assert_receive {:pane_bytes, ^stream_id, 1, "legacy"}
   end
+
+  test "ignores stdout from an unrelated os pid" do
+    state = %{attach: %{os_pid: 456}, seq: 0}
+
+    assert {:noreply, ^state} = Pane.handle_info({:stdout, 999, "ignored"}, state)
+  end
+
+  test "DOWN handler broadcasts detach message and normalizes clean exits" do
+    slug = "down-pane-#{System.unique_integer([:positive])}"
+    stream_id = 987
+    Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, "pane:#{slug}")
+
+    state = %{
+      attach: %{os_pid: 456},
+      config: %CitizenConfig{
+        id: "BAB-CIT-DOWN",
+        slug: slug,
+        display_name: "Down Pane",
+        cli: "/bin/zsh",
+        cwd: System.tmp_dir!()
+      },
+      seq: 4,
+      stream_id: stream_id
+    }
+
+    assert {:stop, :normal, ^state} =
+             Pane.handle_info({:DOWN, make_ref(), :process, self(), {:exit_status, 0}}, state)
+
+    assert_receive {:pane_bytes, ^stream_id, 5, message}
+    assert message =~ "[babs hardline detached:"
+  end
 end

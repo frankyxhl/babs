@@ -1,8 +1,8 @@
 # PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
-**Last reviewed:** 2026-05-04
+**Last updated:** 2026-05-05
+**Last reviewed:** 2026-05-05
 **Status:** Active
 **Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
 **Sources:** v0.1 design session 2026-05-03; Trinity Review `BAB-1006`
@@ -77,9 +77,17 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Output**: Mix umbrella with `:babs` and `:babs_citizens` apps; **two AI seed Citizens** (`clare` running `claude`, `dylan` running `codex` — validates multi-CLI works at SEED time, not deferred) plus deterministic `sentinel` (`/bin/zsh`) for Gate A; minimal LiveView terminal at `/citizens/<slug>`; Channel re-registration; tmux detach + reattach; multi-CLI configs at `citizens/citizen-<slug>.toml`; `Babs.DevReloader` in `:babs` for `:babs_citizens` reload (per `BAB-1110`); restricted keyboard set; PubSub chunk payloads ≤4KB (per `BAB-1106`)
 **Acceptance**: **Flywheel Test (Gate A scripted + Gate B dogfood)** — Gate A is `mix babs.gate_a`, a machine-verifiable sentinel reload test (sentinel survives `:babs_citizens` reload with tmux session and pane PID intact); Gate B is the human dogfood test (clare implements Phase 2 entirely from browser, closes all terminals first). Both gates must pass.
 **Estimate**: 14-21 days (Trinity 2× multiplier from naive 7-10)
-**Built by**: human (last manual phase)
+**Built by**: human
 
 🔥 **FLYWHEEL IGNITES at end of Phase 1** 🔥
+
+### Phase 1a — Flywheel Hardening
+
+**Doc**: `BAB-2207` CHG
+**Output**: Explicit coverage gates for `:babs_citizens` and `:babs`; browser terminal JavaScript extracted from `TerminalLive` into static modules with Node unit tests; browser-harness BDD scenarios cover connect/type/reload/resize/missing-citizen workflows; `/citizens/<slug>` terminal UX aligns with useful Phase 0b full-window behavior; `BABS_HTTP_IP` restores local-only dev default with explicit Tailscale opt-in.
+**Acceptance**: `mix test --cover` passes at `:babs_citizens` 80% and `:babs` 70%; `npm run test:js`, `npm run test:bdd`, preserved `npm run test:e2e`, `mix babs.gate_a`, and Alfred validation pass; billboard/ticket automation remains deferred.
+**Estimate**: 1-2 days
+**Built by**: human (last manual hardening phase before continuing Citizen-built product phases)
 
 ---
 

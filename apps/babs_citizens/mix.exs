@@ -11,6 +11,12 @@ defmodule Babs.Citizens.MixProject do
       lockfile: "../../mix.lock",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
+      test_coverage: [
+        summary: [threshold: 80],
+        ignore_modules: [
+          Mix.Tasks.Babs.GateA
+        ]
+      ],
       deps: deps()
     ]
   end

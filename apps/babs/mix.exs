@@ -11,6 +11,19 @@ defmodule Babs.MixProject do
       lockfile: "../../mix.lock",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
+      test_coverage: [
+        summary: [threshold: 70],
+        ignore_modules: [
+          Babs.Application,
+          BabsWeb.Endpoint,
+          BabsWeb.ErrorHTML,
+          BabsWeb.ErrorJSON,
+          BabsWeb.Layouts,
+          BabsWeb.Router,
+          BabsWeb.Router.Helpers,
+          BabsWeb.UserSocket
+        ]
+      ],
       deps: deps()
     ]
   end

@@ -1,7 +1,7 @@
 # SOP-2100: Workflow Routing PRJ
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-03
 **Status:** Active
 
@@ -127,6 +127,8 @@ Follow `BAB-2201` and `BAB-1002`: create/update `citizens/citizen-<slug>.toml`, 
 
 `BAB-1500` is deferred legacy guidance for the old `*.bob/` workflow. Do not route Phase 1 citizen creation there.
 
+Current post-Phase-1 experimental seed: `elena` uses `gh copilot` through `citizens/citizen-elena.toml` to validate GitHub Copilot CLI hosting. Treat her as an experimental CLI coverage citizen, not as a Phase 1 acceptance dependency.
+
 ---
 
 ## Document Type Quick Reference
@@ -194,3 +196,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-03 | Drop "Migration cutover" routes (Babs is from-scratch); collapse SOP "(when written)" notes for docs that now exist | Claude Code |
 | 2026-05-03 | Self-review fixes: Phase 0/1/2/3 → 0/1/2/3/4; remove "(when written)" on BAB-2200 | Claude Code |
 | 2026-05-04 | Expand architecture ADR range to `BAB-1100`–`BAB-1112`; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` and mark `BAB-1500` deferred | Codex |
+| 2026-05-05 | Record Elena as a post-Phase-1 experimental GitHub Copilot CLI seed under the Phase 1 seed routing note | Codex |
