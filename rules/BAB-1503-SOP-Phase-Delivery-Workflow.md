@@ -160,7 +160,8 @@ A completed phase delivery produces:
     validation, deferred gates, and no private machine details.
 
 13. **Handle PR review loops.**
-    Follow `BAB-1504` for the GitHub Codex PR review loop. For each review
+    Follow `COR-1615` for the GitHub App PR review bot trigger/status/current
+    head loop, then use `COR-1612` for fetched review findings. For each review
     round, inspect comments, fix actionable blockers, rerun relevant validation,
     push, and keep monitoring until no new required changes remain or the
     operator pauses the loop. When actively monitoring an open PR, poll every few
@@ -179,7 +180,7 @@ A completed phase delivery produces:
 |-------|---------|-------|
 | Plan review | Trinity GLM + DeepSeek fast-review | Gemini is optional unless requested or risk warrants it. |
 | Code review | Trinity GLM + DeepSeek fast-review | Inspect raw outputs and fix blockers before PR. |
-| GitHub PR review | `BAB-1504` Codex/GitHub review loop | Continue fixing/pushing until no new required changes remain. |
+| GitHub PR review | `COR-1615` bot loop, then `COR-1612` findings loop | Continue fixing/pushing until no new required changes remain. |
 
 ---
 
@@ -226,3 +227,4 @@ A completed phase delivery produces:
 | 2026-05-05 | Initial version capturing the Phase 0a-1a plan-review, TDD/BDD, validation, Trinity code-review, and PR workflow | Codex |
 | 2026-05-05 | Clarify active PR monitoring cadence: poll every few minutes and resume after each push until reviews/checks settle | Codex |
 | 2026-05-05 | Link PR review handling to `BAB-1504` for GitHub Codex reaction/status mechanics | Codex |
+| 2026-05-05 | Switch active PR review handling from Babs-specific `BAB-1504` to promoted `COR-1615` plus `COR-1612` | Codex |
