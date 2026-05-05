@@ -1,9 +1,9 @@
 # PRP-2201: Phase 1 — V0-S0 SEED (Flywheel Ignition)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-04
-**Status:** Draft
+**Status:** Implemented
 **Replaces:** Earlier `BAB-2201` Phase 1 "Core Supervision Skeleton" (deleted; that scope assumed old 5-phase plan with Discord/Telegram)
 **Depends on:** `BAB-2200` Phase 0 PRP (PTY + detach/reattach validated)
 **Implements:** `BAB-1110` (β + γ live-reload-safe), `BAB-1112` (multi-CLI), `BAB-1107` (Babs owns tmux), `BAB-1106` (Channel re-registration)
@@ -187,6 +187,23 @@ A CHG entry on this PRP recording flywheel-test pass + a short writeup of any de
 
 ---
 
+## Phase 1 Closeout (2026-05-05)
+
+Phase 1 passed both flywheel gates.
+
+- **Gate A:** `mise exec -- mix babs.gate_a` passed. Sentinel survived `:babs_citizens` restart with unchanged tmux session ID and pane PID.
+- **Gate B:** Clare worked from the Babs browser terminal and committed Phase 2 transcript JSONL persistence as `2dc607c Implement Phase 2 transcript JSONL persistence`.
+- **Post-Gate-B hardening:** Independent E2E rerun found a hot-reload compatibility bug where old `Hardline.Pane` state did not yet contain `:transcript_io`. The fix made transcript writes tolerate pre-transcript state and added a regression test.
+- **Validation:** `mise exec -- mix format --check-formatted`, `mise exec -- mix compile --warnings-as-errors`, `mise exec -- mix test`, `mise exec -- mix babs.gate_a`, `npm run test:e2e`, and `af validate --root /Users/frank/Projects/babs-phase1-impl` passed.
+
+Deviations from the original PRP:
+
+- `citizens/citizen-clare.toml` and `citizens/citizen-dylan.toml` use local CLI auth state instead of required API-key env entries. TOML env interpolation remains implemented and unit-tested.
+- Gate B's transcript implementation records browser input and PTY output, not output only. This is acceptable for audit/replay and remains within the Phase 2 transcript direction.
+- Browser E2E for Clare/Dylan now asserts a connected, non-empty terminal rather than a first-run banner string, because Phase 1 intentionally preserves long-lived tmux sessions whose current screen may no longer show the initial CLI banner.
+
+---
+
 ## Open Questions
 
 - **Channel reconnect "flicker" UX** — is the brief disconnect on `:babs` reload acceptable to operator? Default: yes, ≤2s tolerable; UI shows "reconnecting…" badge.
@@ -210,3 +227,4 @@ A CHG entry on this PRP recording flywheel-test pass + a short writeup of any de
 | 2026-05-03 | Initial draft (replaces deleted old `BAB-2201`); incorporates β + γ + multi-CLI + flywheel test | Claude Code |
 | 2026-05-03 | Trinity 2nd-round fixes: split Flywheel Test into Gate A (scripted sentinel) + Gate B (dogfood); reordered Implementation Plan so TOML parsing (Day 2-3) precedes Citizen.Lifecycle (Day 4-5); removed Phase 1 SQLite reference (Phase 1 reads citizen.toml only); added reload watcher day (per `BAB-1110` reload mechanism); fixed ReattachScanner-vs-DynamicSupervisor race; added 4KB PubSub chunk constraint reference; clarified two-seed-citizens as v0.1 validation requirement | Claude Code |
 | 2026-05-04 | Phase 1 pre-implementation cleanup: replace alex/morgan with clare/dylan; add synthetic sentinel Gate A; move citizen config to `citizens/citizen-<slug>.toml`; move reload watcher out of `:babs_citizens` as `Babs.DevReloader`; clarify Channel/PubSub no-duplicate-subscribe rule; clarify reload detach-vs-stop kill semantics | Codex |
+| 2026-05-05 | Phase 1 implemented and closeout recorded: Gate A passed, Gate B dogfood passed via Clare transcript commit, post-gate hot-reload compatibility fix added, and validation suite passed | Codex |

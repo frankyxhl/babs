@@ -1,0 +1,7 @@
+id = "BAB-CIT-0002"
+slug = "dylan"
+display_name = "Dylan"
+cli = "codex"
+cli_args = []
+cwd = "workspaces/dylan"
+description = "Codex seed citizen"

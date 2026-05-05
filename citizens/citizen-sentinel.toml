@@ -1,0 +1,7 @@
+id = "BAB-CIT-0000"
+slug = "sentinel"
+display_name = "Sentinel"
+cli = "/bin/zsh"
+cli_args = ["-f"]
+cwd = "workspaces/sentinel"
+description = "Deterministic shell citizen for Phase 1 Gate A reload validation"

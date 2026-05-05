@@ -1,6 +1,7 @@
 # Elixir / Mix
 /_build/
 /cover/
+**/cover/
 /deps/
 /doc/
 **/_build/
@@ -16,7 +17,12 @@ erl_crash.dump
 /priv/static/assets/
 /priv/static/cache_manifest.json
 /assets/node_modules/
+/node_modules/
 npm-debug.log
+playwright-report/
+test-results/
+__pycache__/
+*.py[cod]
 
 # Babs runtime
 /sessions/
@@ -24,6 +30,7 @@ npm-debug.log
 /cache/
 /state/
 /local/
+workspaces/*/transcript.jsonl
 *.dets
 
 # Phase 0 preflight logs; official full-run logs are review artifacts.

@@ -1,0 +1,8 @@
+id = "BAB-CIT-0003"
+slug = "elena"
+display_name = "Elena"
+cli = "gh"
+cli_args = ["copilot"]
+cwd = "workspaces/elena"
+description = "GitHub Copilot CLI test citizen"
+role = "copilot-tester"
