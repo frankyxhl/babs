@@ -101,7 +101,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Scope**: Every byte that flows through `Hardline.Pane` is appended to `<cwd>/transcript.jsonl`, for example `workspaces/clare/transcript.jsonl`. On browser reload, last N lines replayed to xterm.js for context.
 **Acceptance**: Close browser tab, re-open: see most recent 200 lines of transcript; tab restart is byte-loss-free
 **Note**: This phase is the first chicken-and-egg test for the flywheel — clare modifies the file (`Hardline.Pane`) that captures her own bytes. Per `BAB-1110`, tmux survives the reload; new Pane reattaches.
-**Current status**: Partially implemented during Phase 1 Gate B in PR #7: Babs writes `input` and `output` byte records to `<cwd>/transcript.jsonl`. Remaining Phase 2 work is transcript-backed browser replay; current reconnect context still comes from `tmux capture-pane`.
+**Current status**: Implemented in PR #8. Babs writes `input` and `output` byte records to `<cwd>/transcript.jsonl`; browser reconnect replays bounded, slug-filtered transcript output before falling back to `tmux capture-pane`.
 **Estimate**: 3-5 days
 
 ### Phase 2a — Configurable Workspace Root
@@ -109,13 +109,16 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Doc**: `BAB-2209` PRP
 **Scope**: Separate Babs application root from Citizen workspace storage root. Add `BABS_WORKSPACE_ROOT` / `:babs_citizens, :workspace_root`; resolve relative citizen `cwd` values under that workspace root while preserving absolute `cwd` overrides.
 **Acceptance**: Default dev behavior still resolves seeds to `<BABS_ROOT>/workspaces/<slug>`; setting `BABS_WORKSPACE_ROOT=<workspace-root>` moves seed workspaces and transcripts outside the repo checkout; Gate A and browser-harness BDD still pass.
+**Current status**: Implemented in PR #10. Seed TOML `cwd` values are now `<slug>` and resolve under configurable `workspace_root`; custom workspace-root BDD passed.
 **Estimate**: 1-2 days
 
 ### Phase 3 — SQLite Citizens Table + Auto-Respawn
 
-**Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table fields: `slug`, `display_name`, `cwd`, `cli`, `cli_args`, `status` (`:running`/`:stopped`/`:failed`), `created_at`, `metadata` (JSONB), `role` (nullable), `is_mayor` (bool, default false). On Babs boot, scan SQLite + reattach.
+**Doc**: `BAB-2210` PRP
+**Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table records durable Citizen identity/config/status, including `id`, `slug`, `display_name`, `description`, resolved absolute `cwd`, `cli`, `cli_args`, `env`, string `status` (`running`/`stopped`/`failed`), `metadata`, `role`, `is_mayor`, `last_error`, and Ecto timestamps. `BAB-2210` is authoritative for the exact schema and import semantics. On Babs boot, import seed TOML into SQLite, then scan all SQLite rows and reattach/respawn as appropriate.
 **Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
 **Acceptance**: Restart Babs node; clare auto-respawns from SQLite; cwd preserved
+**Current status**: PRP drafted for review after Phase 2a merge.
 **Estimate**: 4-6 days
 
 ### Phase 4 — NewCitizenLive Spawn UI
