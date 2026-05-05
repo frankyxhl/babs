@@ -323,3 +323,4 @@ Validation passed:
 | 2026-05-05 | Begin Phase 1a implementation; add test-tier map and mark CHG In Progress | Codex |
 | 2026-05-05 | Complete Phase 1a implementation: coverage gates, browser JS extraction, browser-harness BDD, terminal UX parity, `BABS_HTTP_IP`, and validation results | Codex |
 | 2026-05-05 | Update validation results after PR review fixes for socket auth, runtime root config, streaming terminal decode, and Gate A capture robustness | Codex |
+| 2026-05-05 | Address PR review follow-up for production release boot: enable endpoint server mode and require explicit runtime host config for websocket origin checks | Codex |
