@@ -10,6 +10,7 @@ defmodule Babs.Citizens.MixProject do
       deps_path: "../../deps",
       lockfile: "../../mix.lock",
       elixir: "~> 1.19",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       test_coverage: [
         summary: [threshold: 80],
@@ -24,15 +25,21 @@ defmodule Babs.Citizens.MixProject do
   def application do
     [
       mod: {Babs.Citizens.Application, []},
-      extra_applications: [:logger, :erlexec]
+      extra_applications: [:logger, :erlexec, :ecto_sql]
     ]
   end
 
   defp deps do
     [
+      {:ecto_sql, "~> 3.13"},
+      {:ecto_sqlite3, "~> 0.22.0"},
       {:erlexec, "~> 2.3"},
+      {:jason, "~> 1.4"},
       {:phoenix_pubsub, "~> 2.1"},
       {:toml, "~> 0.7.0"}
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_env), do: ["lib"]
 end

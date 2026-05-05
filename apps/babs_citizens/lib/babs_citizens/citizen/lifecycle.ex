@@ -4,6 +4,7 @@ defmodule Babs.Citizens.Lifecycle do
   """
 
   alias Babs.Citizens.Citizen.Config
+  alias Babs.Citizens.Catalog
   alias Babs.Citizens.Hardline.Pane
   alias Babs.Citizens.Runner
 
@@ -16,18 +17,40 @@ defmodule Babs.Citizens.Lifecycle do
   def start_config(config) do
     session = Runner.session_name(config.slug)
 
-    with :ok <- maybe_start_tmux(config, session) do
-      start_pane(config, session)
+    result =
+      with :ok <- maybe_start_tmux(config, session) do
+        start_pane(config, session)
+      end
+
+    case result do
+      {:ok, _pid} = ok ->
+        maybe_mark_running(config.slug)
+        ok
+
+      {:error, reason} = error ->
+        maybe_mark_failed(config.slug, reason)
+        error
     end
   end
 
   def reattach(config) do
     session = Runner.session_name(config.slug)
 
-    if Runner.tmux_session_alive?(session) do
-      start_pane(config, session)
-    else
-      {:error, :tmux_session_not_found}
+    result =
+      if Runner.tmux_session_alive?(session) do
+        start_pane(config, session)
+      else
+        {:error, :tmux_session_not_found}
+      end
+
+    case result do
+      {:ok, _pid} = ok ->
+        maybe_mark_running(config.slug)
+        ok
+
+      {:error, reason} = error ->
+        maybe_mark_failed(config.slug, reason)
+        error
     end
   end
 
@@ -35,7 +58,8 @@ defmodule Babs.Citizens.Lifecycle do
     session = Runner.session_name(slug)
 
     with :ok <- stop_pane(slug),
-         :ok <- Runner.kill_session(session) do
+         :ok <- stop_tmux_session(session) do
+      maybe_mark_stopped(slug)
       :ok
     end
   end
@@ -61,6 +85,9 @@ defmodule Babs.Citizens.Lifecycle do
           else
             error
           end
+
+        {:error, _reason} = error ->
+          error
       end
     end
   end
@@ -90,6 +117,48 @@ defmodule Babs.Citizens.Lifecycle do
 
       {:error, :not_found} ->
         :ok
+    end
+  end
+
+  defp stop_tmux_session(session) do
+    case Runner.kill_session(session) do
+      :ok ->
+        :ok
+
+      {:error, {:tmux_kill_session_failed, _status, output}} = error ->
+        if tmux_session_absent_output?(output), do: :ok, else: error
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp tmux_session_absent_output?(output) when is_binary(output) do
+    String.contains?(output, "can't find session") or
+      String.contains?(output, "no server running")
+  end
+
+  defp maybe_mark_running(slug) do
+    case Catalog.mark_running(slug) do
+      {:ok, _record} -> :ok
+      {:error, :not_found} -> :ok
+      {:error, _changeset} -> :ok
+    end
+  end
+
+  defp maybe_mark_stopped(slug) do
+    case Catalog.mark_stopped(slug) do
+      {:ok, _record} -> :ok
+      {:error, :not_found} -> :ok
+      {:error, _changeset} -> :ok
+    end
+  end
+
+  defp maybe_mark_failed(slug, reason) do
+    case Catalog.mark_failed(slug, reason) do
+      {:ok, _record} -> :ok
+      {:error, :not_found} -> :ok
+      {:error, _changeset} -> :ok
     end
   end
 end

@@ -18,6 +18,31 @@ end
 socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
 workspace_root = non_empty_env.("BABS_WORKSPACE_ROOT")
 
+citizens_db_path =
+  non_empty_env.("BABS_CITIZENS_DB_PATH") ||
+    if config_env() == :test do
+      Path.join([babs_root, "tmp", "test", "babs_citizens.sqlite3"])
+    else
+      Path.join([babs_root, "var", "babs_citizens.sqlite3"])
+    end
+
+ensure_owner_only = fn path, mode ->
+  case File.chmod(path, mode) do
+    :ok -> :ok
+    {:error, _reason} -> :ok
+  end
+end
+
+citizens_db_dir = Path.dirname(citizens_db_path)
+File.mkdir_p!(citizens_db_dir)
+ensure_owner_only.(citizens_db_dir, 0o700)
+
+unless File.exists?(citizens_db_path) do
+  File.touch!(citizens_db_path)
+end
+
+ensure_owner_only.(citizens_db_path, 0o600)
+
 if config_env() == :prod and is_nil(socket_auth_token) do
   raise """
   missing BABS_SOCKET_TOKEN
@@ -35,6 +60,10 @@ end
 
 config :babs, Babs.DevReloader, root: babs_root
 config :babs, BabsWeb.UserSocket, auth_token: socket_auth_token
+
+config :babs_citizens, Babs.Citizens.Repo,
+  database: citizens_db_path,
+  pool_size: if(config_env() == :test, do: 1, else: 5)
 
 if config_env() == :prod do
   phx_host = non_empty_env.("PHX_HOST")

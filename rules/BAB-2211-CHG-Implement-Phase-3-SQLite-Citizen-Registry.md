@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-05
-**Status:** Proposed
+**Status:** Approved
 **Date:** 2026-05-05
 **Requested by:** —
 **Priority:** Medium
@@ -82,8 +82,63 @@ node restarts and can auto-reattach/respawn from SQLite.
 
 ## Approval
 
-Approved to implement once the operator confirms Phase 3 execution should begin.
-The PRP is already approved by Trinity GLM and DeepSeek R5 fast-review.
+Approved by the operator on 2026-05-05. The PRP is approved by Trinity GLM and
+DeepSeek R5 fast-review.
+
+## Implementation Results
+
+Implemented in branch `codex/phase-3-prep`:
+
+- Added `Babs.Citizens.Repo`, SQLite runtime path config, owner-only best-effort
+  file permissions, and Ecto migration/rollback support.
+- Added `Babs.Citizens.CitizenRecord` plus JSON-text field handling for
+  `cli_args`, `env`, `metadata`, and `role`.
+- Added `Babs.Citizens.Catalog` for TOML import/upsert, slug-keyed identity,
+  state-dependent preservation rules, `to_config/1`, and durable status writes.
+- Added `Babs.Citizens.Bootstrap` as the ordered boot sequencer: migrate,
+  import TOML, then scan SQLite rows.
+- Updated `ReattachScanner` to plan and scan SQLite rows, including
+  SQLite-only rows, stopped/failed skips, missing-cwd failure, and tmux
+  reattach/start decisions.
+- Updated lifecycle start/reattach/stop/failure paths to write SQLite status
+  while preserving existing tmux semantics.
+- Added browser-harness BDD coverage that verifies the sentinel row is present
+  and running in SQLite after boot.
+- Disabled Repo SQL query logging by default so persisted `env` values are not
+  emitted as query parameters.
+
+## Validation
+
+Local validation on 2026-05-05:
+
+- `mise exec -- mix format --check-formatted`: passed.
+- `mise exec -- mix compile --warnings-as-errors`: passed.
+- `mise exec -- mix test`: passed, `:babs_citizens` 91 tests and `:babs` 20
+  tests.
+- `mise exec -- mix test --cover`: passed, `:babs_citizens` 84.21% and
+  `:babs` 78.00%.
+- `npm run test:js`: passed, 6 Node tests.
+- `npm run test:bdd`: passed, 9 scenarios with 1 expected
+  `BABS_WORKSPACE_ROOT` skip.
+- `npm run test:e2e`: passed, 6 Playwright tests.
+- `mise exec -- mix babs.gate_a`: passed.
+- `mise exec -- mix ecto.migrate -r Babs.Citizens.Repo`: passed.
+- `mise exec -- mix ecto.rollback -r Babs.Citizens.Repo --step 1 && mise exec -- mix ecto.migrate -r Babs.Citizens.Repo`: passed.
+- `af validate --root /Users/frank/Projects/babs-phase3-prep`: passed, 106 docs
+  checked.
+- `git diff --check`: passed.
+- Private-IP scan found no real Tailscale IP; remaining matches were generic
+  Tailscale documentation and deliberate test secret fixtures.
+
+## Review Results
+
+- Trinity DeepSeek final code review: PASS with advisories only,
+  `.trinity/reviews/20260505-182916-./`.
+- Trinity GLM final code review: PASS with advisories only,
+  `.trinity/reviews/20260505-183419-./`.
+- Addressed earlier Trinity advisories for unknown raw status handling,
+  lower-case token/secret redaction, redundant Repo `pool_size` config, and
+  `scan_rows/1` tmux-error coverage.
 
 ---
 
@@ -93,3 +148,6 @@ The PRP is already approved by Trinity GLM and DeepSeek R5 fast-review.
 |------|--------|----|
 | 2026-05-05 | Initial version | — |
 | 2026-05-05 | Draft implementation CHG for approved Phase 3 SQLite registry PRP | Codex |
+| 2026-05-05 | Mark approved after operator confirmed Phase 3 execution should begin | Codex |
+| 2026-05-05 | Record Phase 3 implementation results and validation evidence | Codex |
+| 2026-05-05 | Address Trinity DeepSeek/GLM advisories with unknown-status skip coverage, stronger secret redaction coverage, and scan_rows tmux-error coverage | Codex |

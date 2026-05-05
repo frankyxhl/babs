@@ -118,7 +118,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table records durable Citizen identity/config/status, including `id`, `slug`, `display_name`, `description`, resolved absolute `cwd`, `cli`, `cli_args`, `env`, string `status` (`running`/`stopped`/`failed`), `metadata`, `role`, `is_mayor`, `last_error`, and Ecto timestamps. `BAB-2210` is authoritative for the exact schema and import semantics. On Babs boot, import seed TOML into SQLite, then scan all SQLite rows and reattach/respawn as appropriate.
 **Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
 **Acceptance**: Restart Babs node; clare auto-respawns from SQLite; cwd preserved
-**Current status**: PRP drafted for review after Phase 2a merge.
+**Current status**: Implemented in branch `codex/phase-3-prep`, PR pending. Local validation passed: Ecto migrate/rollback/migrate, ExUnit/coverage (`:babs_citizens` 84.21%, `:babs` 78.00%), browser-harness BDD with SQLite registry scenario, Playwright smoke, Gate A, and Alfred validation.
 **Estimate**: 4-6 days
 
 ### Phase 4 — NewCitizenLive Spawn UI
@@ -283,3 +283,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-04 | Mark optional Phase 0c implemented after JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and ExUnit validation passed | Codex |
 | 2026-05-05 | Add `BAB-2208` as the Phase 2 transcript persistence PRP and record that PR #7 partially implemented write-side transcript logging while replay remains open | Codex |
 | 2026-05-05 | Add Phase 2a configurable workspace root (`BAB-2209`) before SQLite so durable Citizen working state is not implicitly tied to the active repo checkout | Codex |
+| 2026-05-05 | Mark Phase 3 implemented in branch pending PR after SQLite registry, import/respawn, lifecycle status, BDD, coverage, Gate A, and migration validation passed | Codex |

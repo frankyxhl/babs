@@ -23,13 +23,14 @@ defmodule Babs.Citizens.Citizen.Config do
   def load_file(path, opts \\ []) when is_binary(path) do
     root = root(opts)
     workspace_root = workspace_root(opts, root)
+    create_cwd = Keyword.get(opts, :create_cwd, true)
 
     with {:ok, raw} <- decode_file(path),
          :ok <- validate_required(raw),
          :ok <- validate_slug(raw["slug"]),
          {:ok, cli_args} <- validate_cli_args(Map.get(raw, "cli_args", [])),
          {:ok, env} <- resolve_env(Map.get(raw, "env", %{})),
-         {:ok, cwd} <- resolve_cwd(workspace_root, raw["cwd"]) do
+         {:ok, cwd} <- resolve_cwd(workspace_root, raw["cwd"], create_cwd) do
       {:ok,
        %CitizenConfig{
          id: raw["id"],
@@ -133,13 +134,17 @@ defmodule Babs.Citizens.Citizen.Config do
 
   defp validate_cli_args(args), do: {:error, {:invalid_cli_args, args}}
 
-  defp resolve_cwd(workspace_root, cwd) do
+  defp resolve_cwd(workspace_root, cwd, create_cwd) do
     maybe_warn_legacy_cwd(cwd)
     path = Path.expand(cwd, workspace_root)
 
-    case File.mkdir_p(path) do
-      :ok -> {:ok, path}
-      {:error, reason} -> {:error, {:cwd_mkdir_failed, path, reason}}
+    if create_cwd do
+      case File.mkdir_p(path) do
+        :ok -> {:ok, path}
+        {:error, reason} -> {:error, {:cwd_mkdir_failed, path, reason}}
+      end
+    else
+      {:ok, path}
     end
   end
 
