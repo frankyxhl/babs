@@ -238,7 +238,12 @@ def scenario_transcript_replay_survives_tab_restart(context: BabsBddContext) -> 
 
     context.connect_citizen(slug)
     context.close_test_tab()
-    append_transcript_output(slug, marker + "\n")
+    send_tmux_output(slug, marker)
+    wait_until(
+        f"transcript to contain {marker}",
+        lambda: transcript_contains(slug, marker),
+        timeout=10,
+    )
 
     context.connect_citizen(slug)
     wait_until(
@@ -369,22 +374,32 @@ def terminal_text() -> str:
     return js("document.querySelector('.xterm')?.innerText || ''")
 
 
-def append_transcript_output(slug: str, payload: str) -> None:
+def send_tmux_output(slug: str, marker: str) -> None:
+    subprocess.run(
+        ["tmux", "send-keys", "-t", f"babs-{slug}", f"printf '{marker}\\n'", "Enter"],
+        check=True,
+    )
+
+
+def transcript_contains(slug: str, marker: str) -> bool:
     transcript = ROOT / "workspaces" / slug / "transcript.jsonl"
-    transcript.parent.mkdir(parents=True, exist_ok=True)
 
-    record = {
-        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "slug": slug,
-        "direction": "output",
-        "stream_id": 0,
-        "seq": 1,
-        "b64": base64.b64encode(payload.encode()).decode("ascii"),
-    }
+    if not transcript.exists():
+        return False
 
-    with transcript.open("a", encoding="utf-8") as file:
-        file.write(json.dumps(record, separators=(",", ":")))
-        file.write("\n")
+    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]:
+        try:
+            record = json.loads(line)
+            if record.get("slug") != slug or record.get("direction") != "output":
+                continue
+            payload = base64.b64decode(record.get("b64", "")).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - malformed transcript rows are ignored by design.
+            continue
+
+        if marker in payload:
+            return True
+
+    return False
 
 
 def touch_source(path: Path) -> None:

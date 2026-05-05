@@ -166,6 +166,51 @@ defmodule Babs.Citizens.Hardline.TranscriptTest do
     assert {:ok, "visible\n"} = Transcript.replay_output(cwd)
   end
 
+  test "replay_output/2 filters output records by slug when requested", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "dylan",
+        direction: :output,
+        stream_id: 1,
+        seq: 1,
+        payload: "other citizen\n"
+      })
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 2,
+        payload: "active citizen\n"
+      })
+
+    Transcript.close(io)
+
+    assert {:ok, "active citizen\n"} = Transcript.replay_output(cwd, slug: "clare")
+  end
+
+  test "replay_output/2 preserves legacy output replay when no slug is requested", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    for {slug, seq, payload} <- [{"dylan", 1, "one\n"}, {"clare", 2, "two\n"}] do
+      :ok =
+        Transcript.append(io, %{
+          slug: slug,
+          direction: :output,
+          stream_id: 1,
+          seq: seq,
+          payload: payload
+        })
+    end
+
+    Transcript.close(io)
+
+    assert {:ok, "one\ntwo\n"} = Transcript.replay_output(cwd)
+  end
+
   test "replay_output/2 skips malformed JSONL and invalid base64", %{cwd: cwd} do
     File.mkdir_p!(cwd)
 

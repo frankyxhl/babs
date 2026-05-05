@@ -64,7 +64,8 @@ Complete Phase 2 as a small hardening phase on top of the landed dogfood slice.
 3. Add read-side transcript helpers in `Babs.Citizens.Hardline.Transcript`:
    - parse JSONL records defensively
    - ignore malformed lines rather than crashing terminal reconnect
-   - decode only `direction == "output"` for browser replay
+   - decode only `direction == "output"` records whose `slug` matches the
+     active citizen for browser replay
    - read a bounded tail of the append-only transcript before decoding so
      reconnect memory cost does not grow with the full transcript file
    - return the most recent replay payload by decoding output records, splitting
@@ -101,6 +102,8 @@ Phase 2 is complete when:
 - Transcript replay uses a bounded tail read before JSONL decoding, so a
   long-running Citizen's full transcript is not loaded into memory on every
   browser reconnect.
+- Transcript replay filters decoded output by the active citizen slug, so a
+  shared or accidentally reused cwd cannot replay another Citizen's output.
 - The replay cap is deterministic and documented: replay decodes output records,
   splits on `\n`, and returns the most recent 200 output lines, or fewer if the
   transcript contains fewer.
@@ -117,6 +120,8 @@ Expected test additions:
 
 - Unit tests for transcript read/replay helpers:
   - output-only replay ignores input records
+  - slug-filtered replay ignores records for other citizens in the same
+    transcript file
   - arbitrary binary output round-trips from `b64`
   - malformed JSONL lines are skipped or reported without crashing
   - replay caps to the newest 200 lines
@@ -129,8 +134,8 @@ Expected test additions:
 - Browser-harness BDD:
   - sentinel connects
   - browser tab closes
-  - the test appends a deterministic output record directly to sentinel's
-    transcript while the tab is closed, avoiding sleep/timing flake
+  - the test sends deterministic tmux output while the tab is closed, then waits
+    until the marker is present in sentinel's transcript before reopening
   - browser reopens `/citizens/sentinel`
   - marker appears from transcript replay
 - Existing validation stack:
@@ -159,10 +164,10 @@ Phase 2 implementation validation on 2026-05-05:
 
 - `mise exec -- mix format --check-formatted`: passed
 - `mise exec -- mix compile --warnings-as-errors`: passed
-- `mise exec -- mix test`: passed with `:babs_citizens` 50 tests and `:babs`
+- `mise exec -- mix test`: passed with `:babs_citizens` 52 tests and `:babs`
   20 tests
-- `mise exec -- mix test --cover`: passed with `:babs_citizens` 50 tests,
-  81.39% total coverage, and `Babs.Citizens.Hardline.Transcript` 83.33%;
+- `mise exec -- mix test --cover`: passed with `:babs_citizens` 52 tests,
+  81.62% total coverage, and `Babs.Citizens.Hardline.Transcript` 84.48%;
   `:babs` 20 tests and 77.55% total coverage
 - `npm run test:js`: passed with 6 Node tests
 - `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
@@ -182,6 +187,8 @@ Phase 2 implementation validation on 2026-05-05:
   findings were non-blocking future hardening notes
 - GitHub Codex P2 review finding about full-file transcript reads was addressed
   with bounded-tail replay and regression coverage
+- GitHub Codex P2 review finding about cross-citizen replay from shared cwd was
+  addressed with slug-filtered transcript replay and Channel coverage
 
 ## Open Questions
 
@@ -212,3 +219,4 @@ Phase 2 implementation validation on 2026-05-05:
 | 2026-05-05 | Address Trinity code-review advisories with missing-pane cwd test coverage, empty-transcript fallback test coverage, and stable BDD synthetic transcript sequence value | Codex |
 | 2026-05-05 | Trinity fast-review R2 PASS on final working tree with GLM and DeepSeek; remaining notes are future hardening, not merge blockers | Codex |
 | 2026-05-05 | Address GitHub Codex P2 review by changing transcript replay from full-file read to bounded-tail read with truncated-leading-line regression coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by filtering transcript replay to the active citizen slug and adding Transcript/Channel regression coverage | Codex |

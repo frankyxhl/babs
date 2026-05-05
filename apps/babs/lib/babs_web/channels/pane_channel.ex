@@ -64,7 +64,7 @@ defmodule BabsWeb.PaneChannel do
   end
 
   defp send_initial_snapshot(%{assigns: %{cwd: cwd}} = socket) when is_binary(cwd) do
-    case Transcript.replay_output(cwd) do
+    case Transcript.replay_output(cwd, slug: socket.assigns.slug) do
       {:ok, ""} -> send_tmux_snapshot(socket)
       {:ok, snapshot} -> push_snapshot(socket, snapshot)
       {:error, _reason} -> send_tmux_snapshot(socket)

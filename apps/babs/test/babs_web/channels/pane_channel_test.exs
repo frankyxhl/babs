@@ -69,6 +69,15 @@ defmodule BabsWeb.PaneChannelTest do
 
     :ok =
       Transcript.append(io, %{
+        slug: "other-#{slug}",
+        direction: :output,
+        stream_id: 7,
+        seq: 7,
+        payload: "from other citizen\n"
+      })
+
+    :ok =
+      Transcript.append(io, %{
         slug: slug,
         direction: :output,
         stream_id: 7,

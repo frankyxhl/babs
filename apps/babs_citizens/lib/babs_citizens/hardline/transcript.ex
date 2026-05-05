@@ -73,15 +73,17 @@ defmodule Babs.Citizens.Hardline.Transcript do
   @spec replay_output(Path.t(), keyword()) :: {:ok, binary()} | {:error, term()}
   def replay_output(cwd, opts \\ []) when is_binary(cwd) and is_list(opts) do
     line_limit = Keyword.get(opts, :lines, 200)
+    slug = Keyword.get(opts, :slug)
     tail_bytes = Keyword.get(opts, :tail_bytes, @default_replay_tail_bytes)
 
     with {:ok, line_limit} <- positive_line_limit(line_limit),
+         {:ok, slug} <- valid_slug_filter(slug),
          {:ok, tail_bytes} <- positive_tail_bytes(tail_bytes),
          {:ok, contents} <- read_transcript_tail(path(cwd), tail_bytes) do
       output =
         contents
         |> String.split("\n", trim: true)
-        |> Enum.flat_map(&decode_output_payload/1)
+        |> Enum.flat_map(&decode_output_payload(&1, slug))
         |> IO.iodata_to_binary()
         |> newest_lines(line_limit)
 
@@ -165,14 +167,20 @@ defmodule Babs.Citizens.Hardline.Transcript do
     end
   end
 
-  defp decode_output_payload(line) do
-    with {:ok, %{"direction" => "output", "b64" => b64}} when is_binary(b64) <- JSON.decode(line),
+  defp decode_output_payload(line, slug) do
+    with {:ok, %{"direction" => "output", "b64" => b64} = record} when is_binary(b64) <-
+           JSON.decode(line),
+         true <- slug_matches?(record, slug),
          {:ok, payload} <- Base.decode64(b64) do
       [payload]
     else
       _ -> []
     end
   end
+
+  defp slug_matches?(_record, nil), do: true
+  defp slug_matches?(%{"slug" => slug}, slug), do: true
+  defp slug_matches?(_record, _slug), do: false
 
   defp newest_lines(output, line_limit) do
     output
@@ -199,4 +207,8 @@ defmodule Babs.Citizens.Hardline.Transcript do
 
   defp positive_tail_bytes(value) when is_integer(value) and value > 0, do: {:ok, value}
   defp positive_tail_bytes(value), do: {:error, {:invalid_tail_bytes, value}}
+
+  defp valid_slug_filter(nil), do: {:ok, nil}
+  defp valid_slug_filter(value) when is_binary(value), do: {:ok, value}
+  defp valid_slug_filter(value), do: {:error, {:invalid_slug_filter, value}}
 end
