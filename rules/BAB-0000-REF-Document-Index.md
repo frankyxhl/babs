@@ -31,6 +31,7 @@
 | 1500 | SOP | Add a New Citizen Subtree |
 | 1502 | SOP | PTY Stability Validation |
 | 1503 | SOP | Phase Delivery Workflow |
+| 1504 | SOP | GitHub Codex PR Review Loop |
 | 1800 | REF | Evolution Philosophy |
 | 1801 | SOP | Evolve Babs |
 | 2100 | SOP | Workflow Routing PRJ |

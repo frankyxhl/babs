@@ -136,7 +136,8 @@ Use `BAB-1503` after the phase scope is agreed or when the operator asks to
 start/continue a roadmap phase. It captures the expected loop for Babs phases:
 write/update PRP or CHG, Trinity-review the plan, implement with test pressure,
 run coverage/BDD/E2E/phase gates, Trinity-review code, then create the PR using
-the correct GitHub identity.
+the correct GitHub identity. Once the PR is open, use `BAB-1504` for the GitHub
+Codex review trigger/status/fix loop.
 
 ---
 
@@ -207,3 +208,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-04 | Expand architecture ADR range to `BAB-1100`–`BAB-1112`; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` and mark `BAB-1500` deferred | Codex |
 | 2026-05-05 | Record Elena as a post-Phase-1 experimental GitHub Copilot CLI seed under the Phase 1 seed routing note | Codex |
 | 2026-05-05 | Add `BAB-1503` as the standard roadmap phase delivery route | Codex |
+| 2026-05-05 | Route open-PR GitHub Codex review mechanics through `BAB-1504` | Codex |
