@@ -118,7 +118,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table records durable Citizen identity/config/status, including `id`, `slug`, `display_name`, `description`, resolved absolute `cwd`, `cli`, `cli_args`, `env`, string `status` (`running`/`stopped`/`failed`), `metadata`, `role`, `is_mayor`, `last_error`, and Ecto timestamps. `BAB-2210` is authoritative for the exact schema and import semantics. On Babs boot, import seed TOML into SQLite, then scan all SQLite rows and reattach/respawn as appropriate.
 **Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
 **Acceptance**: Restart Babs node; clare auto-respawns from SQLite; cwd preserved
-**Current status**: Implemented in branch `codex/phase-3-prep`, PR pending. Local validation passed: Ecto migrate/rollback/migrate, ExUnit/coverage (`:babs_citizens` 84.21%, `:babs` 78.00%), browser-harness BDD with SQLite registry scenario, Playwright smoke, Gate A, and Alfred validation.
+**Current status**: Implemented in branch `codex/phase-3-prep`, PR pending. Local validation passed: Ecto migrate/rollback/migrate, ExUnit/coverage (`:babs_citizens` 84.26%, `:babs` 78.00%), browser-harness BDD with SQLite registry scenario, Playwright smoke, Gate A, and Alfred validation.
 **Estimate**: 4-6 days
 
 ### Phase 4 — NewCitizenLive Spawn UI

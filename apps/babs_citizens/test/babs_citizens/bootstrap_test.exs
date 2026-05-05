@@ -47,6 +47,11 @@ defmodule Babs.Citizens.BootstrapTest do
     assert Runner.tmux_session_alive?(session)
   end
 
+  test "migrate propagates with_repo error tuples" do
+    assert {:error, {:migration_failed, :repo_unavailable}} =
+             Bootstrap.migrate(fn _repo, _fun -> {:error, :repo_unavailable} end)
+  end
+
   defp stop_pane_if_alive(slug) do
     case Lifecycle.lookup(slug) do
       {:ok, pid} -> DynamicSupervisor.terminate_child(Babs.Citizens.DynamicSupervisor, pid)

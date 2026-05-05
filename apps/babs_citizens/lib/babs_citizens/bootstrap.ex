@@ -57,12 +57,13 @@ defmodule Babs.Citizens.Bootstrap do
     end
   end
 
-  defp migrate do
-    Ecto.Migrator.with_repo(Repo, fn repo ->
-      Ecto.Migrator.run(repo, migrations_path(), :up, all: true)
-    end)
-
-    :ok
+  def migrate(with_repo \\ &Ecto.Migrator.with_repo/2) do
+    case with_repo.(Repo, fn repo ->
+           Ecto.Migrator.run(repo, migrations_path(), :up, all: true)
+         end) do
+      {:ok, _result, _started_apps} -> :ok
+      {:error, reason} -> {:error, {:migration_failed, reason}}
+    end
   rescue
     error -> {:error, {:migration_failed, Exception.message(error)}}
   end

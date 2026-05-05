@@ -113,9 +113,9 @@ Local validation on 2026-05-05:
 
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- `mise exec -- mix test`: passed, `:babs_citizens` 91 tests and `:babs` 20
+- `mise exec -- mix test`: passed, `:babs_citizens` 92 tests and `:babs` 20
   tests.
-- `mise exec -- mix test --cover`: passed, `:babs_citizens` 84.21% and
+- `mise exec -- mix test --cover`: passed, `:babs_citizens` 84.26% and
   `:babs` 78.00%.
 - `npm run test:js`: passed, 6 Node tests.
 - `npm run test:bdd`: passed, 9 scenarios with 1 expected
@@ -139,6 +139,8 @@ Local validation on 2026-05-05:
 - Addressed earlier Trinity advisories for unknown raw status handling,
   lower-case token/secret redaction, redundant Repo `pool_size` config, and
   `scan_rows/1` tmux-error coverage.
+- Addressed GitHub Codex P1 review finding by propagating
+  `Ecto.Migrator.with_repo/3` error tuples from `Babs.Citizens.Bootstrap.migrate/1`.
 
 ---
 
@@ -151,3 +153,4 @@ Local validation on 2026-05-05:
 | 2026-05-05 | Mark approved after operator confirmed Phase 3 execution should begin | Codex |
 | 2026-05-05 | Record Phase 3 implementation results and validation evidence | Codex |
 | 2026-05-05 | Address Trinity DeepSeek/GLM advisories with unknown-status skip coverage, stronger secret redaction coverage, and scan_rows tmux-error coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P1 migration-error propagation finding with regression coverage | Codex |
