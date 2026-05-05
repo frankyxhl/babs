@@ -2,6 +2,7 @@ defmodule Babs.Citizens.Hardline.PaneTest do
   use ExUnit.Case, async: true
 
   alias Babs.Citizens.Hardline.Pane
+  alias Babs.Citizens.Hardline.Transcript
   alias Babs.Citizens.CitizenConfig
 
   test "chunks PubSub payloads to the configured maximum size" do
@@ -19,6 +20,56 @@ defmodule Babs.Citizens.Hardline.PaneTest do
 
   test "rejects non-positive chunk sizes" do
     assert_raise ArgumentError, fn -> Pane.chunk_bytes("abc", 0) end
+  end
+
+  test "cwd call returns the configured citizen cwd" do
+    cwd = Path.join(System.tmp_dir!(), "pane-cwd-#{System.unique_integer([:positive])}")
+
+    state = %{
+      config: %CitizenConfig{
+        id: "BAB-CIT-CWD",
+        slug: "cwd-pane",
+        display_name: "Cwd Pane",
+        cli: "/bin/zsh",
+        cwd: cwd
+      }
+    }
+
+    assert {:reply, {:ok, ^cwd}, ^state} = Pane.handle_call(:cwd, {self(), make_ref()}, state)
+  end
+
+  test "cwd/1 returns not_found when no pane is registered" do
+    slug = "missing-cwd-pane-#{System.unique_integer([:positive])}"
+
+    assert {:error, :not_found} = Pane.cwd(slug)
+  end
+
+  test "flush_transcript/1 returns not_found when no pane is registered" do
+    slug = "missing-flush-pane-#{System.unique_integer([:positive])}"
+
+    assert {:error, :not_found} = Pane.flush_transcript(slug)
+  end
+
+  test "flush transcript call syncs the open transcript device" do
+    cwd = Path.join(System.tmp_dir!(), "pane-flush-#{System.unique_integer([:positive])}")
+    on_exit(fn -> File.rm_rf!(cwd) end)
+    {:ok, io} = Transcript.open(cwd)
+
+    state = %{
+      config: %CitizenConfig{
+        id: "BAB-CIT-FLUSH",
+        slug: "flush-pane",
+        display_name: "Flush Pane",
+        cli: "/bin/zsh",
+        cwd: cwd
+      },
+      transcript_io: io
+    }
+
+    assert {:reply, :ok, ^state} =
+             Pane.handle_call(:flush_transcript, {self(), make_ref()}, state)
+
+    assert :ok = Transcript.close(io)
   end
 
   test "stdout handler tolerates pre-transcript hot-reload state" do

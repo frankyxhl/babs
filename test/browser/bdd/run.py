@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Browser-harness BDD runner for Phase 1a terminal characterization."""
+"""Browser-harness BDD runner for Babs terminal workflows."""
 
 from __future__ import annotations
 

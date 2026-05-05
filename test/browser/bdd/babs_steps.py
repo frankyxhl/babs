@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import signal
 import subprocess
@@ -25,6 +27,11 @@ from browser_harness.helpers import (
 
 
 ROOT = Path(__file__).resolve().parents[3]
+RUNTIME_ROOT = (
+    Path(os.environ.get("BABS_ROOT") or os.environ.get("RELEASE_ROOT") or ROOT)
+    .expanduser()
+    .resolve()
+)
 PANE_SOURCE = ROOT / "apps/babs_citizens/lib/babs_citizens/hardline/pane.ex"
 WEB_SOURCE = ROOT / "apps/babs/lib/babs_web/channels/pane_channel.ex"
 SERVER_LOG = ROOT / "logs/bdd-server.log"
@@ -170,6 +177,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_web_reload_reconnects_terminal,
         ),
         Scenario(
+            name="transcript replay survives tab restart",
+            given="sentinel is connected",
+            when="the browser tab closes and transcript output arrives before reopen",
+            then="the reopened terminal replays the transcript marker",
+            run=scenario_transcript_replay_survives_tab_restart,
+        ),
+        Scenario(
             name="terminal fills viewport",
             given="a terminal page is open",
             when="the viewport is resized",
@@ -221,6 +235,27 @@ def scenario_web_reload_reconnects_terminal(context: BabsBddContext) -> None:
         timeout=20,
     )
     context.type_command_and_expect(unique_marker("BABS_BDD_AFTER_WEB_RELOAD"))
+
+
+def scenario_transcript_replay_survives_tab_restart(context: BabsBddContext) -> None:
+    slug = "sentinel"
+    marker = unique_marker("BABS_BDD_TRANSCRIPT_REPLAY")
+
+    context.connect_citizen(slug)
+    context.close_test_tab()
+    send_tmux_output(slug, marker)
+    wait_until(
+        f"transcript to contain {marker}",
+        lambda: transcript_contains(slug, marker),
+        timeout=10,
+    )
+
+    context.connect_citizen(slug)
+    wait_until(
+        f"terminal output to replay {marker}",
+        lambda: marker in terminal_text(),
+        timeout=15,
+    )
 
 
 def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
@@ -342,6 +377,34 @@ def terminal_geometry() -> dict:
 
 def terminal_text() -> str:
     return js("document.querySelector('.xterm')?.innerText || ''")
+
+
+def send_tmux_output(slug: str, marker: str) -> None:
+    subprocess.run(
+        ["tmux", "send-keys", "-t", f"babs-{slug}", f"printf '{marker}\\n'", "Enter"],
+        check=True,
+    )
+
+
+def transcript_contains(slug: str, marker: str) -> bool:
+    transcript = RUNTIME_ROOT / "workspaces" / slug / "transcript.jsonl"
+
+    if not transcript.exists():
+        return False
+
+    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]:
+        try:
+            record = json.loads(line)
+            if record.get("slug") != slug or record.get("direction") != "output":
+                continue
+            payload = base64.b64decode(record.get("b64", "")).decode("utf-8", "replace")
+        except Exception:  # noqa: BLE001 - malformed transcript rows are ignored by design.
+            continue
+
+        if marker in payload:
+            return True
+
+    return False
 
 
 def touch_source(path: Path) -> None:

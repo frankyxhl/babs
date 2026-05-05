@@ -1,7 +1,7 @@
 # ADR-1105: Persistence — ETS + SQLite + JSONL Only
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-03
 **Status:** Accepted
 
@@ -23,6 +23,7 @@ The runtime keeps several distinct kinds of state:
 | Citizen registry (id, name, A2A URL, skills, host) | written occasionally | must survive restart; ~20-50 entries |
 | Relay channel config, task history, method cache | mixed read/write | must survive restart; queryable; potentially thousands of rows |
 | AI transcripts (Claude/Codex JSONL output) | append-only by AI CLIs | external truth; Babs only reads |
+| Hardline byte transcripts (`<cwd>/transcript.jsonl`) | append-only by Babs | Babs-owned terminal audit/replay log |
 
 Architecture analysis surfaced **four candidate backends**: ETS, DETS, Mnesia, SQLite. Two architecture reviews (DeepSeek, Codex) gave conflicting recommendations:
 
@@ -57,16 +58,29 @@ What lives here:
 
 Properties: real query patterns (find by name, filter by category, sort by date). Single-writer per table is fine for our scale. Schema migrations via Ecto. Survives restarts trivially.
 
-### JSONL files — canonical external truth
+### JSONL files — append-only file truth
 
 What lives here:
 - Claude transcripts at `~/.claude/projects/<project-id>/<session-id>.jsonl`
 - Codex transcripts at the equivalent
 - Future AI CLI transcripts in their respective conventions
+- Babs-owned Hardline byte transcripts at `<citizen cwd>/transcript.jsonl`
+  starting in Phase 2
 
-Properties: written by external tools (the AI CLIs themselves). Babs only **tails** them via `File.stream!` + position tracking. Never written by Babs. The format is the upstream tool's contract, not ours.
+Properties:
 
-Why on disk (not in SQLite): JSONL is the AI CLI's contract; any external tooling that wants to read these files (now or in the future, in any language) gets them at face value with no conversion step. We don't fork the format.
+- Upstream AI CLI transcripts are written by external tools. Babs only
+  **tails** them via `File.stream!` + position tracking. Babs never writes those
+  files. Their format is the upstream tool's contract, not ours.
+- Babs Hardline byte transcripts are a separate Babs-owned JSONL contract:
+  append-only records of terminal input/output bytes used for audit and browser
+  replay. They do not replace upstream Claude/Codex transcripts.
+
+Why on disk (not in SQLite): JSONL is already the AI CLI transcript contract,
+and byte-level Hardline replay is naturally append-only. Any external tooling
+that wants to read these files (now or in the future, in any language) gets them
+at face value with no conversion step. We do not fork upstream AI CLI formats;
+Babs-owned Hardline transcripts use their own local schema.
 
 ### Explicit Rejection — DETS
 
@@ -120,3 +134,4 @@ If Babs grows to need cross-node *replicated* state (e.g., HA failover for the r
 |------|--------|----|
 | 2026-05-03 | Initial version — three-layer persistence; explicit DETS + Mnesia rejection | Claude Code |
 | 2026-05-03 | Drop "replaces Python's citizen.db" / "during migration Phase 1-2" framing | Claude Code |
+| 2026-05-05 | Clarify Phase 2 distinction between upstream AI CLI JSONL transcripts, which remain read-only to Babs, and Babs-owned Hardline byte transcripts used for terminal audit/replay | Codex |

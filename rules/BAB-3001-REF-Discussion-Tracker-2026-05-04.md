@@ -13,7 +13,7 @@ Per-day session tracker for BAB project per **COR-1201**. Records discussion
 items raised within today's session(s), including the current Phase 0 spike
 state and any deferred validation work.
 
-`next_d` = **D7** (next new topic gets D7)
+`next_d` = **D9** (next new topic gets D9)
 
 ---
 
@@ -27,6 +27,8 @@ state and any deferred validation work.
 | D4 | Phase 0b Hardline Full-Window Mode | Done | User wanted one tmux hardline opened in a separate full-size browser window from the current manager at `http://100.x.y.z:4010/`. Captured as `BAB-2203` PRP and `BAB-2204` CHG. Trinity plan review with GLM/Gemini/DeepSeek passed in `.trinity/reviews/20260504-160652-phase0b-trinity-review-packet.md`; advisories were incorporated before implementation. Implemented browser-only `/?session=<slug>&full=1` mode in `spikes/hardline/priv/static/index.html`, with a single active-session `Open Full` control, full-viewport terminal CSS, invalid-session error overlay, back-to-manager link, status dots, lucide icons, generated fruit/character slug suggestions, and static regression tests. The manager Shell dropdown now defaults new browser-created sessions to tmux's own shell and keeps `/bin/zsh -f` selectable as a fallback; the custom command field was removed from the browser form for simplicity. Local `mix format --check-formatted` passed and `mix test` passed with 45 tests, 0 failures. Tailscale Chrome smoke passed at `http://100.x.y.z:4010/?session=demo-a&full=1`, showing a full-viewport terminal and live tmux size `243x53`. Tailscale API smoke created temporary `shell-smoke` with blank command, confirmed tmux selected `zsh` with empty `pane_start_command`, then stopped the temporary session. |
 | D5 | Phase 0c Hardline Browser Test Harness | Done | User flagged that `index.html` had too much inline JavaScript and asked to improve BDD/E2E coverage. Captured as `BAB-2205` PRP and `BAB-2206` CHG. Implemented as a testing/refactor-only phase: manager browser logic moved into `priv/static/js/hardline_core.js`, `hardline_manager.js`, and `hardline_boot.js`; stable `data-testid` hooks were added; Node pure-JS tests and Playwright DOM/E2E tests cover create/select/type/full/refresh/stop/missing-session workflows with isolated `babs-e2e-*` tmux prefixes. Local validation passed: `npm run test:js` 9 tests, `npm run test:e2e` 10 Playwright tests, and `mise exec -- mix test` 59 tests. No new UI features and no Phase 0 official validation gate change. |
 | D6 | Phase 1 readiness document sync | Done | User cannot run the official 24-hour Phase 0 validation now, so Phase 1 production code remains blocked, but safe prep continued. The previously discussed Phase 1 decisions were applied to the authoritative docs: Clare/Dylan/Sentinel replace Alex/Morgan; Phase 1 reads `citizens/citizen-<slug>.toml` and uses configured `workspaces/<slug>/`; SQLite remains Phase 3 authority; `Babs.DevReloader` lives in `:babs` outside the `:babs_citizens` target app; Channel/PubSub topic is `pane:<slug>` and Channels must not duplicate-subscribe; reload/BEAM restart detach and reattach only, while explicit stop is the tmux kill path. No Phase 1 implementation was started. |
+| D7 | Phase 2 local web server session | Active | For user validation of the Phase 2 branch, Phoenix is run from `/Users/frank/Projects/babs-phase2-reconcile` inside detached tmux session `babs-phase2-web` with `BABS_HTTP_IP=0.0.0.0 mise exec -- mix phx.server`. It listens on `*:4000` and is reachable locally at `http://127.0.0.1:4000/citizens/sentinel` or over Tailscale as `http://100.x.y.z:4000/citizens/sentinel` while the tmux session is alive. Check it with `tmux capture-pane -pt babs-phase2-web`, `lsof -nP -iTCP:4000 -sTCP:LISTEN`, and `curl -I http://127.0.0.1:4000/citizens/sentinel`. Stop it with `tmux kill-session -t babs-phase2-web` when no longer needed. Do not record real Tailscale IPs in public docs or PRs. |
+| D8 | Configurable Citizen workspace root | Proposed | User does not want durable Citizen workspaces implicitly stored under whichever repo/worktree path launched Babs, because that makes test, phase, and production state ambiguous. Captured as `BAB-2209` Phase 2a PRP: add `BABS_WORKSPACE_ROOT` / `:babs_citizens, :workspace_root`, resolve relative citizen `cwd` values under that root, migrate seeds to `cwd = "<slug>"`, preserve absolute `cwd` overrides, and keep `citizens/citizen-<slug>.toml` lookup rooted at `BABS_ROOT` / `config_dir`. No implementation started. Public docs intentionally use placeholders rather than real local filesystem paths. |
 
 ---
 
@@ -67,6 +69,13 @@ state and any deferred validation work.
 - Phase 1 readiness docs are synchronized for later implementation, but
   production Phase 1 code remains blocked until the official Phase 0 gate is
   resolved or explicitly waived in a future decision.
+- Phase 2 PR validation server is currently managed by detached tmux session
+  `babs-phase2-web`, started from `/Users/frank/Projects/babs-phase2-reconcile`
+  with `BABS_HTTP_IP=0.0.0.0 mise exec -- mix phx.server`.
+  Use `tmux capture-pane -pt babs-phase2-web` to inspect logs and
+  `tmux kill-session -t babs-phase2-web` to stop it.
+- Configurable workspace root is now captured as `BAB-2209` Phase 2a PRP for
+  future implementation. Do not implement it until the PRP is reviewed/accepted.
 
 ---
 
@@ -93,3 +102,5 @@ state and any deferred validation work.
 | 2026-05-04 | Added D5 and `BAB-2205`/`BAB-2206` proposed Phase 0c browser test harness plan | Codex |
 | 2026-05-04 | Marked D5 done after Phase 0c JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and 59-test ExUnit validation passed | Codex |
 | 2026-05-04 | Added D6 Phase 1 readiness document sync and reiterated that Phase 1 implementation remains blocked by the deferred official Phase 0 gate | Codex |
+| 2026-05-05 | Added D7 for the Phase 2 detached tmux web-server session and safe Tailscale validation notes without recording real private IPs | Codex |
+| 2026-05-05 | Added D8 and `BAB-2209` draft PRP for configurable Citizen workspace root | Codex |

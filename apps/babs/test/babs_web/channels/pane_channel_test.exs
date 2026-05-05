@@ -5,6 +5,37 @@ defmodule BabsWeb.PaneChannelTest do
 
   @endpoint BabsWeb.Endpoint
   alias BabsWeb.PaneChannel
+  alias Babs.Citizens.Hardline.Transcript
+
+  defmodule FakePane do
+    use GenServer
+
+    def start_link(slug, cwd, opts \\ []) do
+      GenServer.start_link(__MODULE__, {cwd, Keyword.get(opts, :notify)},
+        name: {:via, Registry, {Babs.Citizens.PaneRegistry, slug}}
+      )
+    end
+
+    @impl true
+    def init({cwd, notify}), do: {:ok, %{cwd: cwd, notify: notify}}
+
+    @impl true
+    def handle_call(:cwd, _from, state), do: {:reply, {:ok, state.cwd}, state}
+
+    @impl true
+    def handle_call(:flush_transcript, _from, state) do
+      if state.notify, do: send(state.notify, :flushed_transcript)
+      {:reply, :ok, state}
+    end
+  end
+
+  setup do
+    tmp =
+      Path.join(System.tmp_dir!(), "babs-pane-channel-#{System.unique_integer([:positive])}")
+
+    on_exit(fn -> File.rm_rf!(tmp) end)
+    %{tmp: tmp}
+  end
 
   test "rejects joins when no pane is registered" do
     slug = "missing-#{System.unique_integer([:positive])}"
@@ -13,9 +44,9 @@ defmodule BabsWeb.PaneChannelTest do
              PaneChannel.join("pane:#{slug}", %{}, %Phoenix.Socket{})
   end
 
-  test "pushes pane bytes broadcast by Hardline.Pane on the citizens PubSub" do
+  test "pushes pane bytes broadcast by Hardline.Pane on the citizens PubSub", %{tmp: tmp} do
     slug = "existing-#{System.unique_integer([:positive])}"
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
+    {:ok, _pid} = FakePane.start_link(slug, tmp)
 
     {:ok, _reply, _socket} =
       BabsWeb.UserSocket
@@ -35,6 +66,48 @@ defmodule BabsWeb.PaneChannelTest do
     }
 
     assert Base.decode64!(encoded) == "hello"
+  end
+
+  test "sends transcript replay as the initial snapshot before tmux capture", %{tmp: tmp} do
+    slug = "transcript-#{System.unique_integer([:positive])}"
+
+    {:ok, io} = Transcript.open(tmp)
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "other-#{slug}",
+        direction: :output,
+        stream_id: 7,
+        seq: 7,
+        payload: "from other citizen\n"
+      })
+
+    :ok =
+      Transcript.append(io, %{
+        slug: slug,
+        direction: :output,
+        stream_id: 7,
+        seq: 8,
+        payload: "from transcript\n"
+      })
+
+    :ok = Transcript.close(io)
+    {:ok, _pid} = FakePane.start_link(slug, tmp, notify: self())
+
+    {:ok, _reply, _socket} =
+      BabsWeb.UserSocket
+      |> socket(nil, %{})
+      |> subscribe_and_join(PaneChannel, "pane:#{slug}")
+
+    assert_receive :flushed_transcript
+
+    assert_push "output", %{
+      "stream_id" => 0,
+      "seq" => 0,
+      "base64" => encoded
+    }
+
+    assert Base.decode64!(encoded) == "from transcript\n"
   end
 
   test "allows only the Phase 1 restricted keyboard set" do
@@ -73,6 +146,13 @@ defmodule BabsWeb.PaneChannelTest do
 
   test "snapshot send is best effort when tmux capture fails" do
     socket = %Phoenix.Socket{assigns: %{slug: "missing-pane"}}
+
+    assert {:noreply, ^socket} = PaneChannel.handle_info(:send_snapshot, socket)
+  end
+
+  test "empty transcript snapshot falls back to best-effort tmux capture", %{tmp: tmp} do
+    File.mkdir_p!(tmp)
+    socket = %Phoenix.Socket{assigns: %{slug: "missing-pane", cwd: tmp}}
 
     assert {:noreply, ^socket} = PaneChannel.handle_info(:send_snapshot, socket)
   end

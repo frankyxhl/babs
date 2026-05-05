@@ -1,0 +1,236 @@
+# PRP-2208: Phase 2 Transcript JSONL Persistence
+
+**Applies to:** BAB project
+**Last updated:** 2026-05-05
+**Last reviewed:** 2026-05-05
+**Status:** Implemented
+
+---
+
+## What Is It?
+
+Phase 2 completes durable transcript persistence for Babs-hosted Citizens.
+
+The Phase 1 flywheel dogfood already landed the first slice: `Hardline.Pane`
+opens `<cwd>/transcript.jsonl` and appends JSONL records for browser input and
+PTY output bytes. This PRP reconciles that partial implementation with the full
+roadmap acceptance: browser tab restart must replay recent transcript context
+from disk, not merely show whatever tmux can still capture.
+
+---
+
+## Problem
+
+`BAB-2300` defines Phase 2 as:
+
+- every byte that flows through `Hardline.Pane` is appended to
+  `<cwd>/transcript.jsonl`
+- browser reload/reopen replays recent transcript context to xterm.js
+- tab restart is byte-loss-free
+
+PR #7 delivered the first bullet as part of Phase 1 Gate B:
+
+- `Babs.Citizens.Hardline.Transcript` writes append-only JSONL
+- `Babs.Citizens.Hardline.Pane` records `input` and `output` byte records
+- transcript writes tolerate hot-reload state from before the transcript field
+  existed
+- unit tests cover encoding, arbitrary binary payloads, append mode, and Pane
+  hot-reload tolerance
+
+The remaining gap is that browser reconnect currently gets context from
+`tmux capture-pane` in `BabsWeb.PaneChannel`, not from
+`<cwd>/transcript.jsonl`. That is useful but does not satisfy the Phase 2
+contract because tmux scrollback is bounded and does not prove byte-loss-free
+tab restart.
+
+There is also a vocabulary/ADR alignment issue: `BAB-1105` originally described
+AI CLI JSONL transcripts as external truth written by Claude/Codex and read-only
+to Babs. Phase 2 introduces a separate Babs-owned Hardline byte transcript. That
+is not the same file or same contract; the distinction must be explicit.
+
+## Proposed Solution
+
+Complete Phase 2 as a small hardening phase on top of the landed dogfood slice.
+
+1. Keep the existing Babs-owned transcript path:
+   `<citizen cwd>/transcript.jsonl`.
+2. Treat the existing byte record shape as accepted for byte records:
+   - `ts`
+   - `slug`
+   - `direction`: `input` or `output`
+   - `stream_id`
+   - `seq`
+   - `b64`
+3. Add read-side transcript helpers in `Babs.Citizens.Hardline.Transcript`:
+   - parse JSONL records defensively
+   - ignore malformed lines rather than crashing terminal reconnect
+   - decode only `direction == "output"` records whose `slug` matches the
+     active citizen for browser replay
+   - read a bounded tail of the append-only transcript before decoding so
+     reconnect memory cost does not grow with the full transcript file
+   - return the most recent replay payload by decoding output records, splitting
+     on `\n`, and keeping the newest 200 lines or fewer if fewer exist
+   - tolerate a final partial line if the file is read while the Pane is
+     appending; replay is a best-effort UX read, not a transactional boundary
+4. Change `BabsWeb.PaneChannel` snapshot behavior:
+   - on join, ask the live `Hardline.Pane` for its configured `cwd`; prefer a
+     small `Pane.cwd(slug)` call over re-reading TOML on every browser reconnect
+   - flush the live Pane transcript before replay so delayed writes are visible;
+     if flush fails, fall back to tmux capture instead of trusting stale disk
+     state
+   - replay transcript output bytes first when available
+   - keep `tmux capture-pane` as a best-effort fallback when transcript is
+     missing or empty
+5. Add lifecycle event records for reattach boundaries if this can be done
+   without widening the JSONL contract too much:
+   - at minimum, record a regular `direction == "output"` JSONL record whose
+     payload is a textual marker such as `[babs hardline reattached]`
+   - do not introduce a full event schema unless the implementation needs it
+6. Update docs so Phase 2 clearly distinguishes:
+   - **Babs Hardline transcript**: Babs-owned append-only byte log at
+     `<cwd>/transcript.jsonl`
+   - **AI CLI transcript**: upstream Claude/Codex JSONL files, read-only to
+     Babs, still a later `TranscriptTailer` concern
+
+## Acceptance
+
+Phase 2 is complete when:
+
+- `Hardline.Pane` continues to append every accepted browser input byte and PTY
+  output byte to `<cwd>/transcript.jsonl`.
+- Closing a browser tab, producing output while the tab is closed, and reopening
+  `/citizens/<slug>` replays the recent output from `transcript.jsonl`.
+- Replayed browser context is sourced from transcript JSONL, with tmux
+  `capture-pane` only as fallback.
+- Transcript replay uses a bounded tail read before JSONL decoding, so a
+  long-running Citizen's full transcript is not loaded into memory on every
+  browser reconnect.
+- Transcript replay filters decoded output by the active citizen slug, so a
+  shared or accidentally reused cwd cannot replay another Citizen's output.
+- Browser reconnect flushes the live Pane transcript before replay; if the flush
+  fails, the snapshot path falls back to `tmux capture-pane`.
+- The replay cap is deterministic and documented: replay decodes output records,
+  splits on `\n`, and returns the most recent 200 output lines, or fewer if the
+  transcript contains fewer.
+- Malformed transcript lines do not crash reconnect.
+- "Byte-loss-free tab restart" means bytes produced while the tab is closed are
+  appended to the transcript and the newest 200 output lines are replayed on
+  reconnect. It does not mean old output beyond the replay cap is re-rendered.
+- Existing Phase 1 Gate A still passes.
+- Existing Phase 1a test tiers still pass.
+
+## Tests
+
+Expected test additions:
+
+- Unit tests for transcript read/replay helpers:
+  - output-only replay ignores input records
+  - slug-filtered replay ignores records for other citizens in the same
+    transcript file
+  - arbitrary binary output round-trips from `b64`
+  - malformed JSONL lines are skipped or reported without crashing
+  - replay caps to the newest 200 lines
+  - bounded-tail replay skips a truncated leading JSONL fragment and does not
+    decode old output outside the tail window
+  - empty/missing transcript returns no replay payload
+- Channel tests for snapshot source order:
+  - transcript replay is pushed when available
+  - live Pane transcript flush is requested before transcript replay
+  - tmux capture fallback remains best-effort when transcript is absent
+- Browser-harness BDD:
+  - sentinel connects
+  - browser tab closes
+  - the test sends deterministic tmux output while the tab is closed, then waits
+    until the marker is present in sentinel's transcript before reopening
+  - browser reopens `/citizens/sentinel`
+  - marker appears from transcript replay
+- Existing validation stack:
+  - `mise exec -- mix format --check-formatted`
+  - `mise exec -- mix compile --warnings-as-errors`
+  - `mise exec -- mix test`
+  - `mise exec -- mix test --cover`
+  - `npm run test:js`
+  - `npm run test:bdd`
+  - `npm run test:e2e`
+  - `mise exec -- mix babs.gate_a`
+  - `af validate --root <repo>`
+
+## Out Of Scope
+
+- SQLite-backed citizens table; Phase 3 owns that.
+- `/citizens/new`; Phase 4 owns that.
+- Multi-citizen index, tabs, stop/start/restart UI; Phases 5-6 own those.
+- Ticket/billboard automation.
+- Parsing upstream Claude/Codex JSONL into semantic messages. Phase 2 only
+  persists and replays Babs terminal byte transcripts.
+
+## Validation Results
+
+Phase 2 implementation validation on 2026-05-05:
+
+- `mise exec -- mix format --check-formatted`: passed
+- `mise exec -- mix compile --warnings-as-errors`: passed
+- `mise exec -- mix test`: passed with `:babs_citizens` 55 tests and `:babs`
+  20 tests
+- `mise exec -- mix test --cover`: passed with `:babs_citizens` 55 tests,
+  80.79% total coverage, and `Babs.Citizens.Hardline.Transcript` 85.00%;
+  `:babs` 20 tests and 78.00% total coverage
+- `npm run test:js`: passed with 6 Node tests
+- `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
+  transcript replay after tab restart
+- `npm run test:e2e`: passed with 6 Playwright smoke tests
+- `mise exec -- mix babs.gate_a`: passed
+- `git diff --check`: passed
+- `af validate --root /Users/frank/Projects/babs-phase2-reconcile`: passed
+  with 98 documents and 0 issues
+- Trinity `fast-review` code review passed with GLM and DeepSeek in
+  `.trinity/reviews/20260505-130452-phase-2-transcript-replay`; non-blocking
+  advisories for empty-transcript fallback coverage, `Pane.cwd/1` missing-pane
+  coverage, and BDD synthetic `seq` semantics were addressed
+- Trinity `fast-review` R2 passed with GLM and DeepSeek on the final working
+  tree in
+  `.trinity/reviews/20260505-131559-phase-2-transcript-replay-r2`; remaining
+  findings were non-blocking future hardening notes
+- GitHub Codex P2 review finding about full-file transcript reads was addressed
+  with bounded-tail replay and regression coverage
+- GitHub Codex P2 review finding about cross-citizen replay from shared cwd was
+  addressed with slug-filtered transcript replay and Channel coverage
+- GitHub Codex P1 review finding about stale delayed transcript writes was
+  addressed with live Pane transcript flush before replay and tmux fallback on
+  flush failure
+- GitHub Codex P2 review finding about BDD transcript path assumptions was
+  addressed by resolving transcript checks from `BABS_ROOT` / `RELEASE_ROOT` /
+  repo root, matching runtime config
+
+## Open Questions
+
+- Should replay include only PTY output bytes? Proposed answer: yes. Browser
+  input is persisted for audit, but terminal replay should render only output
+  because output is the terminal's actual display stream.
+- Should lifecycle reattach be a structured JSONL event? Proposed answer: not
+  yet. Use a textual output marker in Phase 2 if needed; reserve structured
+  event schemas for Phase 7+ ticket/history work unless implementation pressure
+  proves otherwise.
+- Should replay trim by records or lines? Proposed answer: lines. The roadmap
+  says "last 200 lines"; implement a line cap over decoded output bytes, while
+  preserving raw terminal bytes inside those lines as much as possible.
+- Does `{:delayed_write, 4096, 50}` weaken "byte-loss-free"? Proposed answer:
+  not for the Phase 2 tab-restart contract. A hard BEAM crash could lose or
+  delay the last few milliseconds of buffered writes; Phase 2 only claims
+  browser tab restart while the Pane continues running.
+
+---
+
+## Change History
+
+| Date | Change | By |
+|------|--------|----|
+| 2026-05-05 | Initial reconciliation PRP: record Phase 1 dogfood slice, identify remaining transcript replay gap, and define Phase 2 completion criteria | Codex |
+| 2026-05-05 | Trinity fast-review PASS follow-up: make 200-line replay deterministic, prefer `Pane.cwd/1`, require reattach markers as normal output records, make BDD replay deterministic, and clarify byte-loss-free scope | Codex |
+| 2026-05-05 | Implement Phase 2 transcript replay: transcript read helpers, `Pane.cwd/1`, transcript-first Channel snapshots, binary replay tests, browser-harness tab-restart BDD, and validation record | Codex |
+| 2026-05-05 | Address Trinity code-review advisories with missing-pane cwd test coverage, empty-transcript fallback test coverage, and stable BDD synthetic transcript sequence value | Codex |
+| 2026-05-05 | Trinity fast-review R2 PASS on final working tree with GLM and DeepSeek; remaining notes are future hardening, not merge blockers | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by changing transcript replay from full-file read to bounded-tail read with truncated-leading-line regression coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by filtering transcript replay to the active citizen slug and adding Transcript/Channel regression coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P1 review by flushing the live Pane transcript before replay and falling back to tmux when flush fails | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by making browser-harness BDD transcript checks resolve the same runtime root as Babs | Codex |

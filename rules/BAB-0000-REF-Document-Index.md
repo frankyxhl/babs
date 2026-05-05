@@ -43,6 +43,8 @@
 | 2205 | PRP | Phase 0c Hardline Browser Test Harness |
 | 2206 | CHG | Phase 0c Hardline Browser Test Harness |
 | 2207 | CHG | Phase 1a Flywheel Hardening |
+| 2208 | PRP | Phase 2 Transcript JSONL Persistence |
+| 2209 | PRP | Phase 2a Configurable Workspace Root |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
