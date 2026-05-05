@@ -113,13 +113,13 @@ Local validation on 2026-05-05:
 
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- `mise exec -- mix test`: passed, `:babs_citizens` 92 tests and `:babs` 20
+- `mise exec -- mix test`: passed, `:babs_citizens` 94 tests and `:babs` 20
   tests.
 - `MIX_TEST_PARTITION=1 mise exec -- mix test --partitions 2`: passed,
   partition 1 subset.
 - `MIX_TEST_PARTITION=2 mise exec -- mix test --partitions 2`: passed,
   partition 2 subset.
-- `mise exec -- mix test --cover`: passed, `:babs_citizens` 84.26% and
+- `mise exec -- mix test --cover`: passed, `:babs_citizens` 84.56% and
   `:babs` 78.00%.
 - `npm run test:js`: passed, 6 Node tests.
 - `npm run test:bdd`: passed, 9 scenarios with 1 expected
@@ -130,6 +130,8 @@ Local validation on 2026-05-05:
 - `mise exec -- mix ecto.rollback -r Babs.Citizens.Repo --step 1 && mise exec -- mix ecto.migrate -r Babs.Citizens.Repo`: passed.
 - `MIX_ENV=test BABS_ROOT=/tmp/babs-partition-check MIX_TEST_PARTITION=3 mise exec -- mix run --no-start -e 'IO.puts(Application.fetch_env!(:babs_citizens, Babs.Citizens.Repo)[:database])'`:
   passed, resolved to `/tmp/babs-partition-check/tmp/test/babs_citizens_3.sqlite3`.
+- `mise exec -- mix test apps/babs_citizens/test/babs_citizens/reattach_scanner_test.exs apps/babs_citizens/test/babs_citizens/reattach_scanner_sqlite_test.exs`:
+  passed, 15 targeted scanner tests.
 - `af validate --root /Users/frank/Projects/babs-phase3-prep`: passed, 106 docs
   checked.
 - `git diff --check`: passed.
@@ -156,6 +158,8 @@ Local validation on 2026-05-05:
   running.
 - Made the Gate A validator test use `Babs.Citizens.RepoCase` so partitioned
   test workers migrate their isolated SQLite database before lifecycle writes.
+- Addressed follow-up GitHub Codex P1 review finding by planning reattach for
+  live running tmux sessions before treating missing `cwd` as a durable failure.
 
 ---
 
@@ -173,3 +177,4 @@ Local validation on 2026-05-05:
 | 2026-05-05 | Address GitHub Codex P2 BDD SQLite path resolution finding | Codex |
 | 2026-05-05 | Address GitHub Codex P2 partitioned test SQLite path finding | Codex |
 | 2026-05-05 | Make Gate A validator test initialize its isolated SQLite schema | Codex |
+| 2026-05-05 | Address GitHub Codex P1 live-session reattach ordering finding | Codex |

@@ -27,6 +27,23 @@ defmodule Babs.Citizens.ReattachScannerSqliteTest do
     assert failed.last_error =~ missing_cwd
   end
 
+  test "scan_rows reattaches a live running session before checking missing cwd" do
+    slug = "reattach-missing-cwd-#{System.unique_integer([:positive])}"
+    record = insert_citizen!(%{slug: slug, status: "running"})
+    config = Babs.Citizens.Catalog.to_config(record)
+
+    on_exit(fn -> Lifecycle.stop_citizen(slug) end)
+
+    assert :ok = Runner.start_session(config)
+    File.rm_rf!(record.cwd)
+
+    assert ReattachScanner.scan_rows([record]) == [{:ok, slug}]
+
+    running = Repo.get!(CitizenRecord, record.id)
+    assert running.status == "running"
+    assert is_nil(running.last_error)
+  end
+
   test "scan_rows reports tmux scan failures" do
     record = insert_citizen!(%{slug: "tmux-scan-error"})
 

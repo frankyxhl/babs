@@ -118,11 +118,11 @@ defmodule Babs.Citizens.ReattachScanner do
         row.status == "failed" ->
           {:skip, row.slug, :failed}
 
-        row.status == "running" and not File.dir?(row.cwd) ->
-          {:fail_missing_cwd, row, {:missing_cwd, row.cwd}}
-
         row.status == "running" and MapSet.member?(existing_slug_set, row.slug) ->
           {:reattach, row}
+
+        row.status == "running" and not File.dir?(row.cwd) ->
+          {:fail_missing_cwd, row, {:missing_cwd, row.cwd}}
 
         row.status == "running" ->
           {:start, row}

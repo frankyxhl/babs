@@ -67,6 +67,15 @@ defmodule Babs.Citizens.ReattachScannerTest do
            ]
   end
 
+  test "plans reattach before missing cwd failure for running SQLite rows" do
+    cwd = Path.join(tmp_root(), "missing-workspace")
+    record = row("reattach-missing-cwd", status: "running", cwd: cwd)
+
+    assert ReattachScanner.plan_rows([record], ["babs-reattach-missing-cwd"]) == [
+             {:reattach, record}
+           ]
+  end
+
   test "plans unexpected raw SQLite status as skipped instead of starting" do
     record = row("unknown-status", status: "paused")
 
