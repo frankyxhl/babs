@@ -47,7 +47,7 @@ Babs is a greenfield Elixir/Phoenix runtime. Common tasks and their routes:
 | Task type | Route |
 |-----------|-------|
 | Architecture decision (already discussed in conversation) | ADR (COR-1100) → `BAB-11xx` |
-| New phase implementation | PRP (COR-1102) → review → CHG → `BAB-22xx` |
+| New phase implementation | PRP/CHG in `BAB-22xx`, then `BAB-1503` phase delivery loop |
 | Add a Phase 1 citizen seed | follow `BAB-2201` and `BAB-1002`; legacy `.bob` guidance in `BAB-1500` is deferred |
 | PTY stability validation (Phase 0) | follow `BAB-1502` |
 | Update existing BAB doc | COR-1300 |

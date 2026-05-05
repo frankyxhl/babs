@@ -76,6 +76,7 @@ Inherits all of COR-1103 §"ALWAYS":
 |---|---|
 | Net-new architecture decision (not covered by existing ADRs) | PRP (COR-1102) → review (COR-1602) → ADR (COR-1100) → file as `BAB-11xx` |
 | Phase implementation spec | PRP (COR-1102) → file as `BAB-22xx`; Phase 2+ sequencing follows `BAB-2300` |
+| Phase delivery after scope is agreed | `BAB-1503` for plan review → TDD/BDD → validation → Trinity code review → PR |
 | Phase 1 citizen seed | Follow `BAB-2201` and `BAB-1002` (`citizens/citizen-<slug>.toml` + `workspaces/<slug>/`) |
 | New citizen archetype beyond Phase 1 seed layout | PRP (COR-1102) first if structurally novel; legacy `BAB-1500` is deferred |
 
@@ -128,6 +129,14 @@ Follow `BAB-2201` and `BAB-1002`: create/update `citizens/citizen-<slug>.toml`, 
 `BAB-1500` is deferred legacy guidance for the old `*.bob/` workflow. Do not route Phase 1 citizen creation there.
 
 Current post-Phase-1 experimental seed: `elena` uses `gh copilot` through `citizens/citizen-elena.toml` to validate GitHub Copilot CLI hosting. Treat her as an experimental CLI coverage citizen, not as a Phase 1 acceptance dependency.
+
+### Deliver a roadmap phase
+
+Use `BAB-1503` after the phase scope is agreed or when the operator asks to
+start/continue a roadmap phase. It captures the expected loop for Babs phases:
+write/update PRP or CHG, Trinity-review the plan, implement with test pressure,
+run coverage/BDD/E2E/phase gates, Trinity-review code, then create the PR using
+the correct GitHub identity.
 
 ---
 
@@ -197,3 +206,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-03 | Self-review fixes: Phase 0/1/2/3 → 0/1/2/3/4; remove "(when written)" on BAB-2200 | Claude Code |
 | 2026-05-04 | Expand architecture ADR range to `BAB-1100`–`BAB-1112`; route Phase 1 citizen seeds to `BAB-2201`/`BAB-1002` and mark `BAB-1500` deferred | Codex |
 | 2026-05-05 | Record Elena as a post-Phase-1 experimental GitHub Copilot CLI seed under the Phase 1 seed routing note | Codex |
+| 2026-05-05 | Add `BAB-1503` as the standard roadmap phase delivery route | Codex |
