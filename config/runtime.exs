@@ -4,9 +4,20 @@ babs_root =
   (System.get_env("BABS_ROOT") || System.get_env("RELEASE_ROOT") || File.cwd!())
   |> Path.expand()
 
-socket_auth_token = System.get_env("BABS_SOCKET_TOKEN")
+non_empty_env = fn name ->
+  case System.get_env(name) do
+    nil ->
+      nil
 
-if config_env() == :prod and socket_auth_token in [nil, ""] do
+    value ->
+      value = String.trim(value)
+      if value == "", do: nil, else: value
+  end
+end
+
+socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
+
+if config_env() == :prod and is_nil(socket_auth_token) do
   raise """
   missing BABS_SOCKET_TOKEN
 
@@ -20,9 +31,9 @@ config :babs, Babs.DevReloader, root: babs_root
 config :babs, BabsWeb.UserSocket, auth_token: socket_auth_token
 
 if config_env() == :prod do
-  phx_host = System.get_env("PHX_HOST")
+  phx_host = non_empty_env.("PHX_HOST")
 
-  if phx_host in [nil, ""] do
+  if is_nil(phx_host) do
     raise """
     missing PHX_HOST
 
@@ -34,8 +45,8 @@ if config_env() == :prod do
 
   integer_env = fn names, default ->
     names
-    |> Enum.map(&System.get_env/1)
-    |> Enum.find(&(&1 not in [nil, ""]))
+    |> Enum.map(non_empty_env)
+    |> Enum.find(& &1)
     |> case do
       nil -> default
       value -> String.to_integer(value)
@@ -44,7 +55,7 @@ if config_env() == :prod do
 
   http_port = integer_env.(["PORT"], 4000)
   url_port = integer_env.(["PHX_URL_PORT", "PHX_PORT", "PORT"], http_port)
-  phx_scheme = System.get_env("PHX_SCHEME") || "http"
+  phx_scheme = non_empty_env.("PHX_SCHEME") || "http"
 
   config :babs, BabsWeb.Endpoint,
     server: true,

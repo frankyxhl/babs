@@ -324,3 +324,5 @@ Validation passed:
 | 2026-05-05 | Complete Phase 1a implementation: coverage gates, browser JS extraction, browser-harness BDD, terminal UX parity, `BABS_HTTP_IP`, and validation results | Codex |
 | 2026-05-05 | Update validation results after PR review fixes for socket auth, runtime root config, streaming terminal decode, and Gate A capture robustness | Codex |
 | 2026-05-05 | Address PR review follow-up for production release boot: enable endpoint server mode and require explicit runtime host config for websocket origin checks | Codex |
+| 2026-05-05 | Address PR review follow-up for production auth hardening: reject whitespace-only runtime socket tokens before endpoint boot | Codex |
+| 2026-05-05 | Add missing production config so release/runtime validation reaches `runtime.exs` instead of failing on absent `config/prod.exs` | Codex |
