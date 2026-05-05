@@ -1,7 +1,6 @@
 defmodule BabsWeb.TerminalController do
   @moduledoc false
 
-  import Phoenix.Controller, only: [put_root_layout: 2]
   import Plug.Conn
   import Phoenix.LiveView.Controller
 
@@ -42,6 +41,20 @@ defmodule BabsWeb.TerminalController do
     end
   end
 
+  def new(conn, params) do
+    conn = fetch_query_params(conn)
+
+    case Lifecycle.lookup("new") do
+      {:ok, _pid} ->
+        send_terminal(conn, "new", socket_token(conn, params))
+
+      {:error, :not_found} ->
+        live_render(conn, BabsWeb.NewCitizenLive,
+          session: %{"socket_token" => socket_token(conn, params)}
+        )
+    end
+  end
+
   def head(conn, %{"slug" => slug}) do
     case Lifecycle.lookup(slug) do
       {:ok, _pid} -> send_resp(conn, 200, "")
@@ -50,9 +63,7 @@ defmodule BabsWeb.TerminalController do
   end
 
   defp send_terminal(conn, slug, socket_token) do
-    conn
-    |> put_root_layout(html: {BabsWeb.Layouts, :root})
-    |> live_render(BabsWeb.TerminalLive,
+    live_render(conn, BabsWeb.TerminalLive,
       session: %{"slug" => slug, "socket_token" => socket_token || ""}
     )
   end

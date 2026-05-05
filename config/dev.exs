@@ -31,8 +31,14 @@ http_ip =
     value -> parse_http_ip.(value)
   end
 
+http_port =
+  case System.get_env("BABS_HTTP_PORT") || System.get_env("PORT") do
+    nil -> 4000
+    value -> String.to_integer(String.trim(value))
+  end
+
 config :babs, BabsWeb.Endpoint,
-  http: [ip: http_ip, port: 4000],
+  http: [ip: http_ip, port: http_port],
   check_origin: false,
   code_reloader: true,
   debug_errors: true,

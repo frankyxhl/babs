@@ -1,3 +1,5 @@
+// Vendored from phoenix 1.8.5, copied from deps/phoenix/priv/static/phoenix.mjs.
+// Keep this file in sync when upgrading the phoenix Mix dependency.
 // js/phoenix/utils.js
 var closure = (value) => {
   if (typeof value === "function") {
@@ -1616,4 +1618,3 @@ export {
   serializer_default as Serializer,
   Socket
 };
-//# sourceMappingURL=phoenix.mjs.map

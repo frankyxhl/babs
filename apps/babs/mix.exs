@@ -41,6 +41,7 @@ defmodule Babs.MixProject do
       {:bandit, "~> 1.11"},
       {:file_system, "~> 1.1"},
       {:jason, "~> 1.4"},
+      {:lazy_html, "~> 0.1.0", only: :test},
       {:phoenix, "~> 1.8"},
       {:phoenix_live_reload, "~> 1.6", only: :dev},
       {:phoenix_live_view, "~> 1.1"}

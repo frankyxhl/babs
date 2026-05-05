@@ -48,6 +48,19 @@ defmodule Babs.Citizens.Catalog do
     Repo.get_by(CitizenRecord, slug: slug)
   end
 
+  def insert_new(%CitizenConfig{} = config) do
+    attrs =
+      config
+      |> config_attrs()
+      |> Map.put(:status, "running")
+      |> Map.put(:metadata, %{})
+      |> Map.put(:is_mayor, false)
+
+    %CitizenRecord{}
+    |> CitizenRecord.changeset(attrs)
+    |> Repo.insert()
+  end
+
   def merge_import(%CitizenRecord{} = existing, %CitizenConfig{} = incoming) do
     warnings =
       if existing.id != incoming.id do
@@ -97,6 +110,14 @@ defmodule Babs.Citizens.Catalog do
 
   def mark_failed(slug_or_record, reason),
     do: update_status(slug_or_record, "failed", redact_reason(reason))
+
+  def redact_reason(reason) do
+    reason
+    |> inspect()
+    |> String.replace(@sensitive_key_value, "\\1\\2[REDACTED]")
+    |> String.replace(@sensitive_assignment, "\\1[REDACTED]")
+    |> String.slice(0, 2_000)
+  end
 
   def to_config(%CitizenRecord{} = record) do
     %CitizenConfig{
@@ -179,13 +200,5 @@ defmodule Babs.Citizens.Catalog do
       %CitizenRecord{} = record -> {:ok, record}
       nil -> {:error, :not_found}
     end
-  end
-
-  defp redact_reason(reason) do
-    reason
-    |> inspect()
-    |> String.replace(@sensitive_key_value, "\\1\\2[REDACTED]")
-    |> String.replace(@sensitive_assignment, "\\1[REDACTED]")
-    |> String.slice(0, 2_000)
   end
 end

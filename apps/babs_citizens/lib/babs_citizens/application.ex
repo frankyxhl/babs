@@ -9,6 +9,7 @@ defmodule Babs.Citizens.Application do
       [
         {Phoenix.PubSub, name: Babs.Citizens.PubSub},
         {Registry, keys: :unique, name: Babs.Citizens.PaneRegistry},
+        {Registry, keys: :unique, name: Babs.Citizens.SpawnerRegistry},
         Babs.Citizens.Repo,
         {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
       ] ++ reattach_children()

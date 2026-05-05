@@ -110,7 +110,12 @@ defmodule Babs.Citizens.Runner do
   end
 
   def detach(%{os_pid: os_pid}) do
-    :exec.stop(os_pid)
+    case :exec.kill(os_pid, :sigterm) do
+      :ok -> :ok
+      {:error, :not_found} -> :ok
+      {:error, {:not_found, _pid}} -> :ok
+      {:error, _reason} = error -> error
+    end
   end
 
   def attach_command(session), do: String.to_charlist("tmux attach-session -t #{session}")

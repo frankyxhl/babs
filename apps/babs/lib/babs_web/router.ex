@@ -2,15 +2,22 @@ defmodule BabsWeb.Router do
   @moduledoc false
 
   use Phoenix.Router
+  import Phoenix.Controller
 
   pipeline :browser do
     plug(:accepts, ["html"])
+    plug(:fetch_session)
+    plug(:fetch_flash)
+    plug(:protect_from_forgery)
+    plug(:put_secure_browser_headers)
+    plug(:put_root_layout, html: {BabsWeb.Layouts, :root})
   end
 
   scope "/", BabsWeb do
     pipe_through(:browser)
 
     get("/", TerminalController, :index)
+    get("/citizens/new", TerminalController, :new)
     get("/citizens/:slug", TerminalController, :show)
     head("/citizens/:slug", TerminalController, :head)
   end

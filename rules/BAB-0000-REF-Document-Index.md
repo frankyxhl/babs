@@ -48,6 +48,8 @@
 | 2209 | PRP | Phase 2a Configurable Workspace Root |
 | 2210 | PRP | Phase 3 SQLite Citizens Table and Auto Respawn |
 | 2211 | CHG | Implement Phase 3 SQLite Citizen Registry |
+| 2212 | PRP | Phase 4 NewCitizenLive Spawn UI |
+| 2213 | CHG | Implement Phase 4 NewCitizenLive Spawn UI |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

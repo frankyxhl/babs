@@ -118,13 +118,14 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table records durable Citizen identity/config/status, including `id`, `slug`, `display_name`, `description`, resolved absolute `cwd`, `cli`, `cli_args`, `env`, string `status` (`running`/`stopped`/`failed`), `metadata`, `role`, `is_mayor`, `last_error`, and Ecto timestamps. `BAB-2210` is authoritative for the exact schema and import semantics. On Babs boot, import seed TOML into SQLite, then scan all SQLite rows and reattach/respawn as appropriate.
 **Reserved fields** for V0-L: `role`, `is_mayor`, `metadata` declared but not written by v0.1 logic.
 **Acceptance**: Restart Babs node; clare auto-respawns from SQLite; cwd preserved
-**Current status**: Implemented in branch `codex/phase-3-prep`, PR pending. Local validation passed: Ecto migrate/rollback/migrate, ExUnit/coverage (`:babs_citizens` 84.26%, `:babs` 78.00%), browser-harness BDD with SQLite registry scenario, Playwright smoke, Gate A, and Alfred validation.
+**Current status**: Implemented and merged in PR #11. Local validation passed: Ecto migrate/rollback/migrate, ExUnit/coverage (`:babs_citizens` 84.26%, `:babs` 78.00%), browser-harness BDD with SQLite registry scenario, Playwright smoke, Gate A, and Alfred validation.
 **Estimate**: 4-6 days
 
 ### Phase 4 — NewCitizenLive Spawn UI
 
-**Scope**: `/citizens/new` form (slug + display name + CLI radio: claude/codex/droid/pi/gh copilot + cwd field + optional env block). Submit → write `citizens/citizen-<slug>.toml` + SQLite row + start citizen + redirect to `/citizens/<slug>`.
+**Scope**: `/citizens/new` form (slug + display name + CLI preset: shell/claude/codex/droid/pi/copilot-cli + cwd field). Submit → write `citizens/citizen-<slug>.toml` + SQLite row + start citizen + redirect to `/citizens/<slug>`. `BAB-2212` owns the implementation plan. Arbitrary env editing is deferred until a secret-storage/redaction design exists.
 **Acceptance**: Spawn a new non-seed citizen via UI; it reaches interactive prompt; SQLite row + citizen TOML exist; transcript starts persisting
+**Current status**: Implemented in PR #12 and ready for operator merge. Local validation passed, including ExUnit/coverage (`:babs_citizens` 83.24%, `:babs` 77.24%), browser-harness BDD, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity fast-review passed on scoped web, citizens-core, and BDD slices after review findings were fixed. GitHub Codex PR review findings were fixed and validation was rerun, including `/citizens/new` route shadowing, cwd symlink-swap revalidation, workspace-root `/` handling, lifecycle exit failure persistence, Gate A detach hang cleanup, and socket-token preservation on create redirect. Per operator review-loop cap, no additional Codex review loop was started after the final targeted socket-token fix.
 **Estimate**: 4-6 days
 
 ### Phase 5 — Multi-Citizen Index + Tab Navigation
@@ -284,3 +285,12 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-05 | Add `BAB-2208` as the Phase 2 transcript persistence PRP and record that PR #7 partially implemented write-side transcript logging while replay remains open | Codex |
 | 2026-05-05 | Add Phase 2a configurable workspace root (`BAB-2209`) before SQLite so durable Citizen working state is not implicitly tied to the active repo checkout | Codex |
 | 2026-05-05 | Mark Phase 3 implemented in branch pending PR after SQLite registry, import/respawn, lifecycle status, BDD, coverage, Gate A, and migration validation passed | Codex |
+| 2026-05-05 | Add `BAB-2212` draft PRP for Phase 4 NewCitizenLive spawn UI, defer arbitrary env editing until secret-storage/redaction design exists, and label the GitHub Copilot CLI preset `copilot-cli` | Codex |
+| 2026-05-05 | Mark Phase 3 merged in PR #11 and Phase 4 PRP reviewed by Trinity GLM/DeepSeek, ready for CHG | Codex |
+| 2026-05-05 | Add draft `BAB-2213` implementation CHG for Phase 4 TDD work | Codex |
+| 2026-05-05 | Mark `BAB-2213` reviewed by Trinity GLM/DeepSeek and pending operator approval | Codex |
+| 2026-05-05 | Mark `BAB-2213` approved after operator approval to proceed with Phase 4 implementation | Codex |
+| 2026-05-05 | Mark Phase 4 implemented locally with validation passed, pending code review and PR | Codex |
+| 2026-05-05 | Record full-scope Trinity implementation-review execution blocker for Phase 4 | Codex |
+| 2026-05-05 | Mark Phase 4 local validation and scoped Trinity fast-review complete, pending PR | Codex |
+| 2026-05-05 | Record GitHub Codex PR review fixes and final validation rerun for Phase 4 | Codex |
