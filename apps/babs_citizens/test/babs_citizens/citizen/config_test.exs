@@ -91,6 +91,28 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
              Config.load_file(missing_env, root: root)
   end
 
+  test "reports unsupported env TOML values as validation errors" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-env-value.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-ENV-VALUE"
+    slug = "env-value"
+    display_name = "Env Value"
+    cli = "/bin/zsh"
+    cwd = "workspaces/env-value"
+
+    [env]
+    GOOD_NUMBER = 1
+    BAD_ARRAY = ["not", "a", "string"]
+    """)
+
+    assert {:error, {"BAD_ARRAY", {:invalid_env_value, ["not", "a", "string"]}}} =
+             Config.load_file(path, root: root)
+  end
+
   test "rejects malformed cli_args before runner construction" do
     root = tmp_root()
     File.mkdir_p!(Path.join(root, "citizens"))

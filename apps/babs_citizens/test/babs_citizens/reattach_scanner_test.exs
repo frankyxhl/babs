@@ -100,6 +100,25 @@ defmodule Babs.Citizens.ReattachScannerTest do
              ReattachScanner.scan(root: root, config_dir: "citizens")
   end
 
+  test "scan reports missing tmux as a recoverable event" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    File.write!(Path.join(root, "citizens/citizen-no-tmux.toml"), """
+    id = "BAB-CIT-NO-TMUX"
+    slug = "no-tmux"
+    display_name = "No Tmux"
+    cli = "/bin/zsh"
+    cwd = "workspaces/no-tmux"
+    """)
+
+    with_tmux_binary("/definitely/missing/babs-tmux", fn ->
+      assert [
+               {:error, :tmux, {:tmux_executable_not_found, "/definitely/missing/babs-tmux"}}
+             ] = ReattachScanner.scan(root: root, config_dir: "citizens")
+    end)
+  end
+
   defp config(slug) do
     %CitizenConfig{
       id: "BAB-CIT-#{slug}",
@@ -121,5 +140,20 @@ defmodule Babs.Citizens.ReattachScannerTest do
 
     File.rm_rf!(root)
     root
+  end
+
+  defp with_tmux_binary(binary, fun) do
+    original = Application.get_env(:babs_citizens, Babs.Citizens.Runner)
+    Application.put_env(:babs_citizens, Babs.Citizens.Runner, tmux_binary: binary)
+
+    try do
+      fun.()
+    after
+      if original do
+        Application.put_env(:babs_citizens, Babs.Citizens.Runner, original)
+      else
+        Application.delete_env(:babs_citizens, Babs.Citizens.Runner)
+      end
+    end
   end
 end

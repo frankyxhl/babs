@@ -1,5 +1,5 @@
 defmodule Babs.Citizens.RunnerTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Babs.Citizens.{CitizenConfig, Runner}
 
@@ -44,11 +44,54 @@ defmodule Babs.Citizens.RunnerTest do
     assert Runner.kill_session("personal-clare") == {:error, :unmanaged_session}
   end
 
+  test "returns recoverable errors when the tmux executable is missing" do
+    with_tmux_binary("/definitely/missing/babs-tmux", fn ->
+      config = config()
+
+      assert {:error, {:tmux_executable_not_found, "/definitely/missing/babs-tmux"}} =
+               Runner.list_sessions_result()
+
+      assert Runner.list_sessions() == []
+
+      assert {:error, {:tmux_executable_not_found, "/definitely/missing/babs-tmux"}} =
+               Runner.start_session(config)
+
+      refute Runner.tmux_session_alive?(Runner.session_name(config.slug))
+    end)
+  end
+
   test "reports tmux metadata and capture failures for missing sessions" do
     missing = "babs-missing-#{System.unique_integer([:positive])}"
 
     refute Runner.tmux_session_alive?(missing)
     assert {:error, :invalid_pane_pid} = Runner.tmux_pane_pid(missing)
     assert {:error, {:tmux_capture_pane_failed, _status, _output}} = Runner.capture_pane(missing)
+  end
+
+  defp config do
+    %CitizenConfig{
+      id: "BAB-CIT-0000",
+      slug: "sentinel",
+      display_name: "Sentinel",
+      cli: "/bin/zsh",
+      cli_args: ["-f"],
+      cwd: "/tmp/babs-sentinel",
+      env: %{"TERM" => "xterm-256color"}
+    }
+  end
+
+  defp with_tmux_binary(binary, fun) do
+    original = Application.get_env(:babs_citizens, Runner)
+    Application.put_env(:babs_citizens, Runner, tmux_binary: binary)
+
+    try do
+      fun.()
+    after
+      if original do
+        Application.put_env(:babs_citizens, Runner, original)
+      else
+        Application.delete_env(:babs_citizens, Runner)
+      end
+    end
   end
 end

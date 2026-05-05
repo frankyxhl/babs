@@ -25,36 +25,56 @@ defmodule Babs.Citizens.Runner do
   end
 
   def start_session(config) do
-    case System.cmd("tmux", new_session_args(config), stderr_to_stdout: true) do
-      {_output, 0} -> :ok
-      {output, status} -> {:error, {:tmux_new_session_failed, status, output}}
+    case tmux_cmd(new_session_args(config)) do
+      {:ok, {_output, 0}} -> :ok
+      {:ok, {output, status}} -> {:error, {:tmux_new_session_failed, status, output}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
   def list_sessions do
-    case System.cmd("tmux", ["list-sessions", "-F", "\#{session_name}"], stderr_to_stdout: true) do
-      {output, 0} ->
-        output
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&managed_session?/1)
+    case list_sessions_result() do
+      {:ok, sessions} -> sessions
+      {:error, _reason} -> []
+    end
+  end
 
-      {output, _status} ->
-        if String.contains?(output, "no server running"), do: [], else: []
+  def list_sessions_result do
+    case tmux_cmd(["list-sessions", "-F", "\#{session_name}"]) do
+      {:ok, {output, 0}} ->
+        sessions =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.filter(&managed_session?/1)
+
+        {:ok, sessions}
+
+      {:ok, {output, status}} ->
+        if String.contains?(output, "no server running") do
+          {:ok, []}
+        else
+          {:error, {:tmux_list_sessions_failed, status, output}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   def tmux_session_alive?(session) when is_binary(session) do
-    case System.cmd("tmux", ["has-session", "-t", session], stderr_to_stdout: true) do
-      {_output, 0} -> true
-      {_output, _status} -> false
+    case tmux_cmd(["has-session", "-t", session]) do
+      {:ok, {_output, 0}} -> true
+      {:ok, {_output, _status}} -> false
+      {:error, _reason} -> false
     end
   end
 
   def kill_session(session) when is_binary(session) do
     if managed_session?(session) do
-      case System.cmd("tmux", ["kill-session", "-t", session], stderr_to_stdout: true) do
-        {_output, 0} -> :ok
-        {output, status} -> {:error, {:tmux_kill_session_failed, status, output}}
+      case tmux_cmd(["kill-session", "-t", session]) do
+        {:ok, {_output, 0}} -> :ok
+        {:ok, {output, status}} -> {:error, {:tmux_kill_session_failed, status, output}}
+        {:error, reason} -> {:error, reason}
       end
     else
       {:error, :unmanaged_session}
@@ -109,20 +129,36 @@ defmodule Babs.Citizens.Runner do
 
   def capture_pane(session, lines \\ 200)
       when is_binary(session) and is_integer(lines) and lines > 0 do
-    case System.cmd("tmux", ["capture-pane", "-p", "-e", "-t", session, "-S", "-#{lines}"],
-           stderr_to_stdout: true
-         ) do
-      {output, 0} -> {:ok, output}
-      {output, status} -> {:error, {:tmux_capture_pane_failed, status, output}}
+    case tmux_cmd(["capture-pane", "-p", "-e", "-t", session, "-S", "-#{lines}"]) do
+      {:ok, {output, 0}} -> {:ok, output}
+      {:ok, {output, status}} -> {:error, {:tmux_capture_pane_failed, status, output}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
   defp tmux_format(session, format) do
-    case System.cmd("tmux", ["display-message", "-p", "-t", session, format],
-           stderr_to_stdout: true
-         ) do
-      {output, 0} -> {:ok, String.trim(output)}
-      {output, status} -> {:error, {:tmux_format_failed, status, output}}
+    case tmux_cmd(["display-message", "-p", "-t", session, format]) do
+      {:ok, {output, 0}} -> {:ok, String.trim(output)}
+      {:ok, {output, status}} -> {:error, {:tmux_format_failed, status, output}}
+      {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp tmux_cmd(args) do
+    tmux = tmux_binary()
+    {:ok, System.cmd(tmux, args, stderr_to_stdout: true)}
+  rescue
+    error in ErlangError ->
+      if error.original == :enoent do
+        {:error, {:tmux_executable_not_found, tmux_binary()}}
+      else
+        reraise(error, __STACKTRACE__)
+      end
+  end
+
+  defp tmux_binary do
+    :babs_citizens
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:tmux_binary, "tmux")
   end
 end

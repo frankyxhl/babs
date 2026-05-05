@@ -28,10 +28,17 @@ defmodule Babs.Citizens.ReattachScanner do
   def handle_call(:events, _from, state), do: {:reply, state.events, state}
 
   def scan(opts \\ []) do
-    opts
-    |> Config.list_configs()
-    |> plan_actions(Runner.list_sessions())
-    |> Enum.map(&run_action/1)
+    config_results = Config.list_configs(opts)
+
+    case Runner.list_sessions_result() do
+      {:ok, sessions} ->
+        config_results
+        |> plan_actions(sessions)
+        |> Enum.map(&run_action/1)
+
+      {:error, reason} ->
+        [run_action({:tmux_error, reason})]
+    end
   end
 
   def plan_actions(config_results, sessions) when is_list(config_results) and is_list(sessions) do
@@ -85,6 +92,12 @@ defmodule Babs.Citizens.ReattachScanner do
     event
   end
 
+  defp run_action({:tmux_error, reason}) do
+    event = {:error, :tmux, reason}
+    maybe_log_event(event)
+    event
+  end
+
   defp run_action({action, config}) when action in [:start, :reattach] do
     session = Runner.session_name(config.slug)
 
@@ -115,6 +128,9 @@ defmodule Babs.Citizens.ReattachScanner do
 
   defp maybe_log_event({:error, :config, reason}),
     do: Logger.warning("Babs citizen config failed: #{inspect(reason)}")
+
+  defp maybe_log_event({:error, :tmux, reason}),
+    do: Logger.warning("Babs citizen tmux scan failed: #{inspect(reason)}")
 
   defp maybe_log_event({:error, slug, reason}),
     do: Logger.warning("Babs citizen #{slug} failed: #{inspect(reason)}")

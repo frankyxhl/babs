@@ -129,5 +129,9 @@ defmodule Babs.Citizens.Citizen.Config do
   end
 
   defp resolve_env_value(value) when is_binary(value), do: {:ok, value}
-  defp resolve_env_value(value), do: {:ok, to_string(value)}
+
+  defp resolve_env_value(value) when is_integer(value) or is_float(value) or is_boolean(value),
+    do: {:ok, to_string(value)}
+
+  defp resolve_env_value(value), do: {:error, {:invalid_env_value, value}}
 end
