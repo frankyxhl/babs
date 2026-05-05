@@ -192,9 +192,9 @@ Phase 2a implementation validation on 2026-05-05:
   `.trinity/reviews/20260505-160643-phase-2a-configurable-workspace-root-r2`;
   non-blocking advisories for invalid app config values, leading-dot legacy cwd
   warnings, and BDD helper drift were addressed
-- Trinity GLM review was attempted twice, but the provider failed before review
-  with `droid` authentication failure; this is a local Trinity provider
-  authentication issue, not a Phase 2a code finding
+- Trinity GLM review passed in
+  `.trinity/reviews/20260505-161345-phase-2a-configurable-workspace-root-glm-r3`;
+  no blocking findings were reported
 
 ## Resolved Decisions
 
@@ -218,4 +218,4 @@ Phase 2a implementation validation on 2026-05-05:
 | 2026-05-05 | Add executable Phase 2a implementation plan and resolve open questions before Trinity plan review | Codex |
 | 2026-05-05 | Trinity GLM and DeepSeek fast-review passed; incorporated non-blocking advisories for path expansion, BDD workspace root, and legacy cwd warnings | Codex |
 | 2026-05-05 | Implement configurable workspace root with unit, integration, BDD workspace-root, coverage, Gate A, and Alfred validation results | Codex |
-| 2026-05-05 | Address DeepSeek R2 implementation-review advisories and record GLM provider authentication blocker | Codex |
+| 2026-05-05 | Address DeepSeek R2 implementation-review advisories and record GLM R3 implementation-review PASS | Codex |
