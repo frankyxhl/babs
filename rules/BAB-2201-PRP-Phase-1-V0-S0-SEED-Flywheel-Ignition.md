@@ -207,7 +207,7 @@ Deviations from the original PRP:
 ## Open Questions
 
 - **Channel reconnect "flicker" UX** — is the brief disconnect on `:babs` reload acceptable to operator? Default: yes, ≤2s tolerable; UI shows "reconnecting…" badge.
-- **Where does `transcript.jsonl` live?** — In Phase 1, it doesn't exist (Phase 2 adds it). Phase 1 transcripts are in-memory only. Phase 2 should write to the citizen's configured `cwd` (for example `workspaces/clare/transcript.jsonl`).
+- **Where does `transcript.jsonl` live?** — In Phase 1, it doesn't exist (Phase 2 adds it). Phase 1 transcripts are in-memory only. Phase 2 writes to the resolved citizen `cwd`; after Phase 2a, seed TOML uses `cwd = "clare"` and the default resolved path is `<BABS_ROOT>/workspaces/clare/transcript.jsonl`.
 - **What if Phase 0's detach/reattach validation fails?** — Phase 1 cannot start. Hardline ADR `BAB-1103` would need to switch to Method B (polling fallback), and this PRP rewrites accordingly.
 
 ---
@@ -228,3 +228,4 @@ Deviations from the original PRP:
 | 2026-05-03 | Trinity 2nd-round fixes: split Flywheel Test into Gate A (scripted sentinel) + Gate B (dogfood); reordered Implementation Plan so TOML parsing (Day 2-3) precedes Citizen.Lifecycle (Day 4-5); removed Phase 1 SQLite reference (Phase 1 reads citizen.toml only); added reload watcher day (per `BAB-1110` reload mechanism); fixed ReattachScanner-vs-DynamicSupervisor race; added 4KB PubSub chunk constraint reference; clarified two-seed-citizens as v0.1 validation requirement | Claude Code |
 | 2026-05-04 | Phase 1 pre-implementation cleanup: replace alex/morgan with clare/dylan; add synthetic sentinel Gate A; move citizen config to `citizens/citizen-<slug>.toml`; move reload watcher out of `:babs_citizens` as `Babs.DevReloader`; clarify Channel/PubSub no-duplicate-subscribe rule; clarify reload detach-vs-stop kill semantics | Codex |
 | 2026-05-05 | Phase 1 implemented and closeout recorded: Gate A passed, Gate B dogfood passed via Clare transcript commit, post-gate hot-reload compatibility fix added, and validation suite passed | Codex |
+| 2026-05-05 | Phase 2a follow-up: clarify that transcript paths use resolved cwd under configurable workspace root | Codex |

@@ -52,7 +52,7 @@ defmodule Babs.Citizens.ReattachScannerTest do
     display_name = "Scan Test"
     cli = "/bin/zsh"
     cli_args = ["-f"]
-    cwd = "workspaces/#{slug}"
+    cwd = "#{slug}"
     """)
 
     on_exit(fn -> Babs.Citizens.Lifecycle.stop_citizen(slug) end)
@@ -72,7 +72,7 @@ defmodule Babs.Citizens.ReattachScannerTest do
     display_name = "Scan Reattach"
     cli = "/bin/zsh"
     cli_args = ["-f"]
-    cwd = "workspaces/#{slug}"
+    cwd = "#{slug}"
     """)
 
     config = %Babs.Citizens.CitizenConfig{
@@ -109,7 +109,7 @@ defmodule Babs.Citizens.ReattachScannerTest do
     slug = "no-tmux"
     display_name = "No Tmux"
     cli = "/bin/zsh"
-    cwd = "workspaces/no-tmux"
+    cwd = "no-tmux"
     """)
 
     with_tmux_binary("/definitely/missing/babs-tmux", fn ->

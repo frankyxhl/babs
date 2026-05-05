@@ -1,7 +1,7 @@
 # REF-1001: Architecture Overview
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-04
 **Status:** Active
 
@@ -20,7 +20,7 @@ This document was authored under the original 5-phase scope. The v0.1 redefiniti
 | Coordination primitive | `BAB-1111` (unified Ticket replaces Mission/Assignment) |
 | AI CLI choice | `BAB-1112` (multi-CLI from day 1) |
 | Vocabulary | `BAB-1002` v0.1 section |
-| Naming for `*.bob/` | Legacy/deferred per `BAB-1002`; Phase 1 uses `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/` |
+| Naming for `*.bob/` | Legacy/deferred per `BAB-1002`; current runtime uses `citizens/citizen-<slug>.toml` plus resolved Citizen workspaces under `workspace_root` |
 
 The amendments are **substantial** — the build-phase sequencing, OTP application structure, cross-machine model, coordination primitive, and Phase 1 runtime layout have all changed. The doc remains as historical context plus the still-valid pieces (Citizen abstraction, supervision-tree philosophy, BEAM-native intra-node coordination). Legacy `*.bob/` naming below is not the Phase 1 runtime layout. A full rewrite will be done by Babs Citizens themselves post-Phase 1.
 
@@ -182,3 +182,4 @@ Babs is a from-scratch project. The build is sequenced to surface high-risk bets
 | 2026-05-04 | Trinity review follow-up: align PubSub topic to authoritative `pane:<slug>` terminology | Codex |
 | 2026-05-04 | Trinity review fix: mark `*.bob/` as legacy/deferred in the v0.1 amendments banner and point Phase 1 to `citizens/citizen-<slug>.toml` plus `workspaces/<slug>/` | Codex |
 | 2026-05-04 | Trinity review fix: replace implementation-facing legacy `PaneSession`/`Tmux.Core`/direct-Channel wording with `Hardline.Pane`, `Hardline`, and PubSub `pane:<slug>` semantics | Codex |
+| 2026-05-05 | Phase 2a: clarify that Citizen workspace paths are resolved under configurable `workspace_root`, with repo-local `workspaces/<slug>/` only the default resolved path | Codex |

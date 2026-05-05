@@ -3,5 +3,5 @@ slug = "sentinel"
 display_name = "Sentinel"
 cli = "/bin/zsh"
 cli_args = ["-f"]
-cwd = "workspaces/sentinel"
+cwd = "sentinel"
 description = "Deterministic shell citizen for Phase 1 Gate A reload validation"

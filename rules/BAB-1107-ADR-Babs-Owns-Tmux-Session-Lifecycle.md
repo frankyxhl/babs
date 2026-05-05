@@ -1,7 +1,7 @@
 # ADR-1107: Babs Owns Tmux Session Lifecycle
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-04
 **Status:** Accepted
 **Supersedes:** Earlier "operator-managed tmux" framing implicit in `BAB-1001` (pre-2026-05-03)
@@ -21,7 +21,7 @@ Once Babs creates the session, it follows that Babs also destroys it, monitors i
 | Lifecycle event | Babs action |
 |-----------------|-------------|
 | **Citizen `start`** | Read `citizens/citizen-<slug>.toml`; `tmux new-session -d -s babs-<slug> -c <cwd>` (detached, `babs-` prefix per naming convention below); spawn AI CLI via `erlexec`; open Hardline.Pane GenServer; ready |
-| **Citizen `stop`** | Polite TERM to AI CLI process → 2s grace → `tmux kill-session -t babs-<slug>`; mark stopped in Phase 1 memory / Phase 3 SQLite; configured `cwd` such as `workspaces/<slug>/` is **preserved** |
+| **Citizen `stop`** | Polite TERM to AI CLI process → 2s grace → `tmux kill-session -t babs-<slug>`; mark stopped in Phase 1 memory / Phase 3 SQLite; resolved workspace `cwd` such as `<workspace_root>/<slug>/` is **preserved** |
 | **Citizen `restart`** | `stop` + `start` atomic, with same cwd and same AI CLI config |
 | **Babs node restart** | On `:babs_citizens` startup, scan tmux for sessions matching `^babs-` prefix; reattach via fresh `erlexec` port to existing detached sessions; resume from where the AI was left off (see `BAB-1110`) |
 | **`:babs_citizens` reload / BEAM restart** | Detach BEAM-side erlexec/GenServer only; tmux session and AI CLI process keep running; ReattachScanner reacquires them. This path MUST NOT kill tmux. |
@@ -62,6 +62,8 @@ All Babs-managed tmux sessions are prefixed `babs-<slug>` (e.g. `babs-clare`, `b
 - `BAB-2201` Phase 1 SEED must include start + stop + restart capability from day 1 (previously could have been deferred). Updated.
 - Operator who runs their own tmux must accept the `babs-` prefix discipline — Babs will not touch un-prefixed sessions.
 - Phase 1 uses `citizens/citizen-<slug>.toml` + configured `cwd` as the lifecycle source of truth. SQLite becomes authoritative in Phase 3, not Phase 1.
+- Phase 2a resolves relative `cwd` values under configurable `workspace_root`;
+  absolute `cwd` values remain exact overrides.
 
 ## Change History
 
@@ -70,3 +72,4 @@ All Babs-managed tmux sessions are prefixed `babs-<slug>` (e.g. `babs-clare`, `b
 | 2026-05-03 | Initial decision; supersedes earlier "operator-managed" framing | Claude Code |
 | 2026-05-03 | Trinity 2nd-round fix: tmux session naming in lifecycle table corrected to use `babs-<name>` prefix (was missing prefix in `start`/`stop` rows; inconsistent with naming-convention section and `BAB-1110`/`BAB-1112`) | Claude Code |
 | 2026-05-04 | Phase 1 cleanup: replace `.bob`/SQLite Phase 1 assumptions with `citizens/citizen-<slug>.toml` + configured workspaces, clarify `babs-<slug>` examples, and make reload/BEAM restart detach-only while explicit stop kills tmux | Codex |
+| 2026-05-05 | Phase 2a: clarify that lifecycle preserves resolved workspace cwd under configurable `workspace_root`, while absolute cwd remains an override | Codex |

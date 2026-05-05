@@ -1,5 +1,7 @@
 defmodule Babs.Citizens.Citizen.ConfigTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
+
+  import ExUnit.CaptureLog
 
   alias Babs.Citizens.Citizen.Config
 
@@ -17,7 +19,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     display_name = "Tester"
     cli = "/bin/zsh"
     cli_args = ["-f"]
-    cwd = "workspaces/tester"
+    cwd = "tester"
     description = "Test citizen"
 
     [env]
@@ -49,12 +51,186 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     slug = "reader"
     display_name = "Reader"
     cli = "/bin/zsh"
-    cwd = "workspaces/reader"
+    cwd = "reader"
     """)
 
     assert {:ok, config} = Config.load_slug("reader", root: root)
     assert config.path == Path.join(root, "citizens/citizen-reader.toml")
     assert config.cwd == Path.join(root, "workspaces/reader")
+  end
+
+  test "custom workspace_root resolves relative cwd outside the application root" do
+    root = tmp_root()
+    workspace_root = Path.join(System.tmp_dir!(), "babs-workspace-root-#{unique()}")
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    File.write!(Path.join(root, "citizens/citizen-sentinel.toml"), """
+    id = "BAB-CIT-SENTINEL"
+    slug = "sentinel"
+    display_name = "Sentinel"
+    cli = "/bin/zsh"
+    cwd = "sentinel"
+    """)
+
+    assert {:ok, config} =
+             Config.load_slug("sentinel", root: root, workspace_root: workspace_root)
+
+    assert config.path == Path.join(root, "citizens/citizen-sentinel.toml")
+    assert config.cwd == Path.join(workspace_root, "sentinel")
+    assert File.dir?(Path.join(workspace_root, "sentinel"))
+    refute File.exists?(Path.join(root, "workspaces/sentinel"))
+  end
+
+  test "relative workspace_root values expand from root, not process cwd" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-relative.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-RELATIVE"
+    slug = "relative"
+    display_name = "Relative"
+    cli = "/bin/zsh"
+    cwd = "relative"
+    """)
+
+    assert {:ok, config} = Config.load_file(path, root: root, workspace_root: "state/workspaces")
+    assert config.cwd == Path.join(root, "state/workspaces/relative")
+  end
+
+  test "app config workspace_root is used when no option override is supplied" do
+    root = tmp_root()
+    workspace_root = Path.join(System.tmp_dir!(), "babs-app-workspace-root-#{unique()}")
+    original = Application.get_env(:babs_citizens, :workspace_root)
+
+    try do
+      Application.put_env(:babs_citizens, :workspace_root, workspace_root)
+      File.mkdir_p!(Path.join(root, "citizens"))
+
+      path = Path.join(root, "citizens/citizen-app-config.toml")
+
+      File.write!(path, """
+      id = "BAB-CIT-APP-CONFIG"
+      slug = "app-config"
+      display_name = "App Config"
+      cli = "/bin/zsh"
+      cwd = "app-config"
+      """)
+
+      assert {:ok, config} = Config.load_file(path, root: root)
+      assert config.cwd == Path.join(workspace_root, "app-config")
+    after
+      if original do
+        Application.put_env(:babs_citizens, :workspace_root, original)
+      else
+        Application.delete_env(:babs_citizens, :workspace_root)
+      end
+    end
+  end
+
+  test "invalid app config workspace_root falls back to default root with warning" do
+    root = tmp_root()
+    original = Application.get_env(:babs_citizens, :workspace_root)
+
+    try do
+      Application.put_env(:babs_citizens, :workspace_root, 123)
+      File.mkdir_p!(Path.join(root, "citizens"))
+
+      path = Path.join(root, "citizens/citizen-invalid-workspace-root.toml")
+
+      File.write!(path, """
+      id = "BAB-CIT-INVALID-WORKSPACE-ROOT"
+      slug = "invalid-workspace-root"
+      display_name = "Invalid Workspace Root"
+      cli = "/bin/zsh"
+      cwd = "invalid-workspace-root"
+      """)
+
+      log =
+        capture_log(fn ->
+          assert {:ok, config} = Config.load_file(path, root: root)
+          assert config.cwd == Path.join(root, "workspaces/invalid-workspace-root")
+        end)
+
+      assert log =~ "workspace_root 123 is not a string"
+    after
+      if original do
+        Application.put_env(:babs_citizens, :workspace_root, original)
+      else
+        Application.delete_env(:babs_citizens, :workspace_root)
+      end
+    end
+  end
+
+  test "absolute cwd bypasses workspace_root" do
+    root = tmp_root()
+    workspace_root = Path.join(System.tmp_dir!(), "babs-workspace-root-#{unique()}")
+    absolute_cwd = Path.join(System.tmp_dir!(), "babs-absolute-cwd-#{unique()}")
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-absolute.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-ABSOLUTE"
+    slug = "absolute"
+    display_name = "Absolute"
+    cli = "/bin/zsh"
+    cwd = "#{absolute_cwd}"
+    """)
+
+    assert {:ok, config} = Config.load_file(path, root: root, workspace_root: workspace_root)
+    assert config.cwd == absolute_cwd
+    assert File.dir?(absolute_cwd)
+    refute File.exists?(Path.join(workspace_root, "absolute"))
+  end
+
+  test "legacy workspaces-prefixed cwd values warn after workspace_root split" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-legacy.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-LEGACY"
+    slug = "legacy"
+    display_name = "Legacy"
+    cli = "/bin/zsh"
+    cwd = "workspaces/legacy"
+    """)
+
+    log =
+      capture_log(fn ->
+        assert {:ok, config} = Config.load_file(path, root: root)
+        assert config.cwd == Path.join(root, "workspaces/workspaces/legacy")
+      end)
+
+    assert log =~ "uses legacy cwd"
+    assert log =~ "workspaces/legacy"
+  end
+
+  test "legacy workspaces-prefixed cwd warning allows leading dot segment" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-legacy-dot.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-LEGACY-DOT"
+    slug = "legacy-dot"
+    display_name = "Legacy Dot"
+    cli = "/bin/zsh"
+    cwd = "./workspaces/legacy-dot"
+    """)
+
+    log =
+      capture_log(fn ->
+        assert {:ok, config} = Config.load_file(path, root: root)
+        assert config.cwd == Path.join(root, "workspaces/workspaces/legacy-dot")
+      end)
+
+    assert log =~ "uses legacy cwd"
+    assert log =~ "./workspaces/legacy-dot"
   end
 
   test "reports missing required keys and missing environment interpolation" do
@@ -81,7 +257,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     slug = "env"
     display_name = "Env"
     cli = "/bin/zsh"
-    cwd = "workspaces/env"
+    cwd = "env"
 
     [env]
     TOKEN = "${BABS_DOES_NOT_EXIST}"
@@ -102,7 +278,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     slug = "env-value"
     display_name = "Env Value"
     cli = "/bin/zsh"
-    cwd = "workspaces/env-value"
+    cwd = "env-value"
 
     [env]
     GOOD_NUMBER = 1
@@ -125,7 +301,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     display_name = "Args"
     cli = "/bin/zsh"
     cli_args = "-f"
-    cwd = "workspaces/args"
+    cwd = "args"
     """)
 
     assert {:error, {:invalid_cli_args, "-f"}} =
@@ -139,7 +315,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     display_name = "Mixed"
     cli = "/bin/zsh"
     cli_args = ["-f", 1]
-    cwd = "workspaces/mixed"
+    cwd = "mixed"
     """)
 
     assert {:error, {:invalid_cli_args, ["-f", 1]}} =
@@ -162,7 +338,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     """)
 
     assert {:error, {:cwd_mkdir_failed, failed_path, reason}} =
-             Config.load_file(path, root: root)
+             Config.load_file(path, root: root, workspace_root: root)
 
     assert failed_path == Path.join(root, "blocked/workspace")
     assert reason in [:enotdir, :eexist, :eacces]
@@ -177,7 +353,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     slug = "good"
     display_name = "Good"
     cli = "/bin/zsh"
-    cwd = "workspaces/good"
+    cwd = "good"
     """)
 
     File.write!(Path.join(root, "citizens/citizen-bad.toml"), "not toml ===")
@@ -198,4 +374,6 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
   defp tmp_root do
     Path.join(System.tmp_dir!(), "babs-config-test-#{System.unique_integer([:positive])}")
   end
+
+  defp unique, do: System.unique_integer([:positive])
 end

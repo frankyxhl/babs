@@ -3,5 +3,5 @@ slug = "clare"
 display_name = "Clare"
 cli = "claude"
 cli_args = []
-cwd = "workspaces/clare"
+cwd = "clare"
 description = "Claude Code seed citizen"

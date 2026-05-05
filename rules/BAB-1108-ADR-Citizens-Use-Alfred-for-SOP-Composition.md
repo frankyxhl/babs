@@ -1,7 +1,7 @@
 # ADR-1108: Citizens Use Alfred for SOP Composition (Convention Only)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-03
 **Status:** Accepted
 
@@ -9,7 +9,7 @@
 
 ## ⚠️ v0.1 Layout Amendment (2026-05-04)
 
-The convention-only Alfred decision remains accepted. Current Phase 1 Citizen configuration lives in `citizens/citizen-<slug>.toml`, and working files live in `workspaces/<slug>/` per `BAB-1002`, `BAB-1112`, and `BAB-2201`. Any legacy `<name>.bob/` references in this ADR should be read as historical examples of "Citizen-owned prompt/config text," not as the Phase 1 file layout.
+The convention-only Alfred decision remains accepted. Current Citizen configuration lives in `citizens/citizen-<slug>.toml`, and working files live under the resolved `workspace_root` per `BAB-1002`, `BAB-1112`, and `BAB-2209`. Any legacy `<name>.bob/` references in this ADR should be read as historical examples of "Citizen-owned prompt/config text," not as the current runtime file layout.
 
 ---
 
@@ -74,3 +74,4 @@ If, after meaningful production use, we discover that Citizens consistently fail
 |------|--------|----|
 | 2026-05-03 | Initial decision; convention-only Alfred integration | Claude Code |
 | 2026-05-04 | Add v0.1 layout amendment for `citizens/citizen-<slug>.toml` + `workspaces/<slug>/`; update example seed name to Dylan | Codex |
+| 2026-05-05 | Phase 2a: update layout amendment to describe resolved `workspace_root` instead of hard-coded repo-local workspaces | Codex |

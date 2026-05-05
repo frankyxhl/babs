@@ -32,6 +32,7 @@ RUNTIME_ROOT = (
     .expanduser()
     .resolve()
 )
+WORKSPACE_ROOT = None
 PANE_SOURCE = ROOT / "apps/babs_citizens/lib/babs_citizens/hardline/pane.ex"
 WEB_SOURCE = ROOT / "apps/babs/lib/babs_web/channels/pane_channel.ex"
 SERVER_LOG = ROOT / "logs/bdd-server.log"
@@ -184,6 +185,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_transcript_replay_survives_tab_restart,
         ),
         Scenario(
+            name="configured workspace root stores transcript outside app root",
+            given="BABS_WORKSPACE_ROOT is configured",
+            when="sentinel produces output while the browser tab is closed",
+            then="the transcript replay marker is read from the configured workspace root",
+            run=scenario_configured_workspace_root_stores_transcript,
+        ),
+        Scenario(
             name="terminal fills viewport",
             given="a terminal page is open",
             when="the viewport is resized",
@@ -249,6 +257,33 @@ def scenario_transcript_replay_survives_tab_restart(context: BabsBddContext) -> 
         lambda: transcript_contains(slug, marker),
         timeout=10,
     )
+
+    context.connect_citizen(slug)
+    wait_until(
+        f"terminal output to replay {marker}",
+        lambda: marker in terminal_text(),
+        timeout=15,
+    )
+
+
+def scenario_configured_workspace_root_stores_transcript(context: BabsBddContext) -> None:
+    if not os.environ.get("BABS_WORKSPACE_ROOT"):
+        raise SkipScenario("BABS_WORKSPACE_ROOT is not set")
+
+    slug = "sentinel"
+    marker = unique_marker("BABS_BDD_WORKSPACE_ROOT")
+
+    context.connect_citizen(slug)
+    context.close_test_tab()
+    send_tmux_output(slug, marker)
+    wait_until(
+        f"custom workspace transcript to contain {marker}",
+        lambda: transcript_contains(slug, marker),
+        timeout=10,
+    )
+
+    transcript = transcript_path(slug)
+    assert str(transcript).startswith(str(workspace_root()))
 
     context.connect_citizen(slug)
     wait_until(
@@ -387,7 +422,7 @@ def send_tmux_output(slug: str, marker: str) -> None:
 
 
 def transcript_contains(slug: str, marker: str) -> bool:
-    transcript = RUNTIME_ROOT / "workspaces" / slug / "transcript.jsonl"
+    transcript = transcript_path(slug)
 
     if not transcript.exists():
         return False
@@ -405,6 +440,30 @@ def transcript_contains(slug: str, marker: str) -> bool:
             return True
 
     return False
+
+
+def transcript_path(slug: str) -> Path:
+    return workspace_root() / slug / "transcript.jsonl"
+
+
+def workspace_root() -> Path:
+    global WORKSPACE_ROOT  # noqa: PLW0603 - cached helper avoids recomputing paths in polling loops.
+
+    if WORKSPACE_ROOT is not None:
+        return WORKSPACE_ROOT
+
+    # Keep this in sync with Babs.Citizens.Citizen.Config.workspace_root/2.
+    raw = os.environ.get("BABS_WORKSPACE_ROOT")
+
+    if raw and raw.strip():
+        path = Path(raw.strip()).expanduser()
+        if not path.is_absolute():
+            path = RUNTIME_ROOT / path
+    else:
+        path = RUNTIME_ROOT / "workspaces"
+
+    WORKSPACE_ROOT = path.resolve()
+    return WORKSPACE_ROOT
 
 
 def touch_source(path: Path) -> None:

@@ -1,7 +1,7 @@
 # ADR-1112: Multi-AI-CLI Citizen Configuration
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
+**Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-04
 **Status:** Accepted
 
@@ -35,7 +35,7 @@ slug = "clare"
 display_name = "Clare"
 cli = "claude"                  # required: the binary to invoke
 cli_args = ["--continue"]       # optional: argv passed to the CLI
-cwd = "workspaces/clare"        # required: working directory for tmux session
+cwd = "clare"                   # required: workspace directory name under workspace_root
 description = "Claude Code seed citizen"
 
 [env]
@@ -58,20 +58,21 @@ slug = "sentinel"
 display_name = "Sentinel"
 cli = "/bin/zsh"
 cli_args = ["-f"]
-cwd = "workspaces/sentinel"
+cwd = "sentinel"
 description = "Deterministic shell citizen for reload validation"
 ```
 
-### Spawn Flow (Phase 1)
+### Spawn Flow (Phase 1+)
 
 1. Read `citizens/citizen-<slug>.toml`
 2. Resolve `[env]` interpolations from Babs node environment
-3. `tmux new-session -d -s babs-<slug> -c <cwd>` (detached)
-4. `erlexec` opens a port that runs the citizen's CLI inside the tmux pane:
+3. Resolve `cwd` under configurable `workspace_root` unless it is absolute
+4. `tmux new-session -d -s babs-<slug> -c <resolved-cwd>` (detached)
+5. `erlexec` opens a port that runs the citizen's CLI inside the tmux pane:
    - Process: `<cli>` with `<cli_args>`
-   - Working dir: `<cwd>`
+   - Working dir: `<resolved-cwd>`
    - Env: merged (Babs node env + `[env]` overrides)
-5. `Hardline.Pane` GenServer spawned to manage the port; PubSub topic `pane:<slug>` published
+6. `Hardline.Pane` GenServer spawned to manage the port; PubSub topic `pane:<slug>` published
 
 ### CLI Compatibility Matrix (v0.1 day-1 expectations)
 
@@ -124,3 +125,4 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 |------|--------|----|
 | 2026-05-03 | Initial decision; multi-CLI agnostic from Phase 1 | Claude Code |
 | 2026-05-04 | Phase 1 cleanup: move config to `citizens/citizen-<slug>.toml`, add required `id`/`slug`/`cwd`, switch examples to Clare and deterministic Sentinel, and defer SQLite failure state to Phase 3 | Codex |
+| 2026-05-05 | Phase 2a: migrate examples to `cwd = "<slug>"` and clarify that spawn uses resolved cwd under configurable `workspace_root` | Codex |

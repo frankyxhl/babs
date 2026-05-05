@@ -3,5 +3,5 @@ slug = "dylan"
 display_name = "Dylan"
 cli = "codex"
 cli_args = []
-cwd = "workspaces/dylan"
+cwd = "dylan"
 description = "Codex seed citizen"
