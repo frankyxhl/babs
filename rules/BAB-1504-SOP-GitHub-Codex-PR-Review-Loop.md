@@ -3,7 +3,21 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-05
-**Status:** Active
+**Status:** Deprecated
+**Replaced by:** COR-1615 (GitHub App PR Review Bot Loop), then COR-1612
+(Respond To PR Review Comments)
+
+---
+
+## v0.1 Status - Deprecated (2026-05-05)
+
+This Babs-specific SOP was promoted into the package-level `COR-1615` workflow.
+Do not use `BAB-1504` as the active PR review loop. Use `COR-1615` to trigger,
+poll, and match GitHub App review bot results to the current PR head; then use
+`COR-1612` to classify and address fetched review findings.
+
+Keep this document only as historical source material for why the Babs workflow
+needed the promoted COR procedure.
 
 ---
 
@@ -214,3 +228,4 @@ The important fields are `reviewThreads[].isOutdated`,
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-05 | Initial version documenting GitHub Codex review triggers, reactions, polling, thread checks, and fix/push/review loop | Codex |
+| 2026-05-05 | Deprecated after promotion to package-level `COR-1615`; active PR review findings handling now continues through `COR-1612` | Codex |

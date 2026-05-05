@@ -136,8 +136,10 @@ Use `BAB-1503` after the phase scope is agreed or when the operator asks to
 start/continue a roadmap phase. It captures the expected loop for Babs phases:
 write/update PRP or CHG, Trinity-review the plan, implement with test pressure,
 run coverage/BDD/E2E/phase gates, Trinity-review code, then create the PR using
-the correct GitHub identity. Once the PR is open, use `BAB-1504` for the GitHub
-Codex review trigger/status/fix loop.
+the correct GitHub identity. Once the PR is open, use `COR-1615` for the GitHub
+App PR review bot trigger/status/current-head loop, then `COR-1612` for fetched
+review findings. `BAB-1504` is deprecated historical Babs source material for
+the promoted COR workflow.
 
 ---
 
@@ -209,3 +211,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-05 | Record Elena as a post-Phase-1 experimental GitHub Copilot CLI seed under the Phase 1 seed routing note | Codex |
 | 2026-05-05 | Add `BAB-1503` as the standard roadmap phase delivery route | Codex |
 | 2026-05-05 | Route open-PR GitHub Codex review mechanics through `BAB-1504` | Codex |
+| 2026-05-05 | Replace active open-PR review routing with promoted `COR-1615` plus `COR-1612`; keep `BAB-1504` as deprecated source material | Codex |
