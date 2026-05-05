@@ -5,6 +5,7 @@ import {
   allowedInput,
   connectionStatus,
   decodeBase64Bytes,
+  decodeTerminalOutput,
   printableAsciiPaste,
   resizePayload
 } from "../../apps/babs/priv/static/js/terminal_core.js";
@@ -29,6 +30,16 @@ describe("terminal_core allowedInput", () => {
 describe("terminal_core browser helpers", () => {
   it("decodes base64 channel payloads into bytes", () => {
     assert.deepEqual(Array.from(decodeBase64Bytes("QkFCUw==")), [66, 65, 66, 83]);
+  });
+
+  it("streams split UTF-8 terminal output across channel payloads", () => {
+    const decoder = new TextDecoder();
+    const bytes = Buffer.from("你");
+    const first = Buffer.from(bytes.subarray(0, 1)).toString("base64");
+    const rest = Buffer.from(bytes.subarray(1)).toString("base64");
+
+    assert.equal(decodeTerminalOutput(decoder, first), "");
+    assert.equal(decodeTerminalOutput(decoder, rest), "你");
   });
 
   it("builds resize payloads from terminal dimensions", () => {

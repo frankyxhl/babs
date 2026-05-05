@@ -1,5 +1,5 @@
 import { Socket } from "/js/phoenix.mjs";
-import { allowedInput, connectionStatus, decodeBase64Bytes, resizePayload } from "/js/terminal_core.js";
+import { allowedInput, connectionStatus, decodeTerminalOutput, resizePayload } from "/js/terminal_core.js";
 
 function applyConnectionStatus(status, state, slug) {
   const next = connectionStatus(state, slug);
@@ -49,7 +49,7 @@ export function bootTerminal(options = {}) {
   const channel = socket.channel(`pane:${root.dataset.slug}`, {});
 
   channel.on("output", (payload) => {
-    terminal.write(decoder.decode(decodeBase64Bytes(payload.base64)));
+    terminal.write(decodeTerminalOutput(decoder, payload.base64));
   });
 
   channel

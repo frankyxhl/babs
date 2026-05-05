@@ -44,6 +44,10 @@ export function decodeBase64Bytes(base64) {
   throw new Error("No base64 decoder available");
 }
 
+export function decodeTerminalOutput(decoder, base64) {
+  return decoder.decode(decodeBase64Bytes(base64), { stream: true });
+}
+
 export function resizePayload(terminal) {
   return { cols: terminal.cols, rows: terminal.rows };
 }

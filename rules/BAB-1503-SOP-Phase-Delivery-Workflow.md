@@ -163,7 +163,9 @@ A completed phase delivery produces:
     Wait for GitHub/Codex review when requested. For each review round, inspect
     comments, fix actionable blockers, rerun relevant validation, push, and keep
     monitoring until no new required changes remain or the operator pauses the
-    loop.
+    loop. When actively monitoring an open PR, poll every few minutes rather
+    than assuming silence means completion. After every push, resume monitoring
+    the new head commit until reviews/checks settle.
 
 14. **Close out after merge.**
     After the operator merges, pull `main`, verify the local branch state, update
@@ -222,3 +224,4 @@ A completed phase delivery produces:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-05 | Initial version capturing the Phase 0a-1a plan-review, TDD/BDD, validation, Trinity code-review, and PR workflow | Codex |
+| 2026-05-05 | Clarify active PR monitoring cadence: poll every few minutes and resume after each push until reviews/checks settle | Codex |
