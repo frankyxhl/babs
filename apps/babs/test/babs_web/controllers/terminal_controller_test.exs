@@ -5,11 +5,29 @@ defmodule BabsWeb.TerminalControllerTest do
 
   @endpoint BabsWeb.Endpoint
 
-  test "root redirects to sentinel terminal" do
+  test "root redirects to citizens index" do
     conn = get(build_conn(), "/")
 
     assert conn.status == 302
-    assert Plug.Conn.get_resp_header(conn, "location") == ["/citizens/sentinel"]
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/citizens"]
+  end
+
+  test "root redirect preserves socket token" do
+    conn = get(build_conn(), "/?socket_token=route-token")
+
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/citizens?socket_token=route-token"]
+  end
+
+  test "root redirect ignores malformed nested socket token" do
+    conn = get(build_conn(), "/?socket_token[a]=route-token")
+
+    assert conn.status == 302
+    assert Plug.Conn.get_resp_header(conn, "location") == ["/citizens"]
+  end
+
+  test "citizens head route returns index existence without rendering" do
+    assert head(build_conn(), "/citizens").status == 200
   end
 
   test "missing citizen returns a plain text 404" do
@@ -31,6 +49,31 @@ defmodule BabsWeb.TerminalControllerTest do
     assert conn.resp_body =~ ~s(data-slug="#{slug}")
     assert conn.resp_body =~ ~s(data-socket-token="secret")
     assert conn.resp_body =~ "/js/terminal_boot.js"
+  end
+
+  test "existing citizen ignores malformed nested socket token" do
+    slug = "controller-token-test-#{System.unique_integer([:positive])}"
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
+
+    conn = get(build_conn(), "/citizens/#{slug}?socket_token[a]=secret")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(data-testid="terminal")
+    assert conn.resp_body =~ ~s(data-slug="#{slug}")
+    assert conn.resp_body =~ ~s(data-socket-token="")
+  end
+
+  test "existing citizen can render pure full terminal mode" do
+    slug = "controller-full-test-#{System.unique_integer([:positive])}"
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
+
+    conn = get(build_conn(), "/citizens/#{slug}?socket_token=secret&full=1")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(data-testid="terminal")
+    assert conn.resp_body =~ ~s(data-slug="#{slug}")
+    assert conn.resp_body =~ ~s(data-socket-token="secret")
+    refute conn.resp_body =~ ~s(data-testid="terminal-chrome")
   end
 
   test "existing new citizen keeps /citizens/new terminal URL" do

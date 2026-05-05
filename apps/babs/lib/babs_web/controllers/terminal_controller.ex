@@ -5,6 +5,7 @@ defmodule BabsWeb.TerminalController do
   import Phoenix.LiveView.Controller
 
   alias Babs.Citizens.Lifecycle
+  alias BabsWeb.CitizenPath
 
   def init(action), do: action
 
@@ -13,18 +14,17 @@ defmodule BabsWeb.TerminalController do
   def index(conn, params) do
     conn = fetch_query_params(conn)
 
-    location =
-      case socket_token(conn, params) do
-        token when is_binary(token) and token != "" ->
-          "/citizens/sentinel?socket_token=#{URI.encode(token)}"
-
-        _ ->
-          "/citizens/sentinel"
-      end
-
     conn
-    |> put_resp_header("location", location)
+    |> put_resp_header("location", CitizenPath.index(socket_token(conn, params)))
     |> send_resp(302, "")
+  end
+
+  def citizens(conn, params) do
+    conn = fetch_query_params(conn)
+
+    live_render(conn, BabsWeb.CitizensLive,
+      session: %{"socket_token" => socket_token(conn, params)}
+    )
   end
 
   def show(conn, %{"slug" => slug} = params) do
@@ -32,7 +32,7 @@ defmodule BabsWeb.TerminalController do
 
     case Lifecycle.lookup(slug) do
       {:ok, _pid} ->
-        send_terminal(conn, slug, socket_token(conn, params))
+        send_terminal(conn, slug, socket_token(conn, params), full?(conn, params))
 
       {:error, :not_found} ->
         conn
@@ -46,7 +46,7 @@ defmodule BabsWeb.TerminalController do
 
     case Lifecycle.lookup("new") do
       {:ok, _pid} ->
-        send_terminal(conn, "new", socket_token(conn, params))
+        send_terminal(conn, "new", socket_token(conn, params), full?(conn, params))
 
       {:error, :not_found} ->
         live_render(conn, BabsWeb.NewCitizenLive,
@@ -62,13 +62,25 @@ defmodule BabsWeb.TerminalController do
     end
   end
 
-  defp send_terminal(conn, slug, socket_token) do
+  def citizens_head(conn, _params), do: send_resp(conn, 200, "")
+
+  defp send_terminal(conn, slug, socket_token, full?) do
     live_render(conn, BabsWeb.TerminalLive,
-      session: %{"slug" => slug, "socket_token" => socket_token || ""}
+      session: %{"slug" => slug, "socket_token" => socket_token || "", "full?" => full?}
     )
   end
 
   defp socket_token(conn, params) do
-    Map.get(conn.query_params, "socket_token") || Map.get(params, "socket_token", "")
+    case Map.get(conn.query_params, "socket_token") || Map.get(params, "socket_token", "") do
+      token when is_binary(token) -> token
+      _token -> ""
+    end
   end
+
+  defp full?(conn, params) do
+    full?(conn.query_params) || full?(params)
+  end
+
+  defp full?(%{"full" => value}) when value in ["1", "true"], do: true
+  defp full?(_params), do: false
 end

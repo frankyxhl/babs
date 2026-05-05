@@ -1,10 +1,14 @@
-import { Socket } from "/js/phoenix.mjs";
-import { allowedInput, connectionStatus, decodeTerminalOutput, resizePayload } from "/js/terminal_core.js";
+import { Socket } from "./phoenix.mjs";
+import { allowedInput, connectionStatus, decodeTerminalOutput, resizePayload } from "./terminal_core.js";
 
 function applyConnectionStatus(status, state, slug) {
   const next = connectionStatus(state, slug);
   status.dataset.state = next.state;
   status.textContent = next.text;
+}
+
+function terminalOwnedStatus(doc, fallback) {
+  return doc.getElementById(fallback.id) ?? fallback;
 }
 
 export function bootTerminal(options = {}) {
@@ -16,6 +20,7 @@ export function bootTerminal(options = {}) {
   const FitAddonCtor = options.FitAddon ?? win.FitAddon?.FitAddon;
   const SocketCtor = options.Socket ?? Socket;
   const TextDecoderCtor = options.TextDecoder ?? win.TextDecoder;
+  let statusState = "connecting";
 
   if (!root) {
     throw new Error("terminal root not found");
@@ -24,6 +29,15 @@ export function bootTerminal(options = {}) {
   if (!status) {
     throw new Error("connection status not found");
   }
+
+  const setConnectionStatus = (state) => {
+    statusState = state;
+    applyConnectionStatus(terminalOwnedStatus(doc, status), statusState, root.dataset.slug);
+  };
+
+  doc.addEventListener?.("phx:update", () => {
+    applyConnectionStatus(terminalOwnedStatus(doc, status), statusState, root.dataset.slug);
+  });
 
   const terminal = new TerminalCtor({
     convertEol: true,
@@ -55,11 +69,11 @@ export function bootTerminal(options = {}) {
   channel
     .join()
     .receive("ok", () => {
-      applyConnectionStatus(status, "connected", root.dataset.slug);
+      setConnectionStatus("connected");
       terminal.writeln("\r\n[babs connected]\r\n");
     })
     .receive("error", (reason) => {
-      applyConnectionStatus(status, "error", root.dataset.slug);
+      setConnectionStatus("error");
       terminal.writeln(`\r\n[babs join failed: ${JSON.stringify(reason)}]\r\n`);
     });
 
