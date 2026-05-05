@@ -33,6 +33,18 @@ defmodule BabsWeb.TerminalControllerTest do
     assert conn.resp_body =~ "/js/terminal_boot.js"
   end
 
+  test "existing new citizen keeps /citizens/new terminal URL" do
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "new", nil)
+
+    conn = get(build_conn(), "/citizens/new?socket_token=route-token")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(data-testid="terminal")
+    assert conn.resp_body =~ ~s(data-slug="new")
+    assert conn.resp_body =~ ~s(data-socket-token="route-token")
+    refute conn.resp_body =~ ~s(data-testid="new-citizen-form")
+  end
+
   test "head returns citizen existence without rendering the terminal" do
     slug = "head-test-#{System.unique_integer([:positive])}"
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)

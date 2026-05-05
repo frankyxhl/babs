@@ -4,6 +4,19 @@ defmodule Babs.Citizens.CitizenConfig do
   """
 
   @enforce_keys [:id, :slug, :display_name, :cli, :cwd]
+  @type t :: %__MODULE__{
+          id: String.t(),
+          slug: String.t(),
+          display_name: String.t(),
+          cli: String.t(),
+          cwd: String.t(),
+          description: String.t() | nil,
+          cli_args: [String.t()],
+          env: %{optional(String.t()) => String.t()},
+          role: map() | String.t() | nil,
+          path: String.t() | nil
+        }
+
   defstruct [
     :id,
     :slug,

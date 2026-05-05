@@ -132,6 +132,33 @@ defmodule Babs.Citizens.CatalogTest do
     assert cwd == record.cwd
   end
 
+  test "insert_new inserts a UI-created record without mkdir, merge, or warnings tuple" do
+    missing_cwd = Path.join(tmp_root!(), "missing-workspace")
+
+    config = %CitizenConfig{
+      id: "BAB-CIT-INSERT-NEW",
+      slug: "insert-new",
+      display_name: "Insert New",
+      description: "UI-created",
+      cli: "/bin/zsh",
+      cli_args: ["-f"],
+      cwd: missing_cwd,
+      env: %{},
+      role: nil
+    }
+
+    assert {:ok, record} = Catalog.insert_new(config)
+    assert record.id == "BAB-CIT-INSERT-NEW"
+    assert record.slug == "insert-new"
+    assert record.status == "running"
+    assert record.metadata == %{}
+    assert record.is_mayor == false
+    refute File.exists?(missing_cwd)
+
+    assert {:error, %Ecto.Changeset{} = changeset} = Catalog.insert_new(config)
+    assert %{slug: ["has already been taken"]} = errors_on(changeset)
+  end
+
   test "imports do not log persisted env secret values" do
     root = tmp_root!()
     write_citizen_toml!(root, "secret-env", %{env: %{"SECRET_TOKEN" => "super-secret-value"}})
@@ -160,5 +187,9 @@ defmodule Babs.Citizens.CatalogTest do
     refute failed.last_error =~ "string-secret"
     assert failed.last_error =~ "plain-detail"
     assert failed.last_error =~ "[REDACTED]"
+  end
+
+  defp errors_on(changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {message, _opts} -> message end)
   end
 end

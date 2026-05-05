@@ -12,6 +12,7 @@ defmodule BabsWeb.Layouts do
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
         <title>Babs</title>
       </head>
       <body>

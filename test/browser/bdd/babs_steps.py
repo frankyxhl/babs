@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import signal
+import shutil
 import sqlite3
 import subprocess
 import time
@@ -92,6 +93,26 @@ class BabsBddContext:
             except subprocess.TimeoutExpired:
                 os.killpg(self.server_process.pid, signal.SIGKILL)
                 self.server_process.wait(timeout=5)
+
+    def restart_server(self) -> None:
+        if self.server_process is None:
+            raise SkipScenario("BDD did not start the Babs server, so it cannot restart it")
+
+        if self.server_process.poll() is None:
+            os.killpg(self.server_process.pid, signal.SIGTERM)
+            try:
+                self.server_process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(self.server_process.pid, signal.SIGKILL)
+                self.server_process.wait(timeout=5)
+
+        deadline = time.time() + 10
+        while time.time() < deadline and self._server_ready():
+            time.sleep(0.25)
+        if self._server_ready():
+            raise RuntimeError("Babs server did not shut down within 10s; refusing to restart")
+        self.server_process = None
+        self.ensure_server()
 
     def close_test_tab(self) -> None:
         if not self.test_target_id:
@@ -193,6 +214,20 @@ def scenarios() -> list[Scenario]:
             run=scenario_sentinel_is_registered_in_sqlite,
         ),
         Scenario(
+            name="new citizen spawn UI creates shell citizen",
+            given="/citizens/new is available",
+            when="the operator submits a unique shell citizen",
+            then="the citizen terminal opens, persists TOML and SQLite, and records transcript bytes",
+            run=scenario_new_citizen_spawn_ui_creates_shell_citizen,
+        ),
+        Scenario(
+            name="browser-created citizen survives restart",
+            given="a shell citizen was created from the browser",
+            when="the managed BDD server restarts",
+            then="boot import and SQLite reconciliation preserve the citizen terminal",
+            run=scenario_browser_created_citizen_survives_restart,
+        ),
+        Scenario(
             name="configured workspace root stores transcript outside app root",
             given="BABS_WORKSPACE_ROOT is configured",
             when="sentinel produces output while the browser tab is closed",
@@ -283,6 +318,67 @@ def scenario_sentinel_is_registered_in_sqlite(context: BabsBddContext) -> None:
     assert row["cwd"] == str(workspace_root() / "sentinel")
     assert json.loads(row["cli_args"]) == ["-f"]
     assert json.loads(row["env"]) == {}
+
+
+def scenario_new_citizen_spawn_ui_creates_shell_citizen(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-spawn")
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        marker = unique_marker("BABS_BDD_NEW_CITIZEN")
+        context.type_command_and_expect(marker, exactly_once=True)
+
+        toml = citizen_toml_path(slug)
+        assert toml.exists()
+        assert f'slug = "{slug}"' in toml.read_text()
+
+        row = sqlite_citizen_row(slug)
+        assert row is not None
+        assert row["status"] == "running"
+        assert row["cwd"] == str(workspace_root() / slug)
+        assert row["cli"] == "/bin/zsh"
+        assert json.loads(row["cli_args"]) == ["-f"]
+
+        wait_until(
+            f"new citizen transcript to contain {marker}",
+            lambda: transcript_contains(slug, marker),
+            timeout=10,
+        )
+
+        context.open_path("/citizens/new")
+        submit_new_citizen_form(slug, "Duplicate Citizen", "shell", slug)
+        wait_until(
+            "duplicate citizen error to render",
+            lambda: "Citizen TOML already exists" in js("document.body.innerText"),
+            timeout=10,
+        )
+        assert tmux_session_count(slug) == 1
+    finally:
+        cleanup_spawned_citizen(slug)
+
+
+def scenario_browser_created_citizen_survives_restart(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-restart")
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        context.close_test_tab()
+        context.restart_server()
+        toml = citizen_toml_path(slug)
+        assert toml.exists()
+        assert f'slug = "{slug}"' in toml.read_text()
+
+        row = sqlite_citizen_row(slug)
+        assert row is not None
+        assert row["status"] == "running"
+        assert row["cwd"] == str(workspace_root() / slug)
+        assert row["cli"].endswith("zsh")
+        assert json.loads(row["cli_args"]) == ["-f"]
+
+        context.connect_citizen(slug)
+        context.type_command_and_expect(unique_marker("BABS_BDD_RESTART_CREATED"), exactly_once=True)
+    finally:
+        cleanup_spawned_citizen(slug)
 
 
 def scenario_configured_workspace_root_stores_transcript(context: BabsBddContext) -> None:
@@ -440,6 +536,91 @@ def send_tmux_output(slug: str, marker: str) -> None:
     )
 
 
+def create_shell_citizen_from_ui(context: BabsBddContext, slug: str) -> None:
+    context.open_path("/citizens/new")
+    assert_element_visible('[data-testid="new-citizen-form"]', "new citizen form")
+    wait_until(
+        "LiveView socket to connect",
+        lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+        timeout=10,
+    )
+    submit_new_citizen_form(slug, f"BDD {slug}", "shell", slug)
+    wait_until(
+        f"browser to redirect to /citizens/{slug}",
+        lambda: js("window.location.pathname") == f"/citizens/{slug}",
+        timeout=15,
+    )
+    assert_element_visible('[data-testid="terminal"]', "spawned terminal root")
+    assert_element_visible(".xterm", "spawned xterm surface")
+    wait_until(
+        f"{slug} connection status to be connected",
+        lambda: js("document.querySelector('[data-testid=\"connection-status\"]')?.dataset.state || ''")
+        == "connected",
+        timeout=15,
+    )
+
+
+def submit_new_citizen_form(slug: str, display_name: str, preset: str, cwd: str) -> None:
+    values = json.dumps({"slug": slug, "display_name": display_name, "preset": preset, "cwd": cwd})
+    js(f"window.__babsBddFormValues = {values}")
+    script = """
+        const values = window.__babsBddFormValues;
+        const setValue = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (!element) throw new Error(`missing form field ${selector}`);
+          element.value = value;
+          element.dispatchEvent(new Event("input", {bubbles: true}));
+          element.dispatchEvent(new Event("change", {bubbles: true}));
+        };
+        setValue('[data-testid="citizen-slug"]', values.slug);
+        setValue('[data-testid="citizen-display-name"]', values.display_name);
+        setValue('[data-testid="citizen-cli-preset"]', values.preset);
+        setValue('[data-testid="citizen-cwd"]', values.cwd);
+        const description = document.querySelector('[data-testid="citizen-description"]');
+        if (description) description.value = "";
+        const form = document.querySelector('[data-testid="new-citizen-form"]');
+        if (!form) throw new Error("missing new citizen form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddFormValues")
+
+
+def citizen_toml_path(slug: str) -> Path:
+    return RUNTIME_ROOT / "citizens" / f"citizen-{slug}.toml"
+
+
+def cleanup_spawned_citizen(slug: str) -> None:
+    if not slug.startswith("bdd-"):
+        raise AssertionError(f"refusing to clean non-BDD citizen slug: {slug}")
+
+    subprocess.run(["tmux", "kill-session", "-t", f"babs-{slug}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    citizen_toml_path(slug).unlink(missing_ok=True)
+    shutil.rmtree(workspace_root() / slug, ignore_errors=True)
+
+    db_path = citizens_db_path()
+    if db_path.exists():
+        with sqlite3.connect(db_path) as connection:
+            connection.execute("delete from citizens where slug = ?", (slug,))
+            connection.commit()
+
+
+def tmux_session_count(slug: str) -> int:
+    result = subprocess.run(
+        ["tmux", "list-sessions", "-F", "#{session_name}"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+
+    if result.returncode != 0:
+        return 0
+
+    return sum(1 for line in result.stdout.splitlines() if line.strip() == f"babs-{slug}")
+
+
 def transcript_contains(slug: str, marker: str) -> bool:
     transcript = transcript_path(slug)
 
@@ -514,6 +695,10 @@ def touch_source(path: Path) -> None:
 
 def unique_marker(prefix: str) -> str:
     return f"{prefix}_{int(time.time() * 1000)}"
+
+
+def unique_slug(prefix: str) -> str:
+    return f"{prefix}-{int(time.time() * 1000)}"
 
 
 def wait_until(label: str, predicate, timeout: float = 10.0) -> None:
