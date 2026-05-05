@@ -123,15 +123,18 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 4 — NewCitizenLive Spawn UI
 
+**Doc**: `BAB-2212` PRP; `BAB-2213` CHG
 **Scope**: `/citizens/new` form (slug + display name + CLI preset: shell/claude/codex/droid/pi/copilot-cli + cwd field). Submit → write `citizens/citizen-<slug>.toml` + SQLite row + start citizen + redirect to `/citizens/<slug>`. `BAB-2212` owns the implementation plan. Arbitrary env editing is deferred until a secret-storage/redaction design exists.
 **Acceptance**: Spawn a new non-seed citizen via UI; it reaches interactive prompt; SQLite row + citizen TOML exist; transcript starts persisting
-**Current status**: Implemented in PR #12 and ready for operator merge. Local validation passed, including ExUnit/coverage (`:babs_citizens` 83.24%, `:babs` 77.24%), browser-harness BDD, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity fast-review passed on scoped web, citizens-core, and BDD slices after review findings were fixed. GitHub Codex PR review findings were fixed and validation was rerun, including `/citizens/new` route shadowing, cwd symlink-swap revalidation, workspace-root `/` handling, lifecycle exit failure persistence, Gate A detach hang cleanup, and socket-token preservation on create redirect. Per operator review-loop cap, no additional Codex review loop was started after the final targeted socket-token fix.
+**Current status**: Implemented and merged in PR #12. Local validation passed, including ExUnit/coverage (`:babs_citizens` 83.24%, `:babs` 77.24%), browser-harness BDD, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity fast-review passed on scoped web, citizens-core, and BDD slices after review findings were fixed. GitHub Codex PR review findings were fixed and validation was rerun, including `/citizens/new` route shadowing, cwd symlink-swap revalidation, workspace-root `/` handling, lifecycle exit failure persistence, Gate A detach hang cleanup, and socket-token preservation on create redirect. Per operator review-loop cap, no additional Codex review loop was started after the final targeted socket-token fix.
 **Estimate**: 4-6 days
 
 ### Phase 5 — Multi-Citizen Index + Tab Navigation
 
+**Doc**: `BAB-2214` PRP; `BAB-2215` CHG
 **Scope**: `/citizens` index page (list all citizens with status badges); tab navigation between active citizens; ≥3 concurrent hardlines without PTY fd leak (verified via `lsof`).
-**Acceptance**: Spawn clare / dylan / one additional citizen simultaneously; each in own tab; 30 min concurrent run, fd count stable
+**Acceptance**: Spawn or seed at least three Citizens simultaneously; each is reachable through `/citizens` index and terminal tabs; fast fd smoke shows no descriptor leak in short validation. The 30 minute concurrent fd stability run is deferred to Phase 6 or the M2 gate, after stop/start/restart lifecycle controls exist.
+**Current status**: Implemented locally on branch `codex/phase-5-prep`; PR review loop is active. `/` redirects to `/citizens`; default terminal pages use compact tab chrome while `?full=1` preserves the pure full-window terminal. Local validation passed on 2026-05-06: ExUnit/coverage (`:babs_citizens` 83.59%, `:babs` 84.10%), browser-harness BDD including the Phase 5 multi-Citizen index/tab/fd scenario, Playwright smoke, Gate A, Alfred validation, and whitespace check. GitHub Codex PR review R1/R2/R3 findings were fixed. The 30 minute fd stability run remains deferred to Phase 6/M2.
 **Estimate**: 3-5 days
 
 ### Phase 6 — Stop / Start / Restart UI

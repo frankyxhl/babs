@@ -132,16 +132,10 @@ class BabsBddContext:
         self.test_target_id = new_tab(f"{self.base_url}{path}")
         wait_for_load(timeout=20)
 
-    def connect_citizen(self, slug: str = "sentinel") -> None:
-        self.open_path(f"/citizens/{slug}")
-        assert_element_visible('[data-testid="terminal"]', "terminal root")
-        assert_element_visible(".xterm", "xterm surface")
-        wait_until(
-            f"{slug} connection status to be connected",
-            lambda: js("document.querySelector('[data-testid=\"connection-status\"]')?.dataset.state || ''")
-            == "connected",
-            timeout=15,
-        )
+    def connect_citizen(self, slug: str = "sentinel", *, full: bool = False) -> None:
+        suffix = "?full=1" if full else ""
+        self.open_path(f"/citizens/{slug}{suffix}")
+        wait_for_terminal_connection(slug)
 
     def type_command_and_expect(self, marker: str, *, exactly_once: bool = False) -> None:
         click_terminal()
@@ -167,6 +161,17 @@ class BabsBddContext:
             return status == 200
         except Exception:
             return False
+
+
+def wait_for_terminal_connection(slug: str) -> None:
+    assert_element_visible('[data-testid="terminal"]', "terminal root")
+    assert_element_visible(".xterm", "xterm surface")
+    wait_until(
+        f"{slug} connection status to be connected",
+        lambda: js("document.querySelector('[data-testid=\"connection-status\"]')?.dataset.state || ''")
+        == "connected",
+        timeout=15,
+    )
 
 
 def scenarios() -> list[Scenario]:
@@ -233,6 +238,13 @@ def scenarios() -> list[Scenario]:
             when="sentinel produces output while the browser tab is closed",
             then="the transcript replay marker is read from the configured workspace root",
             run=scenario_configured_workspace_root_stores_transcript,
+        ),
+        Scenario(
+            name="multi citizen index and tab navigation stays fd bounded",
+            given="three shell citizens are running",
+            when="the operator opens the index and switches between terminal tabs",
+            then="the rows, tabs, full mode, and fast fd thresholds stay correct",
+            run=scenario_multi_citizen_index_and_tab_navigation_stays_fd_bounded,
         ),
         Scenario(
             name="terminal fills viewport",
@@ -408,13 +420,92 @@ def scenario_configured_workspace_root_stores_transcript(context: BabsBddContext
     )
 
 
+def scenario_multi_citizen_index_and_tab_navigation_stays_fd_bounded(context: BabsBddContext) -> None:
+    slugs = [unique_slug("bdd-nav-a"), unique_slug("bdd-nav-b"), unique_slug("bdd-nav-c")]
+    beam_pid = None
+    baseline_fd = None
+
+    try:
+        for slug in slugs:
+            create_shell_citizen_from_ui(context, slug)
+            context.close_test_tab()
+
+        beam_pid = managed_beam_pid(context)
+        baseline_fd = fd_count(beam_pid)
+
+        context.open_path("/citizens")
+        assert_element_visible('[data-testid="citizens-index"]', "citizens index")
+
+        for slug in slugs:
+            assert_element_visible(f'[data-testid="citizen-row-{slug}"]', f"{slug} index row")
+            assert_element_visible(f'[data-testid="citizen-open-{slug}"]', f"{slug} open link")
+            assert_element_visible(f'[data-testid="citizen-full-{slug}"]', f"{slug} full link")
+            wait_until(
+                f"{slug} index status to be up",
+                lambda slug=slug: "up"
+                in js(f"document.querySelector('[data-testid=\"citizen-status-{slug}\"]')?.innerText || ''"),
+                timeout=10,
+            )
+
+        click_selector(f'[data-testid="citizen-open-{slugs[0]}"]')
+        wait_until(
+            f"browser to open /citizens/{slugs[0]}",
+            lambda: js("window.location.pathname") == f"/citizens/{slugs[0]}",
+            timeout=10,
+        )
+        wait_for_terminal_connection(slugs[0])
+
+        for index, slug in enumerate(slugs):
+            if index > 0:
+                click_selector(f'[data-testid="citizen-tab-{slug}"]')
+                wait_until(
+                    f"browser to switch to /citizens/{slug}",
+                    lambda slug=slug: js("window.location.pathname") == f"/citizens/{slug}",
+                    timeout=10,
+                )
+                wait_for_terminal_connection(slug)
+
+            marker = unique_marker(f"BABS_BDD_PHASE5_{slug.upper().replace('-', '_')}")
+            context.type_command_and_expect(marker, exactly_once=True)
+            wait_until(
+                f"{slug} transcript to contain {marker}",
+                lambda slug=slug, marker=marker: transcript_contains(slug, marker),
+                timeout=10,
+            )
+
+            current_fd = fd_count(beam_pid)
+            if current_fd > baseline_fd + 12:
+                raise AssertionError(f"fd count exceeded fast threshold: baseline={baseline_fd} current={current_fd}")
+
+        click_selector('[data-testid="terminal-full-link"]')
+        wait_until(
+            "browser to enter full terminal mode",
+            lambda: js("new URLSearchParams(window.location.search).get('full')") == "1",
+            timeout=10,
+        )
+        wait_for_terminal_connection(slugs[-1])
+        assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in full mode")
+
+        context.close_test_tab()
+        wait_until(
+            "fd count to return near baseline after browser cleanup",
+            lambda: fd_count(beam_pid) <= baseline_fd + 4,
+            timeout=15,
+        )
+    finally:
+        context.close_test_tab()
+        for slug in slugs:
+            cleanup_spawned_citizen(slug)
+
+
 def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
     context.connect_citizen("sentinel")
 
     try:
         before = terminal_geometry()
         assert before["width"] > 400
-        assert before["height"] > 300
+        assert before["height"] > 250
+        assert before["top"] >= 40
         assert status_geometry()["height"] <= 40
 
         cdp(
@@ -428,8 +519,16 @@ def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
 
         after = terminal_geometry()
         assert abs(after["width"] - 1200) <= 4, after
-        assert abs(after["height"] - 700) <= 4, after
+        assert after["top"] >= 40, after
+        assert abs((after["height"] + after["top"]) - after["viewport_height"]) <= 6, after
         assert rendered_xterm_row_count() > 0
+
+        context.connect_citizen("sentinel", full=True)
+        full = terminal_geometry()
+        assert abs(full["top"]) <= 2, full
+        assert abs(full["width"] - 1200) <= 4, full
+        assert abs(full["height"] - full["viewport_height"]) <= 4, full
+        assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in full mode")
     finally:
         cdp("Emulation.clearDeviceMetricsOverride")
 
@@ -470,6 +569,26 @@ def assert_element_visible(selector: str, label: str) -> None:
         raise AssertionError(f"{label} was not visible: {selector}")
 
 
+def assert_no_element(selector: str, label: str) -> None:
+    if js(f"Boolean(document.querySelector({json.dumps(selector)}))"):
+        raise AssertionError(f"{label} should not be present: {selector}")
+
+
+def click_selector(selector: str) -> None:
+    selector_json = json.dumps(selector)
+    rect = js(
+        f"""
+        const e = document.querySelector({selector_json});
+        if (!e) return null;
+        const r = e.getBoundingClientRect();
+        return {{x: r.left + r.width / 2, y: r.top + r.height / 2}};
+        """
+    )
+    if not rect:
+        raise AssertionError(f"element not found for click: {selector}")
+    click_at_xy(rect["x"], rect["y"])
+
+
 def click_terminal() -> None:
     rect = js(
         """
@@ -486,6 +605,52 @@ def click_terminal() -> None:
 
 def command_exists(command: str) -> bool:
     return subprocess.run(["sh", "-lc", f"command -v {command}"], stdout=subprocess.DEVNULL).returncode == 0
+
+
+def managed_beam_pid(context: BabsBddContext) -> int:
+    if context.server_process is None:
+        raise SkipScenario("BDD is using an externally managed server, so fd thresholds are skipped")
+
+    pgid = os.getpgid(context.server_process.pid)
+    result = subprocess.run(
+        ["ps", "-axo", "pid=,pgid=,command="],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    if result.returncode != 0:
+        raise SkipScenario(f"could not inspect process table for fd smoke: {result.stderr.strip()}")
+
+    for line in result.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) < 3:
+            continue
+        pid_text, pgid_text, command = parts
+        if int(pgid_text) == pgid and "beam.smp" in command:
+            return int(pid_text)
+
+    raise SkipScenario("could not find managed BEAM process for fd smoke")
+
+
+def fd_count(pid: int) -> int:
+    proc_fd = Path(f"/proc/{pid}/fd")
+
+    if proc_fd.exists():
+        return len(list(proc_fd.iterdir()))
+
+    result = subprocess.run(
+        ["lsof", "-nP", "-p", str(pid)],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    if result.returncode != 0:
+        raise SkipScenario(f"could not sample fd count with lsof: {result.stderr.strip()}")
+
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    return max(0, len(lines) - 1)
 
 
 def http_get_status(url: str, timeout: float) -> tuple[int, str]:
