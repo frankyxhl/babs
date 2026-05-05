@@ -8,10 +8,16 @@ defmodule Babs.Citizens.Lifecycle do
   alias Babs.Citizens.Hardline.Pane
   alias Babs.Citizens.Runner
 
+  @lock_registry Babs.Citizens.LifecycleRegistry
+
   def start_citizen(slug, opts \\ []) when is_binary(slug) do
     with {:ok, config} <- Config.load_slug(slug, opts) do
       start_config(config)
     end
+  end
+
+  def start_registered_citizen(slug, opts \\ []) when is_binary(slug) do
+    with_slug_lock(slug, opts, fn -> do_start_registered_citizen(slug, opts) end)
   end
 
   def start_config(config) do
@@ -31,6 +37,15 @@ defmodule Babs.Citizens.Lifecycle do
         maybe_mark_failed(config.slug, reason)
         error
     end
+  end
+
+  def restart_registered_citizen(slug, opts \\ []) when is_binary(slug) do
+    with_slug_lock(slug, opts, fn ->
+      with {:ok, config} <- registered_config(slug),
+           :ok <- do_stop_citizen(slug) do
+        run_start_config(config, opts)
+      end
+    end)
   end
 
   def reattach(config) do
@@ -54,7 +69,11 @@ defmodule Babs.Citizens.Lifecycle do
     end
   end
 
-  def stop_citizen(slug) when is_binary(slug) do
+  def stop_citizen(slug, opts \\ []) when is_binary(slug) do
+    with_slug_lock(slug, opts, fn -> do_stop_citizen(slug) end)
+  end
+
+  defp do_stop_citizen(slug) do
     session = Runner.session_name(slug)
 
     with :ok <- stop_pane(slug),
@@ -68,6 +87,44 @@ defmodule Babs.Citizens.Lifecycle do
     case Registry.lookup(Babs.Citizens.PaneRegistry, slug) do
       [{pid, _value}] -> {:ok, pid}
       [] -> {:error, :not_found}
+    end
+  end
+
+  defp do_start_registered_citizen(slug, opts) do
+    with {:ok, config} <- registered_config(slug) do
+      run_start_config(config, opts)
+    end
+  end
+
+  defp registered_config(slug) do
+    case Catalog.get_by_slug(slug) do
+      nil -> {:error, :not_found}
+      record -> {:ok, Catalog.to_config(record)}
+    end
+  end
+
+  defp run_start_config(config, opts) do
+    start = Keyword.get(opts, :start_config, &start_config/1)
+
+    result =
+      try do
+        start.(config)
+      rescue
+        error ->
+          {:error, {error.__struct__, Exception.message(error)}}
+      catch
+        kind, reason ->
+          {:error, {kind, reason}}
+      end
+
+    case result do
+      {:ok, _pid} = ok ->
+        maybe_mark_running(config.slug)
+        ok
+
+      {:error, reason} = error ->
+        maybe_mark_failed(config.slug, reason)
+        error
     end
   end
 
@@ -136,6 +193,40 @@ defmodule Babs.Citizens.Lifecycle do
   defp tmux_session_absent_output?(output) when is_binary(output) do
     String.contains?(output, "can't find session") or
       String.contains?(output, "no server running")
+  end
+
+  defp with_slug_lock(slug, opts, fun) do
+    case acquire_lock(slug, lock_deadline(opts)) do
+      :ok ->
+        try do
+          fun.()
+        after
+          Registry.unregister(@lock_registry, slug)
+        end
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp acquire_lock(slug, deadline) do
+    case Registry.register(@lock_registry, slug, nil) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_registered, _pid}} ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          {:error, {:lifecycle_lock_timeout, slug}}
+        else
+          Process.sleep(10)
+          acquire_lock(slug, deadline)
+        end
+    end
+  end
+
+  defp lock_deadline(opts) do
+    timeout_ms = Keyword.get(opts, :lock_timeout_ms, 5_000)
+    System.monotonic_time(:millisecond) + timeout_ms
   end
 
   defp maybe_mark_running(slug) do

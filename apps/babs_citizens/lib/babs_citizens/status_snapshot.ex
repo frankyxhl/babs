@@ -33,6 +33,7 @@ defmodule Babs.Citizens.StatusSnapshot do
       durable_status: record.status,
       live_status: live_status,
       visual_state: visual_state,
+      actions: actions(live_status),
       last_error: last_error(record)
     }
   end
@@ -48,6 +49,12 @@ defmodule Babs.Citizens.StatusSnapshot do
   defp status(%CitizenRecord{status: "stopped"}, _lookup), do: {:stopped, :paused}
   defp status(%CitizenRecord{status: "failed"}, _lookup), do: {:failed, :dead}
   defp status(_record, _lookup), do: {:failed, :dead}
+
+  defp actions(:up), do: [:open, :full, :stop, :restart]
+  defp actions(:reattaching), do: [:start, :stop]
+  defp actions(:stopped), do: [:start]
+  defp actions(:failed), do: [:start]
+  defp actions(_status), do: []
 
   defp cli_label(cli, ["-f"]) when is_binary(cli) do
     if Path.basename(cli) == "zsh", do: "shell", else: custom_cli_label(cli)

@@ -1,7 +1,185 @@
 defmodule Babs.Citizens.LifecycleStatusTest do
   use Babs.Citizens.RepoCase, async: false
 
-  alias Babs.Citizens.{Catalog, Lifecycle, Repo}
+  alias Babs.Citizens.{Catalog, Lifecycle, Repo, Runner}
+  alias Babs.Citizens.Hardline.Pane
+
+  test "start_registered_citizen loads SQLite config, starts, and marks running" do
+    record =
+      insert_citizen!(%{
+        slug: "registered-start-#{System.unique_integer([:positive])}",
+        status: "failed",
+        last_error: "previous failure"
+      })
+
+    on_exit(fn -> Lifecycle.stop_citizen(record.slug) end)
+
+    assert {:ok, pid} = Lifecycle.start_registered_citizen(record.slug)
+    assert is_pid(pid)
+    assert {:ok, ^pid} = Lifecycle.lookup(record.slug)
+
+    running = Repo.get!(CitizenRecord, record.id)
+    assert running.status == "running"
+    assert running.last_error == nil
+    assert running.cwd == record.cwd
+    assert running.cli == record.cli
+    assert running.cli_args == record.cli_args
+    assert running.env == record.env
+  end
+
+  test "start_registered_citizen returns not_found for missing SQLite rows" do
+    assert {:error, :not_found} = Lifecycle.start_registered_citizen("missing-registered")
+  end
+
+  test "start_registered_citizen marks failures with redacted last_error" do
+    record =
+      insert_citizen!(%{
+        slug: "registered-start-failure",
+        env: %{"SECRET_TOKEN" => "do-not-log"},
+        status: "stopped"
+      })
+
+    with_tmux_binary("/definitely/missing/babs-tmux", fn ->
+      assert {:error, {:tmux_executable_not_found, _path}} =
+               Lifecycle.start_registered_citizen(record.slug)
+    end)
+
+    failed = Repo.get!(CitizenRecord, record.id)
+    assert failed.status == "failed"
+    assert failed.last_error =~ "tmux_executable_not_found"
+    refute failed.last_error =~ "do-not-log"
+  end
+
+  test "restart_registered_citizen is stop plus start using the same SQLite row" do
+    record =
+      insert_citizen!(%{
+        slug: "registered-restart-#{System.unique_integer([:positive])}",
+        status: "running"
+      })
+
+    session = Runner.session_name(record.slug)
+    on_exit(fn -> Lifecycle.stop_citizen(record.slug) end)
+
+    assert {:ok, first_pid} = Lifecycle.start_registered_citizen(record.slug)
+    assert {:ok, ^first_pid} = Lifecycle.lookup(record.slug)
+
+    before_marker = "BABS_RESTART_BEFORE_#{System.unique_integer([:positive])}"
+    Pane.inject(record.slug, "printf '#{before_marker}\\n'\n")
+    wait_for_capture!(session, before_marker)
+
+    assert {:ok, restarted_pid} = Lifecycle.restart_registered_citizen(record.slug)
+    assert is_pid(restarted_pid)
+    assert restarted_pid != first_pid
+    assert {:ok, ^restarted_pid} = Lifecycle.lookup(record.slug)
+
+    after_marker = "BABS_RESTART_AFTER_#{System.unique_integer([:positive])}"
+    Pane.inject(record.slug, "printf '#{after_marker}\\n'\n")
+    wait_for_capture!(session, after_marker)
+
+    running = Repo.get!(CitizenRecord, record.id)
+    assert running.status == "running"
+    assert running.last_error == nil
+    assert running.cwd == record.cwd
+    assert running.cli == record.cli
+    assert running.cli_args == record.cli_args
+    assert running.env == record.env
+  end
+
+  test "restart_registered_citizen aborts when stop fails and does not start over it" do
+    record = insert_citizen!(%{slug: "restart-stop-failure", status: "running"})
+
+    with_tmux_binary("/definitely/missing/babs-tmux", fn ->
+      assert {:error, {:tmux_executable_not_found, _path}} =
+               Lifecycle.restart_registered_citizen(record.slug,
+                 start_config: fn _config ->
+                   flunk("restart must not start after stop failure")
+                 end
+               )
+    end)
+
+    assert Repo.get!(CitizenRecord, record.id).status == "running"
+  end
+
+  test "same-slug registered lifecycle actions serialize while different slugs proceed" do
+    insert_citizen!(%{slug: "lock-a", status: "stopped"})
+    insert_citizen!(%{slug: "lock-b", status: "stopped"})
+
+    parent = self()
+
+    start = fn config ->
+      send(parent, {:lifecycle_entered, config.slug, self()})
+
+      if config.slug == "lock-a" do
+        receive do
+          :release -> {:ok, self()}
+        after
+          2_000 -> {:error, :timeout}
+        end
+      else
+        {:ok, self()}
+      end
+    end
+
+    task_a =
+      Task.async(fn ->
+        Lifecycle.start_registered_citizen("lock-a", start_config: start)
+      end)
+
+    assert_receive {:lifecycle_entered, "lock-a", pid_a}
+
+    same_slug_task =
+      Task.async(fn ->
+        Lifecycle.start_registered_citizen("lock-a", start_config: start)
+      end)
+
+    different_slug_task =
+      Task.async(fn ->
+        Lifecycle.start_registered_citizen("lock-b", start_config: start)
+      end)
+
+    assert_receive {:lifecycle_entered, "lock-b", _pid_b}, 500
+    assert {:ok, _pid} = Task.await(different_slug_task)
+    refute_receive {:lifecycle_entered, "lock-a", _second_pid}, 100
+
+    send(pid_a, :release)
+    assert {:ok, _pid} = Task.await(task_a)
+    assert_receive {:lifecycle_entered, "lock-a", pid_second}, 500
+    send(pid_second, :release)
+    assert {:ok, _pid} = Task.await(same_slug_task)
+  end
+
+  test "same-slug registered lifecycle actions can time out while waiting for lock" do
+    insert_citizen!(%{slug: "lock-timeout", status: "stopped"})
+    parent = self()
+
+    start = fn config ->
+      send(parent, {:lifecycle_entered, config.slug, self()})
+
+      receive do
+        :release -> {:ok, self()}
+      after
+        2_000 -> {:error, :timeout}
+      end
+    end
+
+    task =
+      Task.async(fn ->
+        Lifecycle.start_registered_citizen("lock-timeout", start_config: start)
+      end)
+
+    assert_receive {:lifecycle_entered, "lock-timeout", pid}
+
+    assert {:error, {:lifecycle_lock_timeout, "lock-timeout"}} =
+             Lifecycle.start_registered_citizen("lock-timeout",
+               start_config: fn _config ->
+                 flunk("lifecycle should not start after lock timeout")
+               end,
+               lock_timeout_ms: 20
+             )
+
+    send(pid, :release)
+    assert {:ok, _pid} = Task.await(task)
+  end
 
   test "stop_citizen marks the SQLite row stopped when the session is already gone" do
     record = insert_citizen!(%{slug: "stop-missing-session", status: "running"})
@@ -73,6 +251,32 @@ defmodule Babs.Citizens.LifecycleStatusTest do
       else
         Application.delete_env(:babs_citizens, Babs.Citizens.Runner)
       end
+    end
+  end
+
+  defp wait_for_capture!(session, marker) do
+    deadline = System.monotonic_time(:millisecond) + 5_000
+    do_wait_for_capture!(session, marker, deadline)
+  end
+
+  defp do_wait_for_capture!(session, marker, deadline) do
+    cond do
+      capture_contains?(session, marker) ->
+        :ok
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        flunk("timed out waiting for #{marker} in #{session}")
+
+      true ->
+        Process.sleep(100)
+        do_wait_for_capture!(session, marker, deadline)
+    end
+  end
+
+  defp capture_contains?(session, marker) do
+    case Runner.capture_pane(session) do
+      {:ok, capture} -> String.contains?(capture, marker)
+      {:error, _reason} -> false
     end
   end
 end

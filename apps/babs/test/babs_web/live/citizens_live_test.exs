@@ -4,14 +4,22 @@ defmodule BabsWeb.CitizensLiveTest do
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
 
-  alias Babs.Citizens.{CitizenRecord, Repo}
+  alias Babs.Citizens.{Catalog, CitizenRecord, Repo}
 
   @endpoint BabsWeb.Endpoint
 
   setup do
     ensure_repo!()
     Repo.delete_all(CitizenRecord)
-    :ok
+    previous = Application.get_env(:babs, BabsWeb.CitizensLive)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:babs, BabsWeb.CitizensLive, previous)
+      else
+        Application.delete_env(:babs, BabsWeb.CitizensLive)
+      end
+    end)
   end
 
   test "renders empty state with new citizen link" do
@@ -88,10 +96,103 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(href="/citizens/new?socket_token=socket-token")
     assert html =~ ~s(href="/citizens/clare?socket_token=socket-token")
     assert html =~ ~s(href="/citizens/clare?full=1&amp;socket_token=socket-token")
+    assert html =~ ~s(data-testid="citizen-stop-clare")
+    assert html =~ ~s(data-testid="citizen-restart-clare")
+    refute html =~ ~s(data-testid="citizen-start-clare")
+
+    assert html =~ ~s(data-testid="citizen-start-dylan")
+    assert html =~ ~s(data-testid="citizen-stop-dylan")
+    refute html =~ ~s(data-testid="citizen-restart-dylan")
+
+    assert html =~ ~s(data-testid="citizen-start-failed-one")
+    assert html =~ ~s(data-testid="citizen-start-stopped-one")
     assert html =~ ~s(data-testid="citizen-open-dylan")
     assert html =~ ~s(data-testid="citizen-full-dylan")
     refute html =~ ~s(href="/citizens/dylan?socket_token=socket-token")
     refute html =~ ~s(href="/citizens/dylan?full=1&amp;socket_token=socket-token")
+  end
+
+  test "start control invokes lifecycle boundary and refreshes the row" do
+    record = insert_citizen!(%{slug: "start-me", status: "stopped"})
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      lifecycle_action: fn :start, slug ->
+        send(parent, {:lifecycle_action, :start, slug})
+        Catalog.mark_running(slug)
+        Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
+        {:ok, self()}
+      end
+    )
+
+    {:ok, view, html} = live(build_conn(), "/citizens")
+    assert html =~ ~s(data-testid="citizen-start-start-me")
+    assert html =~ "stopped"
+
+    view
+    |> element(~s(button[data-testid="citizen-start-start-me"]))
+    |> render_click()
+
+    assert_receive {:lifecycle_action, :start, "start-me"}
+    assert Repo.get!(CitizenRecord, record.id).status == "running"
+
+    html = render(view)
+    assert html =~ "up"
+    assert html =~ ~s(data-testid="citizen-stop-start-me")
+    assert html =~ ~s(data-testid="citizen-restart-start-me")
+  end
+
+  test "stop control invokes lifecycle boundary and refreshes the row" do
+    record = insert_citizen!(%{slug: "stop-me", status: "running"})
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      lifecycle_action: fn :stop, slug ->
+        send(parent, {:lifecycle_action, :stop, slug})
+        Catalog.mark_stopped(slug)
+        :ok
+      end
+    )
+
+    {:ok, view, html} = live(build_conn(), "/citizens")
+    assert html =~ ~s(data-testid="citizen-stop-stop-me")
+    assert html =~ "up"
+
+    html =
+      view
+      |> element(~s(button[data-testid="citizen-stop-stop-me"]))
+      |> render_click()
+
+    assert_receive {:lifecycle_action, :stop, "stop-me"}
+    assert Repo.get!(CitizenRecord, record.id).status == "stopped"
+    assert html =~ "Stopped stop-me"
+    assert html =~ "stopped"
+    assert html =~ ~s(data-testid="citizen-start-stop-me")
+    refute html =~ ~s(href="/citizens/stop-me")
+  end
+
+  test "restart control reports redacted lifecycle errors" do
+    insert_citizen!(%{slug: "restart-error", status: "running"})
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "restart-error", nil)
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      lifecycle_action: fn :restart, "restart-error" ->
+        {:error, {:tmux_failed, "api_token=super-secret"}}
+      end
+    )
+
+    {:ok, view, html} = live(build_conn(), "/citizens")
+    assert html =~ ~s(data-testid="citizen-restart-restart-error")
+
+    html =
+      view
+      |> element(~s(button[data-testid="citizen-restart-restart-error"]))
+      |> render_click()
+
+    assert html =~ "Restart failed for restart-error"
+    assert html =~ "[REDACTED]"
+    refute html =~ "super-secret"
   end
 
   test "refresh tick reflects status changes" do

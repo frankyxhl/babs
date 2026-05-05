@@ -5,7 +5,7 @@ defmodule BabsWeb.CitizensLive do
 
   use Phoenix.LiveView
 
-  alias Babs.Citizens.StatusSnapshot
+  alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
 
   @refresh_ms 1_000
@@ -23,6 +23,22 @@ defmodule BabsWeb.CitizensLive do
   @impl true
   def handle_info(:refresh_citizens, socket) do
     if connected?(socket), do: schedule_refresh()
+
+    {:noreply, assign_snapshots(socket)}
+  end
+
+  @impl true
+  def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
+    socket =
+      case parse_action(action) do
+        {:ok, action} ->
+          action
+          |> lifecycle_action(slug)
+          |> assign_lifecycle_result(socket, action, slug)
+
+        :error ->
+          put_flash(socket, :error, "Unknown lifecycle action")
+      end
 
     {:noreply, assign_snapshots(socket)}
   end
@@ -104,6 +120,11 @@ defmodule BabsWeb.CitizensLive do
         white-space: nowrap;
       }
 
+      button.button {
+        font: inherit;
+        cursor: pointer;
+      }
+
       .button:hover {
         border-color: var(--accent);
       }
@@ -123,6 +144,23 @@ defmodule BabsWeb.CitizensLive do
         background: var(--accent);
         color: #07100e;
         font-weight: 700;
+      }
+
+      .button-danger:hover {
+        border-color: var(--danger);
+      }
+
+      .flash {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 10px 12px;
+        color: var(--text);
+      }
+
+      .flash-error {
+        border-color: var(--danger);
+        color: var(--danger);
       }
 
       .citizens-counts {
@@ -261,6 +299,18 @@ defmodule BabsWeb.CitizensLive do
           <a class="button button-primary" href={CitizenPath.new(@socket_token)}>New Citizen</a>
         </header>
 
+        <div :if={Phoenix.Flash.get(@flash, :info)} class="flash" data-testid="citizens-flash-info">
+          {Phoenix.Flash.get(@flash, :info)}
+        </div>
+
+        <div
+          :if={Phoenix.Flash.get(@flash, :error)}
+          class="flash flash-error"
+          data-testid="citizens-flash-error"
+        >
+          {Phoenix.Flash.get(@flash, :error)}
+        </div>
+
         <section class="citizens-counts" aria-label="Citizen status counts">
           <div class="citizens-count" data-testid="citizens-count-total">
             <span class="citizens-count-label">Total</span>
@@ -310,7 +360,7 @@ defmodule BabsWeb.CitizensLive do
 
             <div class="citizen-actions">
               <a
-                :if={citizen.live_status == :up}
+                :if={action?(citizen, :open)}
                 class="button"
                 href={CitizenPath.terminal(citizen.slug, @socket_token)}
                 data-testid={"citizen-open-#{citizen.slug}"}
@@ -318,7 +368,7 @@ defmodule BabsWeb.CitizensLive do
                 Open
               </a>
               <span
-                :if={citizen.live_status != :up}
+                :if={!action?(citizen, :open)}
                 class="button button-disabled"
                 aria-disabled="true"
                 data-testid={"citizen-open-#{citizen.slug}"}
@@ -326,7 +376,7 @@ defmodule BabsWeb.CitizensLive do
                 Open
               </span>
               <a
-                :if={citizen.live_status == :up}
+                :if={action?(citizen, :full)}
                 class="button"
                 href={CitizenPath.terminal(citizen.slug, @socket_token, full?: true)}
                 data-testid={"citizen-full-#{citizen.slug}"}
@@ -334,13 +384,49 @@ defmodule BabsWeb.CitizensLive do
                 Full
               </a>
               <span
-                :if={citizen.live_status != :up}
+                :if={!action?(citizen, :full)}
                 class="button button-disabled"
                 aria-disabled="true"
                 data-testid={"citizen-full-#{citizen.slug}"}
               >
                 Full
               </span>
+              <button
+                :if={action?(citizen, :start)}
+                type="button"
+                class="button"
+                phx-click="lifecycle"
+                phx-value-action="start"
+                phx-value-slug={citizen.slug}
+                phx-disable-with="Starting"
+                data-testid={"citizen-start-#{citizen.slug}"}
+              >
+                Start
+              </button>
+              <button
+                :if={action?(citizen, :stop)}
+                type="button"
+                class="button button-danger"
+                phx-click="lifecycle"
+                phx-value-action="stop"
+                phx-value-slug={citizen.slug}
+                phx-disable-with="Stopping"
+                data-testid={"citizen-stop-#{citizen.slug}"}
+              >
+                Stop
+              </button>
+              <button
+                :if={action?(citizen, :restart)}
+                type="button"
+                class="button"
+                phx-click="lifecycle"
+                phx-value-action="restart"
+                phx-value-slug={citizen.slug}
+                phx-disable-with="Restarting"
+                data-testid={"citizen-restart-#{citizen.slug}"}
+              >
+                Restart
+              </button>
             </div>
           </article>
         </section>
@@ -364,9 +450,48 @@ defmodule BabsWeb.CitizensLive do
     base = %{total: length(snapshots), up: 0, reattaching: 0, stopped: 0, failed: 0}
 
     Enum.reduce(snapshots, base, fn snapshot, acc ->
-      Map.update!(acc, snapshot.live_status, &(&1 + 1))
+      Map.update(acc, snapshot.live_status, 1, &(&1 + 1))
     end)
   end
+
+  defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
+
+  defp parse_action("start"), do: {:ok, :start}
+  defp parse_action("stop"), do: {:ok, :stop}
+  defp parse_action("restart"), do: {:ok, :restart}
+  defp parse_action(_action), do: :error
+
+  defp lifecycle_action(action, slug) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:lifecycle_action, &default_lifecycle_action/2)
+    |> then(fn handler -> handler.(action, slug) end)
+  end
+
+  defp default_lifecycle_action(:start, slug), do: Lifecycle.start_registered_citizen(slug)
+  defp default_lifecycle_action(:stop, slug), do: Lifecycle.stop_citizen(slug)
+  defp default_lifecycle_action(:restart, slug), do: Lifecycle.restart_registered_citizen(slug)
+
+  defp assign_lifecycle_result(:ok, socket, action, slug) do
+    put_flash(socket, :info, "#{action_label(action)} #{slug}")
+  end
+
+  defp assign_lifecycle_result({:ok, _pid}, socket, action, slug) do
+    put_flash(socket, :info, "#{action_label(action)} #{slug}")
+  end
+
+  defp assign_lifecycle_result({:error, reason}, socket, action, slug) do
+    message = "#{action_error_label(action)} failed for #{slug}: #{Catalog.redact_reason(reason)}"
+    put_flash(socket, :error, message)
+  end
+
+  defp action_label(:start), do: "Started"
+  defp action_label(:stop), do: "Stopped"
+  defp action_label(:restart), do: "Restarted"
+
+  defp action_error_label(:start), do: "Start"
+  defp action_error_label(:stop), do: "Stop"
+  defp action_error_label(:restart), do: "Restart"
 
   defp schedule_refresh do
     Process.send_after(self(), :refresh_citizens, @refresh_ms)

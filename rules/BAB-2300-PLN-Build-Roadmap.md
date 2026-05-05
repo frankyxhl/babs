@@ -139,8 +139,10 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 6 — Stop / Start / Restart UI
 
-**Scope**: Buttons in citizen detail view: stop (`tmux kill-session` + SQLite `:stopped` + preserve configured workspace), start (reuse config/workspace, fresh tmux + erlexec, status `:running`), restart (atomic stop + start). Per `BAB-1107` semantics.
-**Acceptance**: Stop clare → restart clare; transcript continues with `:reattached` event in history; AI CLI starts fresh but workspace files are intact
+**Doc**: `BAB-2216` CHG
+**Scope**: Browser lifecycle controls on `/citizens` and default terminal pages: stop (`tmux kill-session` + SQLite `stopped` + preserve configured workspace), start (reuse SQLite config/workspace, fresh tmux + erlexec, status `running`), restart (atomic stop + start). Per `BAB-1107` semantics.
+**Acceptance**: Stop clare from the browser, start/restart clare from the browser, terminal reconnects, SQLite status is correct, transcript path and workspace files are preserved, stopped Citizens do not auto-start on Babs restart, and running Citizens still auto-respawn/reattach.
+**Current status**: Implemented locally on branch `codex/phase-6-chg`. `BAB-2216` CHG was approved on 2026-05-06 after Trinity fast-review with GLM 9.05/10 and DeepSeek 9.0/10. Local validation passed on 2026-05-06: ExUnit/coverage (`:babs_citizens` 83.88%, `:babs` 82.08%), JS tests, browser-harness BDD with the Phase 6 lifecycle scenarios, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity implementation review passed on scoped `apps/` review with GLM PASS and DeepSeek PASS; DeepSeek's conditional missing Stop-click test was fixed. PR loop is next.
 **Estimate**: 2-4 days
 
 ### 🎯 M2 = V0-S complete (~3-5 weeks flywheel time)
@@ -297,3 +299,7 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-05 | Record full-scope Trinity implementation-review execution blocker for Phase 4 | Codex |
 | 2026-05-05 | Mark Phase 4 local validation and scoped Trinity fast-review complete, pending PR | Codex |
 | 2026-05-05 | Record GitHub Codex PR review fixes and final validation rerun for Phase 4 | Codex |
+| 2026-05-06 | Add `BAB-2216` draft CHG for Phase 6 Stop/Start/Restart UI lifecycle controls | Codex |
+| 2026-05-06 | Mark `BAB-2216` approved after Trinity GLM/DeepSeek fast-review PASS | Codex |
+| 2026-05-06 | Record local Phase 6 implementation and validation evidence | Codex |
+| 2026-05-06 | Record Phase 6 Trinity implementation review pass and Stop-click test fix | Codex |
