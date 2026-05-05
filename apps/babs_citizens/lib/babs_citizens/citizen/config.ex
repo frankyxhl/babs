@@ -26,6 +26,7 @@ defmodule Babs.Citizens.Citizen.Config do
     with {:ok, raw} <- decode_file(path),
          :ok <- validate_required(raw),
          :ok <- validate_slug(raw["slug"]),
+         {:ok, cli_args} <- validate_cli_args(Map.get(raw, "cli_args", [])),
          {:ok, env} <- resolve_env(Map.get(raw, "env", %{})),
          {:ok, cwd} <- resolve_cwd(root, raw["cwd"]) do
       {:ok,
@@ -34,7 +35,7 @@ defmodule Babs.Citizens.Citizen.Config do
          slug: raw["slug"],
          display_name: raw["display_name"],
          cli: raw["cli"],
-         cli_args: Map.get(raw, "cli_args", []),
+         cli_args: cli_args,
          cwd: cwd,
          description: Map.get(raw, "description"),
          env: env,
@@ -86,10 +87,23 @@ defmodule Babs.Citizens.Citizen.Config do
     if valid_slug?(slug), do: :ok, else: {:error, {:invalid_slug, slug}}
   end
 
+  defp validate_cli_args(args) when is_list(args) do
+    if Enum.all?(args, &is_binary/1) do
+      {:ok, args}
+    else
+      {:error, {:invalid_cli_args, args}}
+    end
+  end
+
+  defp validate_cli_args(args), do: {:error, {:invalid_cli_args, args}}
+
   defp resolve_cwd(root, cwd) do
     path = Path.expand(cwd, root)
-    File.mkdir_p(path)
-    {:ok, path}
+
+    case File.mkdir_p(path) do
+      :ok -> {:ok, path}
+      {:error, reason} -> {:error, {:cwd_mkdir_failed, path, reason}}
+    end
   end
 
   defp resolve_env(env) when is_map(env) do

@@ -294,7 +294,7 @@ Validation passed:
 
 - `mise exec -- mix format --check-formatted`
 - `mise exec -- mix compile --warnings-as-errors`
-- `mise exec -- mix test`: `:babs_citizens` 37 tests, `:babs` 18 tests
+- `mise exec -- mix test`: `:babs_citizens` 39 tests, `:babs` 18 tests
 - `mise exec -- mix test --cover`: `:babs_citizens` 82.70% against 80%;
   `:babs` 77.27% against 70%
 - `npm run test:js`: 6 Node unit tests
@@ -326,3 +326,4 @@ Validation passed:
 | 2026-05-05 | Address PR review follow-up for production release boot: enable endpoint server mode and require explicit runtime host config for websocket origin checks | Codex |
 | 2026-05-05 | Address PR review follow-up for production auth hardening: reject whitespace-only runtime socket tokens before endpoint boot | Codex |
 | 2026-05-05 | Add missing production config so release/runtime validation reaches `runtime.exs` instead of failing on absent `config/prod.exs` | Codex |
+| 2026-05-05 | Address PR review follow-up for citizen config hardening: validate `cli_args` as a string list and return structured errors when workspace creation fails | Codex |

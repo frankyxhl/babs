@@ -91,6 +91,61 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
              Config.load_file(missing_env, root: root)
   end
 
+  test "rejects malformed cli_args before runner construction" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    string_args = Path.join(root, "citizens/citizen-string-args.toml")
+
+    File.write!(string_args, """
+    id = "BAB-CIT-ARGS"
+    slug = "args"
+    display_name = "Args"
+    cli = "/bin/zsh"
+    cli_args = "-f"
+    cwd = "workspaces/args"
+    """)
+
+    assert {:error, {:invalid_cli_args, "-f"}} =
+             Config.load_file(string_args, root: root)
+
+    mixed_args = Path.join(root, "citizens/citizen-mixed-args.toml")
+
+    File.write!(mixed_args, """
+    id = "BAB-CIT-MIXED"
+    slug = "mixed"
+    display_name = "Mixed"
+    cli = "/bin/zsh"
+    cli_args = ["-f", 1]
+    cwd = "workspaces/mixed"
+    """)
+
+    assert {:error, {:invalid_cli_args, ["-f", 1]}} =
+             Config.load_file(mixed_args, root: root)
+  end
+
+  test "reports workspace directory creation failures" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+    File.write!(Path.join(root, "blocked"), "not a directory")
+
+    path = Path.join(root, "citizens/citizen-blocked.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-BLOCKED"
+    slug = "blocked"
+    display_name = "Blocked"
+    cli = "/bin/zsh"
+    cwd = "blocked/workspace"
+    """)
+
+    assert {:error, {:cwd_mkdir_failed, failed_path, reason}} =
+             Config.load_file(path, root: root)
+
+    assert failed_path == Path.join(root, "blocked/workspace")
+    assert reason in [:enotdir, :eexist, :eacces]
+  end
+
   test "list_configs returns loaded configs and preserves decode errors" do
     root = tmp_root()
     File.mkdir_p!(Path.join(root, "citizens"))
