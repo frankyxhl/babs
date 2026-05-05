@@ -65,6 +65,8 @@ Complete Phase 2 as a small hardening phase on top of the landed dogfood slice.
    - parse JSONL records defensively
    - ignore malformed lines rather than crashing terminal reconnect
    - decode only `direction == "output"` for browser replay
+   - read a bounded tail of the append-only transcript before decoding so
+     reconnect memory cost does not grow with the full transcript file
    - return the most recent replay payload by decoding output records, splitting
      on `\n`, and keeping the newest 200 lines or fewer if fewer exist
    - tolerate a final partial line if the file is read while the Pane is
@@ -96,6 +98,9 @@ Phase 2 is complete when:
   `/citizens/<slug>` replays the recent output from `transcript.jsonl`.
 - Replayed browser context is sourced from transcript JSONL, with tmux
   `capture-pane` only as fallback.
+- Transcript replay uses a bounded tail read before JSONL decoding, so a
+  long-running Citizen's full transcript is not loaded into memory on every
+  browser reconnect.
 - The replay cap is deterministic and documented: replay decodes output records,
   splits on `\n`, and returns the most recent 200 output lines, or fewer if the
   transcript contains fewer.
@@ -115,6 +120,8 @@ Expected test additions:
   - arbitrary binary output round-trips from `b64`
   - malformed JSONL lines are skipped or reported without crashing
   - replay caps to the newest 200 lines
+  - bounded-tail replay skips a truncated leading JSONL fragment and does not
+    decode old output outside the tail window
   - empty/missing transcript returns no replay payload
 - Channel tests for snapshot source order:
   - transcript replay is pushed when available
@@ -152,10 +159,10 @@ Phase 2 implementation validation on 2026-05-05:
 
 - `mise exec -- mix format --check-formatted`: passed
 - `mise exec -- mix compile --warnings-as-errors`: passed
-- `mise exec -- mix test`: passed with `:babs_citizens` 49 tests and `:babs`
+- `mise exec -- mix test`: passed with `:babs_citizens` 50 tests and `:babs`
   20 tests
-- `mise exec -- mix test --cover`: passed with `:babs_citizens` 49 tests,
-  81.87% total coverage, and `Babs.Citizens.Hardline.Transcript` 90.00%;
+- `mise exec -- mix test --cover`: passed with `:babs_citizens` 50 tests,
+  81.39% total coverage, and `Babs.Citizens.Hardline.Transcript` 83.33%;
   `:babs` 20 tests and 77.55% total coverage
 - `npm run test:js`: passed with 6 Node tests
 - `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
@@ -173,6 +180,8 @@ Phase 2 implementation validation on 2026-05-05:
   tree in
   `.trinity/reviews/20260505-131559-phase-2-transcript-replay-r2`; remaining
   findings were non-blocking future hardening notes
+- GitHub Codex P2 review finding about full-file transcript reads was addressed
+  with bounded-tail replay and regression coverage
 
 ## Open Questions
 
@@ -202,3 +211,4 @@ Phase 2 implementation validation on 2026-05-05:
 | 2026-05-05 | Implement Phase 2 transcript replay: transcript read helpers, `Pane.cwd/1`, transcript-first Channel snapshots, binary replay tests, browser-harness tab-restart BDD, and validation record | Codex |
 | 2026-05-05 | Address Trinity code-review advisories with missing-pane cwd test coverage, empty-transcript fallback test coverage, and stable BDD synthetic transcript sequence value | Codex |
 | 2026-05-05 | Trinity fast-review R2 PASS on final working tree with GLM and DeepSeek; remaining notes are future hardening, not merge blockers | Codex |
+| 2026-05-05 | Address GitHub Codex P2 review by changing transcript replay from full-file read to bounded-tail read with truncated-leading-line regression coverage | Codex |

@@ -213,6 +213,45 @@ defmodule Babs.Citizens.Hardline.TranscriptTest do
     assert {:ok, "two\nthree\n"} = Transcript.replay_output(cwd, lines: 2)
   end
 
+  test "replay_output/2 reads a bounded tail and skips truncated leading JSONL", %{cwd: cwd} do
+    File.mkdir_p!(cwd)
+
+    old_line =
+      Transcript.encode(%{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 1,
+        payload: "old\n"
+      })
+      |> IO.iodata_to_binary()
+
+    filler_line =
+      Transcript.encode(%{
+        slug: "clare",
+        direction: :input,
+        stream_id: 1,
+        seq: 2,
+        payload: String.duplicate("x", 256)
+      })
+      |> IO.iodata_to_binary()
+
+    new_line =
+      Transcript.encode(%{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 3,
+        payload: "new\n"
+      })
+      |> IO.iodata_to_binary()
+
+    File.write!(Transcript.path(cwd), [old_line, "\n", filler_line, "\n", new_line, "\n"])
+
+    assert {:ok, "new\n"} =
+             Transcript.replay_output(cwd, tail_bytes: byte_size(new_line) + 12)
+  end
+
   test "replay_output/2 returns an empty payload for missing transcripts", %{cwd: cwd} do
     assert {:ok, ""} = Transcript.replay_output(cwd)
   end
