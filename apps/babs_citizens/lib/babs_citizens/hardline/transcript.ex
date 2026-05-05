@@ -61,6 +61,30 @@ defmodule Babs.Citizens.Hardline.Transcript do
   end
 
   @doc """
+  Replay output bytes from `cwd/transcript.jsonl`.
+
+  Only records with `"direction": "output"` are replayed. Malformed JSONL rows,
+  invalid base64 payloads, and incomplete final rows are ignored because this is
+  a best-effort browser snapshot, not an audit reader.
+  """
+  @spec replay_output(Path.t(), keyword()) :: {:ok, binary()} | {:error, term()}
+  def replay_output(cwd, opts \\ []) when is_binary(cwd) and is_list(opts) do
+    line_limit = Keyword.get(opts, :lines, 200)
+
+    with {:ok, line_limit} <- positive_line_limit(line_limit),
+         {:ok, contents} <- read_transcript(path(cwd)) do
+      output =
+        contents
+        |> String.split("\n", trim: true)
+        |> Enum.flat_map(&decode_output_payload/1)
+        |> IO.iodata_to_binary()
+        |> newest_lines(line_limit)
+
+      {:ok, output}
+    end
+  end
+
+  @doc """
   Encode a record as a single JSON line (no trailing newline).
   """
   @spec encode(record()) :: iodata()
@@ -88,4 +112,44 @@ defmodule Babs.Citizens.Hardline.Transcript do
 
   defp direction_to_string(:output), do: "output"
   defp direction_to_string(:input), do: "input"
+
+  defp read_transcript(path) do
+    case File.read(path) do
+      {:ok, contents} -> {:ok, contents}
+      {:error, :enoent} -> {:ok, ""}
+      {:error, reason} -> {:error, {:file_error, path, reason}}
+    end
+  end
+
+  defp decode_output_payload(line) do
+    with {:ok, %{"direction" => "output", "b64" => b64}} when is_binary(b64) <- JSON.decode(line),
+         {:ok, payload} <- Base.decode64(b64) do
+      [payload]
+    else
+      _ -> []
+    end
+  end
+
+  defp newest_lines(output, line_limit) do
+    output
+    |> :binary.split("\n", [:global])
+    |> trim_trailing_empty_line()
+    |> Enum.take(-line_limit)
+    |> join_lines(String.ends_with?(output, "\n"))
+  end
+
+  defp trim_trailing_empty_line(parts) do
+    case Enum.reverse(parts) do
+      ["" | rest] -> Enum.reverse(rest)
+      _other -> parts
+    end
+  end
+
+  defp join_lines([], _trailing_newline?), do: ""
+
+  defp join_lines(parts, true), do: [Enum.intersperse(parts, "\n"), "\n"] |> IO.iodata_to_binary()
+  defp join_lines(parts, false), do: Enum.join(parts, "\n")
+
+  defp positive_line_limit(value) when is_integer(value) and value > 0, do: {:ok, value}
+  defp positive_line_limit(value), do: {:error, {:invalid_line_limit, value}}
 end

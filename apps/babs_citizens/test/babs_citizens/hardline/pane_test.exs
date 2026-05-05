@@ -21,6 +21,28 @@ defmodule Babs.Citizens.Hardline.PaneTest do
     assert_raise ArgumentError, fn -> Pane.chunk_bytes("abc", 0) end
   end
 
+  test "cwd call returns the configured citizen cwd" do
+    cwd = Path.join(System.tmp_dir!(), "pane-cwd-#{System.unique_integer([:positive])}")
+
+    state = %{
+      config: %CitizenConfig{
+        id: "BAB-CIT-CWD",
+        slug: "cwd-pane",
+        display_name: "Cwd Pane",
+        cli: "/bin/zsh",
+        cwd: cwd
+      }
+    }
+
+    assert {:reply, {:ok, ^cwd}, ^state} = Pane.handle_call(:cwd, {self(), make_ref()}, state)
+  end
+
+  test "cwd/1 returns not_found when no pane is registered" do
+    slug = "missing-cwd-pane-#{System.unique_integer([:positive])}"
+
+    assert {:error, :not_found} = Pane.cwd(slug)
+  end
+
   test "stdout handler tolerates pre-transcript hot-reload state" do
     slug = "legacy-pane-#{System.unique_integer([:positive])}"
     stream_id = 123

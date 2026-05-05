@@ -26,6 +26,12 @@ defmodule Babs.Citizens.Hardline.Pane do
     GenServer.cast(via(slug), {:resize, rows, cols})
   end
 
+  def cwd(slug) when is_binary(slug) do
+    GenServer.call(via(slug), :cwd)
+  catch
+    :exit, _reason -> {:error, :not_found}
+  end
+
   def chunk_bytes(bytes, max_size \\ @pubsub_chunk_size)
 
   def chunk_bytes(_bytes, max_size) when not (is_integer(max_size) and max_size > 0) do
@@ -70,6 +76,11 @@ defmodule Babs.Citizens.Hardline.Pane do
       {:error, reason} ->
         {:stop, reason}
     end
+  end
+
+  @impl true
+  def handle_call(:cwd, _from, state) do
+    {:reply, {:ok, state.config.cwd}, state}
   end
 
   @impl true

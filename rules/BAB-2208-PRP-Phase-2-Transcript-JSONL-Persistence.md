@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-05
 **Last reviewed:** 2026-05-05
-**Status:** Draft
+**Status:** Implemented
 
 ---
 
@@ -146,6 +146,34 @@ Expected test additions:
 - Parsing upstream Claude/Codex JSONL into semantic messages. Phase 2 only
   persists and replays Babs terminal byte transcripts.
 
+## Validation Results
+
+Phase 2 implementation validation on 2026-05-05:
+
+- `mise exec -- mix format --check-formatted`: passed
+- `mise exec -- mix compile --warnings-as-errors`: passed
+- `mise exec -- mix test`: passed with `:babs_citizens` 49 tests and `:babs`
+  20 tests
+- `mise exec -- mix test --cover`: passed with `:babs_citizens` 49 tests,
+  81.87% total coverage, and `Babs.Citizens.Hardline.Transcript` 90.00%;
+  `:babs` 20 tests and 77.55% total coverage
+- `npm run test:js`: passed with 6 Node tests
+- `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
+  transcript replay after tab restart
+- `npm run test:e2e`: passed with 6 Playwright smoke tests
+- `mise exec -- mix babs.gate_a`: passed
+- `git diff --check`: passed
+- `af validate --root /Users/frank/Projects/babs-phase2-reconcile`: passed
+  with 98 documents and 0 issues
+- Trinity `fast-review` code review passed with GLM and DeepSeek in
+  `.trinity/reviews/20260505-130452-phase-2-transcript-replay`; non-blocking
+  advisories for empty-transcript fallback coverage, `Pane.cwd/1` missing-pane
+  coverage, and BDD synthetic `seq` semantics were addressed
+- Trinity `fast-review` R2 passed with GLM and DeepSeek on the final working
+  tree in
+  `.trinity/reviews/20260505-131559-phase-2-transcript-replay-r2`; remaining
+  findings were non-blocking future hardening notes
+
 ## Open Questions
 
 - Should replay include only PTY output bytes? Proposed answer: yes. Browser
@@ -171,3 +199,6 @@ Expected test additions:
 |------|--------|----|
 | 2026-05-05 | Initial reconciliation PRP: record Phase 1 dogfood slice, identify remaining transcript replay gap, and define Phase 2 completion criteria | Codex |
 | 2026-05-05 | Trinity fast-review PASS follow-up: make 200-line replay deterministic, prefer `Pane.cwd/1`, require reattach markers as normal output records, make BDD replay deterministic, and clarify byte-loss-free scope | Codex |
+| 2026-05-05 | Implement Phase 2 transcript replay: transcript read helpers, `Pane.cwd/1`, transcript-first Channel snapshots, binary replay tests, browser-harness tab-restart BDD, and validation record | Codex |
+| 2026-05-05 | Address Trinity code-review advisories with missing-pane cwd test coverage, empty-transcript fallback test coverage, and stable BDD synthetic transcript sequence value | Codex |
+| 2026-05-05 | Trinity fast-review R2 PASS on final working tree with GLM and DeepSeek; remaining notes are future hardening, not merge blockers | Codex |

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import os
 import signal
 import subprocess
@@ -170,6 +172,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_web_reload_reconnects_terminal,
         ),
         Scenario(
+            name="transcript replay survives tab restart",
+            given="sentinel is connected",
+            when="the browser tab closes and transcript output arrives before reopen",
+            then="the reopened terminal replays the transcript marker",
+            run=scenario_transcript_replay_survives_tab_restart,
+        ),
+        Scenario(
             name="terminal fills viewport",
             given="a terminal page is open",
             when="the viewport is resized",
@@ -221,6 +230,22 @@ def scenario_web_reload_reconnects_terminal(context: BabsBddContext) -> None:
         timeout=20,
     )
     context.type_command_and_expect(unique_marker("BABS_BDD_AFTER_WEB_RELOAD"))
+
+
+def scenario_transcript_replay_survives_tab_restart(context: BabsBddContext) -> None:
+    slug = "sentinel"
+    marker = unique_marker("BABS_BDD_TRANSCRIPT_REPLAY")
+
+    context.connect_citizen(slug)
+    context.close_test_tab()
+    append_transcript_output(slug, marker + "\n")
+
+    context.connect_citizen(slug)
+    wait_until(
+        f"terminal output to replay {marker}",
+        lambda: marker in terminal_text(),
+        timeout=15,
+    )
 
 
 def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
@@ -342,6 +367,24 @@ def terminal_geometry() -> dict:
 
 def terminal_text() -> str:
     return js("document.querySelector('.xterm')?.innerText || ''")
+
+
+def append_transcript_output(slug: str, payload: str) -> None:
+    transcript = ROOT / "workspaces" / slug / "transcript.jsonl"
+    transcript.parent.mkdir(parents=True, exist_ok=True)
+
+    record = {
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "slug": slug,
+        "direction": "output",
+        "stream_id": 0,
+        "seq": 1,
+        "b64": base64.b64encode(payload.encode()).decode("ascii"),
+    }
+
+    with transcript.open("a", encoding="utf-8") as file:
+        file.write(json.dumps(record, separators=(",", ":")))
+        file.write("\n")
 
 
 def touch_source(path: Path) -> None:

@@ -5,6 +5,7 @@ defmodule BabsWeb.PaneChannel do
 
   alias Babs.Citizens.Lifecycle
   alias Babs.Citizens.Hardline.Pane
+  alias Babs.Citizens.Hardline.Transcript
   alias Babs.Citizens.Runner
 
   @allowed_controls ["\r", "\n", "\t", <<3>>, <<4>>, <<26>>, <<127>>]
@@ -18,7 +19,7 @@ defmodule BabsWeb.PaneChannel do
     case Lifecycle.lookup(slug) do
       {:ok, _pid} ->
         send(self(), :send_snapshot)
-        {:ok, assign(socket, :slug, slug)}
+        {:ok, socket |> assign(:slug, slug) |> assign(:cwd, pane_cwd(slug))}
 
       {:error, :not_found} ->
         {:error, %{reason: "not_found"}}
@@ -57,21 +58,43 @@ defmodule BabsWeb.PaneChannel do
   end
 
   def handle_info(:send_snapshot, socket) do
+    send_initial_snapshot(socket)
+
+    {:noreply, socket}
+  end
+
+  defp send_initial_snapshot(%{assigns: %{cwd: cwd}} = socket) when is_binary(cwd) do
+    case Transcript.replay_output(cwd) do
+      {:ok, ""} -> send_tmux_snapshot(socket)
+      {:ok, snapshot} -> push_snapshot(socket, snapshot)
+      {:error, _reason} -> send_tmux_snapshot(socket)
+    end
+  end
+
+  defp send_initial_snapshot(socket), do: send_tmux_snapshot(socket)
+
+  defp send_tmux_snapshot(socket) do
     session = Runner.session_name(socket.assigns.slug)
 
     case Runner.capture_pane(session) do
-      {:ok, snapshot} ->
-        push(socket, "output", %{
-          "stream_id" => 0,
-          "seq" => 0,
-          "base64" => Base.encode64(snapshot)
-        })
-
-      {:error, _reason} ->
-        :ok
+      {:ok, snapshot} -> push_snapshot(socket, snapshot)
+      {:error, _reason} -> :ok
     end
+  end
 
-    {:noreply, socket}
+  defp push_snapshot(socket, snapshot) do
+    push(socket, "output", %{
+      "stream_id" => 0,
+      "seq" => 0,
+      "base64" => Base.encode64(snapshot)
+    })
+  end
+
+  defp pane_cwd(slug) do
+    case Pane.cwd(slug) do
+      {:ok, cwd} when is_binary(cwd) -> cwd
+      _other -> nil
+    end
   end
 
   defp positive_integer(value) when is_integer(value) and value > 0, do: {:ok, value}

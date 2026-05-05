@@ -139,4 +139,81 @@ defmodule Babs.Citizens.Hardline.TranscriptTest do
 
     assert Enum.map(lines, &JSON.decode!(&1)["seq"]) == [1, 2]
   end
+
+  test "replay_output/2 returns output bytes and ignores input records", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "clare",
+        direction: :input,
+        stream_id: 1,
+        seq: 1,
+        payload: "printf 'hidden'\n"
+      })
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 2,
+        payload: "visible\n"
+      })
+
+    Transcript.close(io)
+
+    assert {:ok, "visible\n"} = Transcript.replay_output(cwd)
+  end
+
+  test "replay_output/2 skips malformed JSONL and invalid base64", %{cwd: cwd} do
+    File.mkdir_p!(cwd)
+
+    File.write!(Transcript.path(cwd), """
+    not json
+    {"direction":"output","b64":"%%%","slug":"clare","stream_id":1,"seq":1}
+    #{IO.iodata_to_binary(Transcript.encode(%{slug: "clare", direction: :output, stream_id: 1, seq: 2, payload: "ok\n"}))}
+    """)
+
+    assert {:ok, "ok\n"} = Transcript.replay_output(cwd)
+  end
+
+  test "replay_output/2 round-trips arbitrary binary output payloads", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+    raw = <<0, 27, 91, 51, 49, 109, "hello", 0xFF, 0xFE>>
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 1,
+        payload: raw
+      })
+
+    :ok = Transcript.close(io)
+
+    assert {:ok, ^raw} = Transcript.replay_output(cwd)
+  end
+
+  test "replay_output/2 caps replay to newest output lines", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "clare",
+        direction: :output,
+        stream_id: 1,
+        seq: 1,
+        payload: "one\ntwo\nthree\n"
+      })
+
+    Transcript.close(io)
+
+    assert {:ok, "two\nthree\n"} = Transcript.replay_output(cwd, lines: 2)
+  end
+
+  test "replay_output/2 returns an empty payload for missing transcripts", %{cwd: cwd} do
+    assert {:ok, ""} = Transcript.replay_output(cwd)
+  end
 end
