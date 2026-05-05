@@ -141,6 +141,8 @@ Local validation on 2026-05-05:
   `scan_rows/1` tmux-error coverage.
 - Addressed GitHub Codex P1 review finding by propagating
   `Ecto.Migrator.with_repo/3` error tuples from `Babs.Citizens.Bootstrap.migrate/1`.
+- Addressed GitHub Codex P2 review finding by resolving relative
+  `BABS_CITIZENS_DB_PATH` values against `BABS_ROOT`.
 
 ---
 
@@ -154,3 +156,4 @@ Local validation on 2026-05-05:
 | 2026-05-05 | Record Phase 3 implementation results and validation evidence | Codex |
 | 2026-05-05 | Address Trinity DeepSeek/GLM advisories with unknown-status skip coverage, stronger secret redaction coverage, and scan_rows tmux-error coverage | Codex |
 | 2026-05-05 | Address GitHub Codex P1 migration-error propagation finding with regression coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P2 relative SQLite database path finding | Codex |

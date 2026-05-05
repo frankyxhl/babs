@@ -19,12 +19,17 @@ socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
 workspace_root = non_empty_env.("BABS_WORKSPACE_ROOT")
 
 citizens_db_path =
-  non_empty_env.("BABS_CITIZENS_DB_PATH") ||
-    if config_env() == :test do
-      Path.join([babs_root, "tmp", "test", "babs_citizens.sqlite3"])
-    else
-      Path.join([babs_root, "var", "babs_citizens.sqlite3"])
-    end
+  case non_empty_env.("BABS_CITIZENS_DB_PATH") do
+    nil ->
+      if config_env() == :test do
+        Path.join([babs_root, "tmp", "test", "babs_citizens.sqlite3"])
+      else
+        Path.join([babs_root, "var", "babs_citizens.sqlite3"])
+      end
+
+    path ->
+      Path.expand(path, babs_root)
+  end
 
 ensure_owner_only = fn path, mode ->
   case File.chmod(path, mode) do
