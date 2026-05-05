@@ -97,9 +97,11 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 2 — Transcript JSONL Persistence
 
+**Doc**: `BAB-2208` PRP
 **Scope**: Every byte that flows through `Hardline.Pane` is appended to `<cwd>/transcript.jsonl`, for example `workspaces/clare/transcript.jsonl`. On browser reload, last N lines replayed to xterm.js for context.
 **Acceptance**: Close browser tab, re-open: see most recent 200 lines of transcript; tab restart is byte-loss-free
 **Note**: This phase is the first chicken-and-egg test for the flywheel — clare modifies the file (`Hardline.Pane`) that captures her own bytes. Per `BAB-1110`, tmux survives the reload; new Pane reattaches.
+**Current status**: Partially implemented during Phase 1 Gate B in PR #7: Babs writes `input` and `output` byte records to `<cwd>/transcript.jsonl`. Remaining Phase 2 work is transcript-backed browser replay; current reconnect context still comes from `tmux capture-pane`.
 **Estimate**: 3-5 days
 
 ### Phase 3 — SQLite Citizens Table + Auto-Respawn
@@ -269,3 +271,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-04 | Mark Phase 0a implemented after manager console code, tests, Tailscale API smoke, browser smoke, and reattach verification passed | Codex |
 | 2026-05-04 | Add optional Phase 0b Hardline Full-Window Mode Spike (`BAB-2203`/`BAB-2204`) after Phase 0a; clarify it is browser-only usability work and not a Phase 0 gate substitute | Codex |
 | 2026-05-04 | Mark optional Phase 0c implemented after JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and ExUnit validation passed | Codex |
+| 2026-05-05 | Add `BAB-2208` as the Phase 2 transcript persistence PRP and record that PR #7 partially implemented write-side transcript logging while replay remains open | Codex |
