@@ -480,7 +480,10 @@ def citizens_db_path() -> Path:
     raw = os.environ.get("BABS_CITIZENS_DB_PATH")
 
     if raw and raw.strip():
-        return Path(raw.strip()).expanduser().resolve()
+        path = Path(raw.strip()).expanduser()
+        if not path.is_absolute():
+            path = RUNTIME_ROOT / path
+        return path.resolve()
 
     return (RUNTIME_ROOT / "var" / "babs_citizens.sqlite3").resolve()
 
