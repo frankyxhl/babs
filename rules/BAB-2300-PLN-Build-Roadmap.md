@@ -104,6 +104,13 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Current status**: Partially implemented during Phase 1 Gate B in PR #7: Babs writes `input` and `output` byte records to `<cwd>/transcript.jsonl`. Remaining Phase 2 work is transcript-backed browser replay; current reconnect context still comes from `tmux capture-pane`.
 **Estimate**: 3-5 days
 
+### Phase 2a — Configurable Workspace Root
+
+**Doc**: `BAB-2209` PRP
+**Scope**: Separate Babs application root from Citizen workspace storage root. Add `BABS_WORKSPACE_ROOT` / `:babs_citizens, :workspace_root`; resolve relative citizen `cwd` values under that workspace root while preserving absolute `cwd` overrides.
+**Acceptance**: Default dev behavior still resolves seeds to `<BABS_ROOT>/workspaces/<slug>`; setting `BABS_WORKSPACE_ROOT=<workspace-root>` moves seed workspaces and transcripts outside the repo checkout; Gate A and browser-harness BDD still pass.
+**Estimate**: 1-2 days
+
 ### Phase 3 — SQLite Citizens Table + Auto-Respawn
 
 **Scope**: `priv/repo/migrations/` + `Babs.Citizens.Repo`; `citizens` table fields: `slug`, `display_name`, `cwd`, `cli`, `cli_args`, `status` (`:running`/`:stopped`/`:failed`), `created_at`, `metadata` (JSONB), `role` (nullable), `is_mayor` (bool, default false). On Babs boot, scan SQLite + reattach.
@@ -272,3 +279,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-04 | Add optional Phase 0b Hardline Full-Window Mode Spike (`BAB-2203`/`BAB-2204`) after Phase 0a; clarify it is browser-only usability work and not a Phase 0 gate substitute | Codex |
 | 2026-05-04 | Mark optional Phase 0c implemented after JS extraction, Node pure-JS tests, Playwright DOM/E2E tests, and ExUnit validation passed | Codex |
 | 2026-05-05 | Add `BAB-2208` as the Phase 2 transcript persistence PRP and record that PR #7 partially implemented write-side transcript logging while replay remains open | Codex |
+| 2026-05-05 | Add Phase 2a configurable workspace root (`BAB-2209`) before SQLite so durable Citizen working state is not implicitly tied to the active repo checkout | Codex |
