@@ -53,6 +53,14 @@ defmodule Babs.Citizens.Hardline.Transcript do
   def close(nil), do: :ok
   def close(io), do: File.close(io)
 
+  @doc "Flush a transcript IO device so replay reads the latest buffered bytes."
+  @spec flush(File.io_device() | nil) :: :ok | {:error, term()}
+  def flush(nil), do: {:error, :no_transcript}
+
+  def flush(io) do
+    :file.sync(io)
+  end
+
   @doc """
   Append one record to the open transcript IO device.
   """

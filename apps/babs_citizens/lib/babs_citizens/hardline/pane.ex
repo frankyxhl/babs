@@ -32,6 +32,12 @@ defmodule Babs.Citizens.Hardline.Pane do
     :exit, _reason -> {:error, :not_found}
   end
 
+  def flush_transcript(slug) when is_binary(slug) do
+    GenServer.call(via(slug), :flush_transcript)
+  catch
+    :exit, _reason -> {:error, :not_found}
+  end
+
   def chunk_bytes(bytes, max_size \\ @pubsub_chunk_size)
 
   def chunk_bytes(_bytes, max_size) when not (is_integer(max_size) and max_size > 0) do
@@ -81,6 +87,21 @@ defmodule Babs.Citizens.Hardline.Pane do
   @impl true
   def handle_call(:cwd, _from, state) do
     {:reply, {:ok, state.config.cwd}, state}
+  end
+
+  @impl true
+  def handle_call(:flush_transcript, _from, state) do
+    case Transcript.flush(Map.get(state, :transcript_io)) do
+      :ok ->
+        {:reply, :ok, state}
+
+      {:error, reason} ->
+        Logger.warning(
+          "babs hardline transcript flush failed for #{state.config.slug}: #{inspect(reason)}"
+        )
+
+        {:reply, {:error, reason}, state}
+    end
   end
 
   @impl true

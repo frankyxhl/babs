@@ -10,17 +10,23 @@ defmodule BabsWeb.PaneChannelTest do
   defmodule FakePane do
     use GenServer
 
-    def start_link(slug, cwd) do
-      GenServer.start_link(__MODULE__, cwd,
+    def start_link(slug, cwd, opts \\ []) do
+      GenServer.start_link(__MODULE__, {cwd, Keyword.get(opts, :notify)},
         name: {:via, Registry, {Babs.Citizens.PaneRegistry, slug}}
       )
     end
 
     @impl true
-    def init(cwd), do: {:ok, cwd}
+    def init({cwd, notify}), do: {:ok, %{cwd: cwd, notify: notify}}
 
     @impl true
-    def handle_call(:cwd, _from, cwd), do: {:reply, {:ok, cwd}, cwd}
+    def handle_call(:cwd, _from, state), do: {:reply, {:ok, state.cwd}, state}
+
+    @impl true
+    def handle_call(:flush_transcript, _from, state) do
+      if state.notify, do: send(state.notify, :flushed_transcript)
+      {:reply, :ok, state}
+    end
   end
 
   setup do
@@ -86,12 +92,14 @@ defmodule BabsWeb.PaneChannelTest do
       })
 
     :ok = Transcript.close(io)
-    {:ok, _pid} = FakePane.start_link(slug, tmp)
+    {:ok, _pid} = FakePane.start_link(slug, tmp, notify: self())
 
     {:ok, _reply, _socket} =
       BabsWeb.UserSocket
       |> socket(nil, %{})
       |> subscribe_and_join(PaneChannel, "pane:#{slug}")
+
+    assert_receive :flushed_transcript
 
     assert_push "output", %{
       "stream_id" => 0,

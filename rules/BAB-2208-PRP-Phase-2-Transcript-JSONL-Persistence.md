@@ -75,6 +75,9 @@ Complete Phase 2 as a small hardening phase on top of the landed dogfood slice.
 4. Change `BabsWeb.PaneChannel` snapshot behavior:
    - on join, ask the live `Hardline.Pane` for its configured `cwd`; prefer a
      small `Pane.cwd(slug)` call over re-reading TOML on every browser reconnect
+   - flush the live Pane transcript before replay so delayed writes are visible;
+     if flush fails, fall back to tmux capture instead of trusting stale disk
+     state
    - replay transcript output bytes first when available
    - keep `tmux capture-pane` as a best-effort fallback when transcript is
      missing or empty
@@ -104,6 +107,8 @@ Phase 2 is complete when:
   browser reconnect.
 - Transcript replay filters decoded output by the active citizen slug, so a
   shared or accidentally reused cwd cannot replay another Citizen's output.
+- Browser reconnect flushes the live Pane transcript before replay; if the flush
+  fails, the snapshot path falls back to `tmux capture-pane`.
 - The replay cap is deterministic and documented: replay decodes output records,
   splits on `\n`, and returns the most recent 200 output lines, or fewer if the
   transcript contains fewer.
@@ -130,6 +135,7 @@ Expected test additions:
   - empty/missing transcript returns no replay payload
 - Channel tests for snapshot source order:
   - transcript replay is pushed when available
+  - live Pane transcript flush is requested before transcript replay
   - tmux capture fallback remains best-effort when transcript is absent
 - Browser-harness BDD:
   - sentinel connects
@@ -164,11 +170,11 @@ Phase 2 implementation validation on 2026-05-05:
 
 - `mise exec -- mix format --check-formatted`: passed
 - `mise exec -- mix compile --warnings-as-errors`: passed
-- `mise exec -- mix test`: passed with `:babs_citizens` 52 tests and `:babs`
+- `mise exec -- mix test`: passed with `:babs_citizens` 55 tests and `:babs`
   20 tests
-- `mise exec -- mix test --cover`: passed with `:babs_citizens` 52 tests,
-  81.62% total coverage, and `Babs.Citizens.Hardline.Transcript` 84.48%;
-  `:babs` 20 tests and 77.55% total coverage
+- `mise exec -- mix test --cover`: passed with `:babs_citizens` 55 tests,
+  81.32% total coverage, and `Babs.Citizens.Hardline.Transcript` 85.00%;
+  `:babs` 20 tests and 78.00% total coverage
 - `npm run test:js`: passed with 6 Node tests
 - `npm run test:bdd`: passed with 8 browser-harness BDD scenarios, including
   transcript replay after tab restart
@@ -189,6 +195,9 @@ Phase 2 implementation validation on 2026-05-05:
   with bounded-tail replay and regression coverage
 - GitHub Codex P2 review finding about cross-citizen replay from shared cwd was
   addressed with slug-filtered transcript replay and Channel coverage
+- GitHub Codex P1 review finding about stale delayed transcript writes was
+  addressed with live Pane transcript flush before replay and tmux fallback on
+  flush failure
 
 ## Open Questions
 
@@ -220,3 +229,4 @@ Phase 2 implementation validation on 2026-05-05:
 | 2026-05-05 | Trinity fast-review R2 PASS on final working tree with GLM and DeepSeek; remaining notes are future hardening, not merge blockers | Codex |
 | 2026-05-05 | Address GitHub Codex P2 review by changing transcript replay from full-file read to bounded-tail read with truncated-leading-line regression coverage | Codex |
 | 2026-05-05 | Address GitHub Codex P2 review by filtering transcript replay to the active citizen slug and adding Transcript/Channel regression coverage | Codex |
+| 2026-05-05 | Address GitHub Codex P1 review by flushing the live Pane transcript before replay and falling back to tmux when flush fails | Codex |

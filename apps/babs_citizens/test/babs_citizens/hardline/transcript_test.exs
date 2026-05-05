@@ -21,6 +21,23 @@ defmodule Babs.Citizens.Hardline.TranscriptTest do
     assert :ok = Transcript.close(io)
   end
 
+  test "flush/1 syncs an open transcript and rejects missing devices", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    assert :ok =
+             Transcript.append(io, %{
+               slug: "clare",
+               direction: :output,
+               stream_id: 1,
+               seq: 1,
+               payload: "flushed\n"
+             })
+
+    assert :ok = Transcript.flush(io)
+    assert {:error, :no_transcript} = Transcript.flush(nil)
+    assert :ok = Transcript.close(io)
+  end
+
   test "encode/1 emits a single JSON line with the documented fields", %{cwd: _cwd} do
     timestamp = ~U[2026-05-05 12:34:56.789012Z]
 
