@@ -22,7 +22,16 @@ citizens_db_path =
   case non_empty_env.("BABS_CITIZENS_DB_PATH") do
     nil ->
       if config_env() == :test do
-        Path.join([babs_root, "tmp", "test", "babs_citizens.sqlite3"])
+        test_partition = non_empty_env.("MIX_TEST_PARTITION")
+
+        test_db_name =
+          if test_partition do
+            "babs_citizens_#{test_partition}.sqlite3"
+          else
+            "babs_citizens.sqlite3"
+          end
+
+        Path.join([babs_root, "tmp", "test", test_db_name])
       else
         Path.join([babs_root, "var", "babs_citizens.sqlite3"])
       end
