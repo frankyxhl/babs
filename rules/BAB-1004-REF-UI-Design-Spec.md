@@ -1,8 +1,8 @@
 # REF-1004: UI Design Spec
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-06
+**Last reviewed:** 2026-05-06
 **Status:** Active
 
 ---
@@ -48,7 +48,7 @@ This is a **text design spec** — no Figma, no images. The intent is precision-
 
 **Density**: High. Operators want to see many citizens at once, not large empty whitespace. Comfortable padding inside cards (16-20px), tight padding inside list rows (8-12px vertical).
 
-**Iconography**: Lucide / Phosphor outline icons at 16px; status dots are 8px solid circles. Avoid emojis except for status legends.
+**Iconography**: Lucide / Phosphor outline icons at 16px; status dots are 8px solid circles. Every action button must include a relevant semantic icon. Avoid emojis except for status legends.
 
 **Motion**: Restrained. State transitions fade in 120-180ms. No bounce, no spring. Terminal output is real-time (no animation).
 
@@ -268,7 +268,10 @@ Visually: Excalidraw's own canvas, with the Babs sidebar still visible. Header s
 
 ### Action Button
 
-- Default: text-only, secondary text color, 6px padding, hover→primary text
+- Default: icon + short label, secondary text color, 6px padding,
+  hover→primary text
+- Icon-only buttons are allowed only for dense repeated controls and must have
+  an accessible label/tooltip
 - Primary: filled with `Babs purple` accent, white text, used for confirmation actions
 - Destructive: filled with status:error color, used for restart/kill
 
@@ -402,3 +405,4 @@ When any of these become real needs, file a PRP — they each warrant their own 
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial version — visual identity, layouts for 5 views, component library, image-gen prompts | Claude Code |
+| 2026-05-06 | Require semantic icons on action buttons, with accessible labels for icon-only dense controls | Codex |

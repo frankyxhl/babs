@@ -1,8 +1,8 @@
 # REF-1003: Glossary of Boundaries
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-04
-**Last reviewed:** 2026-05-04
+**Last updated:** 2026-05-06
+**Last reviewed:** 2026-05-06
 **Status:** Active
 
 ---
@@ -14,7 +14,7 @@ This document was authored under the original 5-phase scope. v0.1 narrows bounda
 - **Discord / Telegram boundaries are removed** (no Connector layer in v0.1; deferred indefinitely)
 - **Tmux is now a lifecycle-owned boundary** — Babs creates and destroys tmux sessions per `BAB-1107` (not "attach-only")
 - **Cross-node boundary is read-only** per `BAB-1109` (no bidirectional HTTP JSON-RPC A2A in v0.1)
-- **Ticket filesystem (`tickets/`)** is a new boundary added in V0-M per `BAB-1111`
+- **Ticket filesystem (configured tickets root)** is a new boundary added in V0-M per `BAB-1111`
 - **Two OTP apps** (`:babs` web + `:babs_citizens` lifecycle) per `BAB-1110` is a new internal boundary
 
 The amendments are **substantial** — Discord/Telegram boundaries removed, tmux re-classified, cross-node narrowed, Ticket filesystem and two-OTP-app boundaries added. Use this document for the boundaries still in scope (PTY → see `BAB-1110`; Phoenix Endpoint, SQLite, JSONL transcripts). For changed/added boundaries, see the linked ADRs. A full rewrite will be done by Babs Citizens themselves post-Phase 1.
@@ -161,3 +161,4 @@ When a future feature looks like it needs a new boundary, **first check this glo
 | 2026-05-03 | Drop "Python relay migration compatibility" framing on A2A boundary | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Active`; supersession context remains in the v0.1 banner | Codex |
 | 2026-05-04 | Trinity review follow-up: align terminal boundary amendment with authoritative `pane:<slug>` topic terminology | Codex |
+| 2026-05-06 | Normalize Ticket filesystem boundary wording to configured tickets root | Codex |
