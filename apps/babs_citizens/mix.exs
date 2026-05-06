@@ -34,6 +34,7 @@ defmodule Babs.Citizens.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.22.0"},
       {:erlexec, "~> 2.3"},
+      {:file_system, "~> 1.1"},
       {:jason, "~> 1.4"},
       {:phoenix_pubsub, "~> 2.1"},
       {:toml, "~> 0.7.0"},

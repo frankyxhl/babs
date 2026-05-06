@@ -7,6 +7,7 @@ defmodule BabsWeb.CitizensLive do
 
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
+  alias BabsWeb.TicketPath
   alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
@@ -132,6 +133,7 @@ defmodule BabsWeb.CitizensLive do
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        gap: 7px;
         min-height: 36px;
         padding: 7px 11px;
         text-decoration: none;
@@ -185,6 +187,19 @@ defmodule BabsWeb.CitizensLive do
         display: grid;
         grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 10px;
+      }
+
+      .citizens-nav {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .icon {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
       }
 
       .citizens-count {
@@ -302,6 +317,7 @@ defmodule BabsWeb.CitizensLive do
       @media (max-width: 560px) {
         .citizens-page { padding: 18px 10px; }
         .citizens-header { flex-direction: column; }
+        .citizens-nav { justify-content: flex-start; flex-wrap: wrap; }
         .citizens-counts { grid-template-columns: 1fr; }
         .citizen-actions { flex-wrap: wrap; }
       }
@@ -314,7 +330,14 @@ defmodule BabsWeb.CitizensLive do
             <h1>Citizens</h1>
             <p class="citizens-subtitle">Running terminals and durable Citizen records</p>
           </div>
-          <a class="button button-primary" href={CitizenPath.new(@socket_token)}>New Citizen</a>
+          <nav class="citizens-nav" aria-label="Citizen navigation">
+            <a class="button" href={TicketPath.index(@socket_token)} data-testid="citizens-nav-tickets">
+              <BabsWeb.Icon.icon name="list" /> Tickets
+            </a>
+            <a class="button button-primary" href={CitizenPath.new(@socket_token)}>
+              <BabsWeb.Icon.icon name="plus" /> New Citizen
+            </a>
+          </nav>
         </header>
 
         <div :if={Phoenix.Flash.get(@flash, :info)} class="flash" data-testid="citizens-flash-info">
@@ -377,13 +400,13 @@ defmodule BabsWeb.CitizensLive do
             </div>
 
              <div class="citizen-actions" data-lifecycle-scope={citizen.slug}>
-               <a
+              <a
                  :if={action?(citizen, :open)}
                  class="button"
                 href={CitizenPath.terminal(citizen.slug, @socket_token)}
                 data-testid={"citizen-open-#{citizen.slug}"}
               >
-                Open
+                <BabsWeb.Icon.icon name="external-link" /> Open
               </a>
               <span
                 :if={!action?(citizen, :open)}
@@ -391,7 +414,7 @@ defmodule BabsWeb.CitizensLive do
                 aria-disabled="true"
                 data-testid={"citizen-open-#{citizen.slug}"}
               >
-                Open
+                <BabsWeb.Icon.icon name="external-link" /> Open
               </span>
               <a
                 :if={action?(citizen, :full)}
@@ -399,7 +422,7 @@ defmodule BabsWeb.CitizensLive do
                 href={CitizenPath.terminal(citizen.slug, @socket_token, full?: true)}
                 data-testid={"citizen-full-#{citizen.slug}"}
               >
-                Full
+                <BabsWeb.Icon.icon name="maximize" /> Full
               </a>
               <span
                 :if={!action?(citizen, :full)}
@@ -407,7 +430,7 @@ defmodule BabsWeb.CitizensLive do
                 aria-disabled="true"
                 data-testid={"citizen-full-#{citizen.slug}"}
               >
-                Full
+                <BabsWeb.Icon.icon name="maximize" /> Full
               </span>
                <button
                  :if={action?(citizen, :start)}
@@ -418,7 +441,7 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Starting"
                  data-testid={"citizen-start-#{citizen.slug}"}
                >
-                Start
+                <BabsWeb.Icon.icon name="play" /> Start
               </button>
                <button
                  :if={action?(citizen, :stop)}
@@ -432,7 +455,7 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Stopping"
                  data-testid={"citizen-stop-#{citizen.slug}"}
                >
-                Stop
+                <BabsWeb.Icon.icon name="square" /> Stop
               </button>
                <button
                  :if={action?(citizen, :restart)}
@@ -443,7 +466,7 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Restarting"
                  data-testid={"citizen-restart-#{citizen.slug}"}
                >
-                Restart
+                <BabsWeb.Icon.icon name="rotate-cw" /> Restart
               </button>
             </div>
           </article>

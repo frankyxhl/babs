@@ -22,5 +22,7 @@ defmodule BabsWeb.Router do
     get("/citizens/new", TerminalController, :new)
     get("/citizens/:slug", TerminalController, :show)
     head("/citizens/:slug", TerminalController, :head)
+    get("/tickets", TerminalController, :tickets)
+    get("/tickets/:id", TerminalController, :ticket)
   end
 end
