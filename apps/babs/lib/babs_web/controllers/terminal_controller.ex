@@ -27,6 +27,22 @@ defmodule BabsWeb.TerminalController do
     )
   end
 
+  def tickets(conn, params) do
+    conn = fetch_query_params(conn)
+
+    live_render(conn, BabsWeb.TicketsLive,
+      session: %{"socket_token" => socket_token(conn, params)}
+    )
+  end
+
+  def ticket(conn, %{"id" => id} = params) do
+    conn = fetch_query_params(conn)
+
+    live_render(conn, BabsWeb.TicketLive,
+      session: %{"id" => id, "socket_token" => socket_token(conn, params)}
+    )
+  end
+
   def show(conn, %{"slug" => slug} = params) do
     conn = fetch_query_params(conn)
 

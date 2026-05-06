@@ -160,13 +160,15 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Planning doc**: `BAB-2217` PRP covers the complete Phase 7-12 M3 design and execution slices.
 **Execution contract**: `BAB-2218` records approved operator defaults for continuous Phase 7-12 delivery, review-loop caps, runtime data roots, multi-CLI validation citizens, and stop conditions.
 **Implementation CHG**: `BAB-2219` is approved and defines the Phase 7 Ticket storage core TDD plan, command-surface bridge decision, validation scope, and review requirements.
-**Current status**: Implemented locally on `codex/m3-phase-7-ticket-core`, Trinity implementation review passed with GLM and DeepSeek, and local validation passed; pending PR. The slice uses a documented temporary `mix babs.ticket.*` bridge rather than ADR-complete `bb ticket` over UDS.
+**Current status**: Merged in PR #16. The slice uses a documented temporary `mix babs.ticket.*` bridge rather than ADR-complete `bb ticket` over UDS.
 **Scope**: configured tickets root, defaulting to gitignored `<BABS_ROOT>/var/tickets`; schema validation (per `BAB-1111` frontmatter); `bb ticket new` minimum CLI target with any temporary `mix babs.ticket.*` bridge disclosed in the Phase 7 PR; per-ticket single-writer GenServer (concurrent-write safety); `T-...history.jsonl` append-only log.
 **Acceptance**: Create 5 tickets via `bb ticket new` or an explicitly disclosed temporary `mix babs.ticket.*` bridge; `git status` clean except intended source changes; concurrent writes from 2 processes do not corrupt files (test in code)
 **Estimate**: 4-6 days
 
 ### Phase 8 — Ticket Index UI + Render
 
+**Implementation CHG**: `BAB-2220` drafts the Phase 8 Ticket UI, detail render, watcher, icon, BDD, and validation plan.
+**Current status**: Implemented locally on `codex/m3-phase-8-ticket-ui`; local ExUnit, coverage, JS, browser-harness BDD, Playwright E2E smoke, Gate A, Alfred validation, and whitespace checks pass. Trinity implementation review passed with GLM and DeepSeek; pending PR.
 **Scope**: `/tickets` list page (grouped by state); `/tickets/<id>` view (frontmatter table + markdown body + history timeline); filesystem watcher (FSEvents on macOS) drives live UI updates.
 **Acceptance**: Browse all tickets; click one, see full content; manually edit ticket file in editor → UI updates within 1s
 **Estimate**: 5-7 days
@@ -315,3 +317,5 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-06 | Mark `BAB-2219` approved after Trinity R3 GLM/DeepSeek PASS and advisory fold-in | Codex |
 | 2026-05-06 | Record local Phase 7 Ticket storage implementation and temporary Mix command bridge | Codex |
 | 2026-05-06 | Record Phase 7 Trinity implementation review pass and post-review fixes | Codex |
+| 2026-05-06 | Mark Phase 7 PR #16 merged and add `BAB-2220` Phase 8 Ticket UI and watcher CHG reference | Codex |
+| 2026-05-06 | Record local Phase 8 Ticket UI and watcher implementation plus validation pass | Codex |

@@ -14,8 +14,12 @@ function commandExists(command) {
   }
 }
 
-async function connectCitizen(page, slug) {
-  await page.goto(`/citizens/${slug}`);
+async function connectCitizen(page, slug, opts = {}) {
+  const response = await page.goto(`/citizens/${slug}`);
+
+  if (opts.optional && response?.status() === 404) {
+    test.skip(true, `${slug} citizen is not running`);
+  }
 
   await expect(page.locator(".xterm")).toBeVisible();
   await expect(page.getByTestId("connection-status")).toHaveAttribute(
@@ -82,14 +86,14 @@ test("sentinel terminal reconnects after web reload", async ({ page }) => {
 test("clare browser terminal connects when Claude CLI is available", async ({ page }) => {
   test.skip(!commandExists("claude"), "claude CLI is not installed");
 
-  await connectCitizen(page, "clare");
+  await connectCitizen(page, "clare", { optional: true });
   await expectTerminalHasContent(page);
 });
 
 test("dylan browser terminal connects when Codex CLI is available", async ({ page }) => {
   test.skip(!commandExists("codex"), "codex CLI is not installed");
 
-  await connectCitizen(page, "dylan");
+  await connectCitizen(page, "dylan", { optional: true });
   await expectTerminalHasContent(page);
 });
 

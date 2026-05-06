@@ -10,6 +10,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,6 +59,7 @@ class BabsBddContext:
         self.base_url = os.environ.get("BABS_BROWSER_BASE_URL", "http://127.0.0.1:4000").rstrip("/")
         self.server_process: subprocess.Popen | None = None
         self.test_target_id: str | None = None
+        self.tickets_root = tickets_root()
 
     def ensure_server(self) -> None:
         if self._server_ready():
@@ -65,9 +67,12 @@ class BabsBddContext:
 
         SERVER_LOG.parent.mkdir(parents=True, exist_ok=True)
         log = SERVER_LOG.open("ab")
+        env = os.environ.copy()
+        env["BABS_TICKETS_ROOT"] = str(self.tickets_root)
         self.server_process = subprocess.Popen(
             ["mise", "exec", "--", "mix", "phx.server"],
             cwd=ROOT,
+            env=env,
             stdout=log,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -280,6 +285,34 @@ def scenarios() -> list[Scenario]:
             when="the operator opens that citizen URL",
             then="the page returns a clear citizen-not-found response",
             run=scenario_missing_citizen_returns_404,
+        ),
+        Scenario(
+            name="ticket billboard list shows manual ticket",
+            given="a runtime Ticket file is created manually",
+            when="the operator opens /tickets",
+            then="the Ticket appears in the Billboard list with icon-labeled navigation",
+            run=scenario_ticket_billboard_list_shows_manual_ticket,
+        ),
+        Scenario(
+            name="ticket external edit refreshes index",
+            given="the /tickets page is open",
+            when="the Ticket markdown title is edited on disk",
+            then="the page updates without a browser reload",
+            run=scenario_ticket_external_edit_refreshes_index,
+        ),
+        Scenario(
+            name="ticket detail renders body and history",
+            given="a runtime Ticket has markdown body and history",
+            when="the operator opens /tickets/<id>",
+            then="the detail page renders the body and history timeline",
+            run=scenario_ticket_detail_renders_body_and_history,
+        ),
+        Scenario(
+            name="malformed ticket is visible",
+            given="a malformed runtime Ticket file exists",
+            when="the operator opens /tickets",
+            then="the Invalid section shows the malformed file without crashing",
+            run=scenario_malformed_ticket_is_visible,
         ),
     ]
 
@@ -658,6 +691,11 @@ def scenario_seed_citizens_connect_when_available(context: BabsBddContext) -> No
             print(f"  SKIP {slug}: {command} CLI is not installed")
             continue
 
+        status, _body = http_get_status(f"{context.base_url}/citizens/{slug}", timeout=5)
+        if status == 404:
+            print(f"  SKIP {slug}: citizen is not running")
+            continue
+
         context.connect_citizen(slug)
         wait_until(
             f"{slug} terminal to render content",
@@ -678,6 +716,74 @@ def scenario_missing_citizen_returns_404(context: BabsBddContext) -> None:
 
     context.open_path(missing_path)
     assert "citizen not found: babs-bdd-missing" in js("document.body.innerText")
+
+
+def scenario_ticket_billboard_list_shows_manual_ticket(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Billboard Ticket", "Manual Ticket body.")
+
+        context.open_path("/tickets")
+        assert_element_visible("[data-testid='tickets-index']", "tickets index")
+        assert_element_visible(f"[data-testid='ticket-row-{ticket_id}']", f"{ticket_id} row")
+        assert "BDD Billboard Ticket" in js("document.body.innerText")
+        assert js("Boolean(document.querySelector('[data-testid=\"tickets-refresh\"] [data-icon=\"refresh\"]'))")
+        assert js("document.querySelector('[data-testid=\"tickets-refresh\"]')?.getAttribute('aria-label')") == "Refresh tickets"
+        assert js("Boolean(document.querySelector('[data-testid=\"tickets-nav-citizens\"] [data-icon=\"users\"]'))")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_external_edit_refreshes_index(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Refresh Before", "Manual Ticket body.")
+        context.open_path("/tickets")
+        assert_element_visible(f"[data-testid='ticket-row-{ticket_id}']", f"{ticket_id} row before edit")
+
+        path = ticket_markdown_path(context.tickets_root, ticket_id)
+        content = path.read_text()
+        path.write_text(content.replace("BDD Refresh Before", "BDD Refresh After"))
+
+        wait_until(
+            "ticket index to refresh after external edit",
+            lambda: "BDD Refresh After" in js("document.body.innerText"),
+            timeout=10,
+        )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_detail_renders_body_and_history(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Detail Ticket", "Detail body from BDD.")
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-detail']", "ticket detail")
+        assert "BDD Detail Ticket" in js("document.body.innerText")
+        assert "Detail body from BDD." in js("document.body.innerText")
+        assert "created" in js("document.body.innerText")
+        assert_element_visible("[data-testid='ticket-history-event']", "ticket history event")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        context.tickets_root.mkdir(parents=True, exist_ok=True)
+        ticket_markdown_path(context.tickets_root, ticket_id).write_text("not frontmatter")
+
+        context.open_path("/tickets")
+        assert_element_visible("[data-testid='ticket-group-invalid']", "invalid ticket group")
+        assert_element_visible("[data-testid='ticket-invalid-row']", "invalid ticket row")
+        assert f"{ticket_id}.md" in js("document.body.innerText")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
 
 
 def assert_element_visible(selector: str, label: str) -> None:
@@ -970,6 +1076,74 @@ def citizens_db_path() -> Path:
         return path.resolve()
 
     return (RUNTIME_ROOT / "var" / "babs_citizens.sqlite3").resolve()
+
+
+def tickets_root() -> Path:
+    raw = os.environ.get("BABS_TICKETS_ROOT")
+
+    if raw and raw.strip():
+        path = Path(raw.strip()).expanduser()
+        if not path.is_absolute():
+            path = RUNTIME_ROOT / path
+        return path.resolve()
+
+    return (RUNTIME_ROOT / "var" / "tickets").resolve()
+
+
+def allocate_ticket_id(root: Path) -> str:
+    root.mkdir(parents=True, exist_ok=True)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    for seq in range(900, 1000):
+        ticket_id = f"T-{today}-{seq:03d}"
+        if not ticket_markdown_path(root, ticket_id).exists() and not ticket_history_path(root, ticket_id).exists():
+            return ticket_id
+
+    raise AssertionError("could not allocate BDD Ticket id")
+
+
+def write_ticket(root: Path, ticket_id: str, title: str, body: str) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    ticket_markdown_path(root, ticket_id).write_text(
+        f"""---
+id: "{ticket_id}"
+type: "assignment"
+state: "open"
+assigner: "bdd"
+assignees: []
+assignee_role: null
+inspector: "user"
+priority: "normal"
+parent_ticket: null
+created_at: "{now}"
+updated_at: "{now}"
+metadata: {{"source": "browser-harness"}}
+---
+
+# {title}
+
+{body}
+"""
+    )
+
+    ticket_history_path(root, ticket_id).write_text(
+        json.dumps({"ts": now, "event": "created", "by": "bdd"}, separators=(",", ":")) + "\n"
+    )
+
+
+def cleanup_ticket(root: Path, ticket_id: str) -> None:
+    ticket_markdown_path(root, ticket_id).unlink(missing_ok=True)
+    ticket_history_path(root, ticket_id).unlink(missing_ok=True)
+
+
+def ticket_markdown_path(root: Path, ticket_id: str) -> Path:
+    return root / f"{ticket_id}.md"
+
+
+def ticket_history_path(root: Path, ticket_id: str) -> Path:
+    return root / f"{ticket_id}.history.jsonl"
 
 
 def workspace_root() -> Path:
