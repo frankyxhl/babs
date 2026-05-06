@@ -257,14 +257,17 @@ Implemented locally on branch `codex/m3-phase-7-ticket-core` on 2026-05-06:
   ref-tagged writer idle timeouts, pre-write Ticket validation, non-raising
   Ticket root creation in `TicketId.claim_next/2`, sequence exhaustion at 999,
   and empty-claim cleanup on failed create.
+- Addressed GitHub Codex R1 by validating storage-only comment history events
+  before rewriting Ticket markdown, preventing failed oversized comments from
+  advancing `updated_at` without a matching history event.
 
 Local validation passed:
 
 - `mise exec -- mix format --check-formatted`
 - `mise exec -- mix compile --warnings-as-errors`
-- `mise exec -- mix test` — 156 `:babs_citizens` tests and 51 `:babs` tests
+- `mise exec -- mix test` — 157 `:babs_citizens` tests and 51 `:babs` tests
   passed.
-- `mise exec -- mix test --cover` — `:babs_citizens` 82.49% and `:babs`
+- `mise exec -- mix test --cover` — `:babs_citizens` 82.54% and `:babs`
   81.49%.
 - `mise exec -- mix babs.gate_a`
 - `af validate --root .` — 115 documents checked, 0 issues.
@@ -327,6 +330,10 @@ change browser JavaScript or browser-visible behavior.
   messages, API pre-write validation, Ticket ID sequence exhaustion,
   non-raising Ticket root creation, and empty placeholder cleanup after failed
   create.
+- GitHub Codex R1 on PR #16 reviewed commit `270a5ddce4` and reported one P2
+  finding: oversized comments could rewrite markdown before
+  `History.append/3` rejected the event. Fixed by adding
+  `History.validate_appendable/2` before markdown rewrite and a regression test.
 
 ---
 
@@ -339,3 +346,4 @@ change browser JavaScript or browser-visible behavior.
 | 2026-05-06 | Address Trinity R2 advisories and choose `yaml_elixir` for YAML frontmatter | Codex |
 | 2026-05-06 | Mark CHG approved after Trinity R3 PASS and final advisory fold-in | Codex |
 | 2026-05-06 | Record local implementation validation and Trinity implementation-review fixes | Codex |
+| 2026-05-06 | Record GitHub Codex R1 oversized-comment fix | Codex |

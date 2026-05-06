@@ -8,6 +8,14 @@ defmodule Babs.Citizens.Tickets.History do
   @required ~w(ts event by)
   @max_event_bytes 16_384
 
+  @spec validate_appendable(String.t(), map()) :: :ok | {:error, term()}
+  def validate_appendable(id, event) when is_binary(id) and is_map(event) do
+    with :ok <- validate_event(event),
+         {:ok, _line} <- encode_event(id, event) do
+      :ok
+    end
+  end
+
   @spec append(String.t(), String.t(), map()) :: :ok | {:error, term()}
   def append(root, id, event) when is_binary(root) and is_binary(id) and is_map(event) do
     with :ok <- validate_event(event),

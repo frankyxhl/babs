@@ -60,15 +60,11 @@ defmodule Babs.Citizens.Tickets.Writer do
            {:ok, body} <- comment_body(attrs),
            {:ok, by} <- comment_by(attrs),
            now <- now(opts),
+           event <- comment_event(now, by, body),
+           :ok <- History.validate_appendable(id, event),
            updated = %{ticket | updated_at: now},
            :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
-           :ok <-
-             History.append(state.root, id, %{
-               "ts" => now,
-               "event" => "comment",
-               "by" => by,
-               "body" => body
-             }) do
+           :ok <- History.append(state.root, id, event) do
         {:ok, %{ticket: updated, delivery: :deferred}}
       end
 
@@ -90,6 +86,15 @@ defmodule Babs.Citizens.Tickets.Writer do
       "event" => "created",
       "by" => ticket.assigner,
       "ticket_id" => ticket.id
+    }
+  end
+
+  defp comment_event(now, by, body) do
+    %{
+      "ts" => now,
+      "event" => "comment",
+      "by" => by,
+      "body" => body
     }
   end
 

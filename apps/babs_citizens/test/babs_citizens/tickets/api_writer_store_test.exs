@@ -78,6 +78,31 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert List.last(history)["body"] == "Working on it."
   end
 
+  test "oversized comments fail before rewriting ticket markdown" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Large comment", body: "Initial body."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    ticket_id = ticket.id
+
+    assert {:error, {:history_event_too_large, ^ticket_id}} =
+             Api.comment_ticket(ticket.id, %{body: String.duplicate("x", 20_000), by: "clare"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z"
+             )
+
+    assert {:ok, %{ticket: unchanged, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert unchanged.updated_at == "2026-05-06T00:00:00Z"
+    assert Enum.map(history, & &1["event"]) == ["created"]
+  end
+
   test "detects manual write conflicts before writer mutation" do
     root = tmp_root()
 
