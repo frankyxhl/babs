@@ -25,11 +25,20 @@ These terms reflect the current v0.1 design. They take precedence over legacy se
 
 ### Hardline
 
-The PTY/byte channel between BEAM and a `tmux` pane. **1:1 with one Citizen execution** (one Citizen = one active Hardline; one Hardline owns one tmux session).
+The PTY/byte channel between BEAM and a `tmux` pane. **1:1 with one Citizen execution** (one Citizen = one active Hardline; one Hardline is attached to one tmux pane).
 
 Implemented as `Hardline.Pane` GenServer (in `:babs_citizens` OTP app — see `BAB-1110`). Holds an `erlexec` port. Publishes received bytes to `Phoenix.PubSub` topic `pane:<slug>`; provides `inject/2` for input.
 
 Replaces the old `Tmux.Core` + `PaneSession` split. Origin: *The Matrix* hardline phones (see `BAB-1005`).
+
+### Imported Tmux Session
+
+A tmux pane created outside Babs and explicitly attached through the Phase 13
+import UI. Imported sessions default to external ownership: Babs may stream,
+inject, persist transcript, detach, and reattach, but it must not kill the
+external tmux session. UI should label these Citizens with an `Imported ·
+External-owned` style badge and show a `Detach only · tmux stays running`
+lifecycle reminder near Stop/Detach controls. See `BAB-1113`.
 
 ### Ticket
 
@@ -54,11 +63,11 @@ There is no separate Billboard data structure — the filesystem is the billboar
 
 ### Mayor
 
-A special Citizen with `is_mayor: true` (V0-L only — Phase 15 in `BAB-2300`). Reads the Billboard, proposes ticket trees + citizen lists, awaits user approval, writes approved tickets to disk. **Not implemented in v0.1 (V0-S or V0-M)**; SQLite reserved field `is_mayor` is set false in v0.1.
+A special Citizen with `is_mayor: true` (V0-L only — Phase 16 in `BAB-2300`). Reads the Billboard, proposes ticket trees + citizen lists, awaits user approval, writes approved tickets to disk. **Not implemented in v0.1 (V0-S or V0-M)**; SQLite reserved field `is_mayor` is set false in v0.1.
 
 ### Inspector
 
-A Citizen with `role: inspector` (V0-L only — Phase 14). Reviews tickets in `Pending Approval` state and decides approve/reject. In v0.1 (V0-S/V0-M), the inspector role is fulfilled by the human user.
+A Citizen with `role: inspector` (V0-L only — Phase 15). Reviews tickets in `Pending Approval` state and decides approve/reject. In v0.1 (V0-S/V0-M), the inspector role is fulfilled by the human user.
 
 ### Mission (deprecated as runtime concept; reborn as `Ticket(type=mission)`)
 
@@ -206,3 +215,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-04 | Trinity review fix: update anti-pattern table to recommend `Hardline.Pane` and `Hardline` instead of legacy `PaneSession` and `Tmux.Core` terms | Codex |
 | 2026-05-05 | Phase 2a: introduce configurable `workspace_root`, migrate seed examples to `cwd = "<slug>"`, and clarify default resolved workspace paths | Codex |
 | 2026-05-06 | Normalize Ticket vocabulary to five states plus transition events, `assignees: []` Billboard representation, and gitignored runtime tickets root | Codex |
+| 2026-05-06 | Add Imported Tmux Session vocabulary and shift Inspector/Mayor phase references after Phase 13 attach insertion | Codex |

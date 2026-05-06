@@ -43,7 +43,7 @@ defmodule Babs.Citizens.Hardline.Transcript do
   @spec open(Path.t()) :: {:ok, File.io_device()} | {:error, term()}
   def open(cwd) when is_binary(cwd) do
     with :ok <- File.mkdir_p(cwd),
-         {:ok, io} <- File.open(path(cwd), [:append, :binary, {:delayed_write, 4096, 50}]) do
+         {:ok, io} <- File.open(path(cwd), [:append, :binary]) do
       {:ok, io}
     end
   end

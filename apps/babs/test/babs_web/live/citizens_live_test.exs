@@ -94,6 +94,7 @@ defmodule BabsWeb.CitizensLiveTest do
            ])
 
     assert html =~ ~s(href="/citizens/new?socket_token=socket-token")
+    assert html =~ ~s(href="/citizens/attach?socket_token=socket-token")
     assert html =~ ~s(href="/citizens/clare?socket_token=socket-token")
     assert html =~ ~s(href="/citizens/clare?full=1&amp;socket_token=socket-token")
     assert html =~ ~s(data-testid="citizen-stop-clare")
@@ -110,6 +111,39 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(data-testid="citizen-full-dylan")
     refute html =~ ~s(href="/citizens/dylan?socket_token=socket-token")
     refute html =~ ~s(href="/citizens/dylan?full=1&amp;socket_token=socket-token")
+  end
+
+  test "renders imported external-owned lifecycle badges and detach controls" do
+    insert_citizen!(%{
+      slug: "imported-one",
+      display_name: "Imported One",
+      status: "running",
+      metadata: %{
+        "hardline" => %{
+          "ownership" => "external",
+          "tmux" => %{
+            "session_name" => "operator",
+            "window_index" => "0",
+            "pane_index" => "0",
+            "pane_id" => "%101",
+            "target" => "operator:0.0"
+          }
+        }
+      }
+    })
+
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "imported-one", nil)
+
+    {:ok, _view, html} = live(build_conn(), "/citizens")
+
+    assert html =~ ~s(data-testid="citizen-ownership-imported-one")
+    assert html =~ "Imported · External-owned"
+    assert html =~ "operator:0.0"
+    assert html =~ "Detach only · tmux stays running"
+    assert html =~ ~s(data-testid="citizen-stop-imported-one")
+    assert html =~ "Detach"
+    assert html =~ ~s(data-testid="citizen-restart-imported-one")
+    assert html =~ "Reattach"
   end
 
   test "start control invokes lifecycle boundary and refreshes the row" do

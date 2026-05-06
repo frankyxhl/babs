@@ -259,6 +259,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_citizen_lifecycle_controls_stop_start_restart,
         ),
         Scenario(
+            name="imported external tmux attach detaches without killing external session",
+            given="a stopped Citizen and an unmanaged tmux pane exist",
+            when="the operator imports the pane from /citizens/attach and later detaches it",
+            then="Babs uses Attach/Detach semantics and the external tmux session stays alive",
+            run=scenario_imported_external_tmux_attach_detaches_without_killing_external_session,
+        ),
+        Scenario(
             name="stopped citizens stay stopped across managed server restart",
             given="one browser-created citizen is stopped and one is running",
             when="the managed BDD server restarts",
@@ -306,6 +313,20 @@ def scenarios() -> list[Scenario]:
             when="the operator opens /tickets/<id>",
             then="the detail page renders the body and history timeline",
             run=scenario_ticket_detail_renders_body_and_history,
+        ),
+        Scenario(
+            name="ticket new form creates chat ready detail",
+            given="/tickets is available",
+            when="the operator creates a Ticket from the browser",
+            then="the detail page opens with a chat panel and composer",
+            run=scenario_ticket_new_form_creates_chat_ready_detail,
+        ),
+        Scenario(
+            name="ticket chat shows captured citizen reply",
+            given="a Ticket detail page is open",
+            when="a Citizen reply is appended to the Ticket history JSONL",
+            then="the chat view refreshes with the Citizen message",
+            run=scenario_ticket_chat_shows_captured_citizen_reply,
         ),
         Scenario(
             name="malformed ticket is visible",
@@ -600,11 +621,19 @@ def scenario_citizen_lifecycle_controls_stop_start_restart(context: BabsBddConte
             timeout=10,
         )
 
+        before_restart_stream_id = latest_transcript_output_stream_id(slug)
         click_selector('[data-testid="terminal-restart"]')
         wait_until(
-            "terminal restart flash to render",
-            lambda: "Restarted" in js("document.body.innerText"),
-            timeout=15,
+            f"browser to reconnect /citizens/{slug} after restart",
+            lambda: js("window.location.pathname") == f"/citizens/{slug}"
+            and js("document.querySelector('[data-testid=\"connection-status\"]')?.dataset.state || ''")
+            == "connected",
+            timeout=20,
+        )
+        wait_until(
+            f"{slug} hardline stream to change after restart",
+            lambda: latest_transcript_output_stream_id(slug) not in (None, before_restart_stream_id),
+            timeout=20,
         )
         after_restart_marker = unique_marker("BABS_BDD_LIFECYCLE_AFTER_RESTART")
         context.type_command_and_expect(after_restart_marker, exactly_once=True)
@@ -620,6 +649,71 @@ def scenario_citizen_lifecycle_controls_stop_start_restart(context: BabsBddConte
         assert transcript_contains(slug, after_restart_marker)
     finally:
         cleanup_spawned_citizen(slug)
+
+
+def scenario_imported_external_tmux_attach_detaches_without_killing_external_session(
+    context: BabsBddContext,
+) -> None:
+    slug = unique_slug("bdd-import")
+    external_session = unique_slug("bdd-external")
+    target = f"{external_session}:0.0"
+    pane_id = ""
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        context.open_path("/citizens")
+        click_selector(f'[data-testid="citizen-stop-{slug}"]')
+        wait_for_index_status(slug, "stopped")
+
+        start_external_tmux_session(external_session)
+        assert external_tmux_session_alive(external_session)
+        pane_id = external_tmux_pane_id(external_session)
+
+        context.open_path("/citizens/attach")
+        assert_element_visible('[data-testid="attach-citizen-page"]', "attach Citizen page")
+        assert_element_visible('[data-testid="attach-form"]', "attach form")
+        assert "Attach tmux" in js("document.body.innerText")
+        assert "Attachable" in js("document.body.innerText")
+        submit_attach_form(slug, pane_id)
+
+        wait_until(
+            f"browser to open imported terminal /citizens/{slug}",
+            lambda: js("window.location.pathname") == f"/citizens/{slug}",
+            timeout=20,
+        )
+        wait_for_terminal_connection(slug)
+        wait_until(
+            "imported terminal badge and detach controls to render",
+            lambda: "Imported" in js("document.body.innerText")
+            and "External-owned" in js("document.body.innerText")
+            and "Detach only" in js("document.body.innerText")
+            and "Detach" in js("document.body.innerText")
+            and "Reattach" in js("document.body.innerText"),
+            timeout=10,
+        )
+
+        marker = unique_marker("BABS_BDD_IMPORTED_ATTACH")
+        context.type_command_and_expect(marker, exactly_once=True)
+        assert external_tmux_capture_contains(external_session, marker)
+
+        click_selector('[data-testid="terminal-stop"]')
+        wait_until(
+            "browser to return to citizens index after external detach",
+            lambda: js("window.location.pathname") == "/citizens",
+            timeout=15,
+        )
+        wait_for_index_status(slug, "stopped")
+        assert external_tmux_session_alive(external_session)
+
+        row = sqlite_citizen_row(slug)
+        assert row is not None
+        metadata = json.loads(row["metadata"])
+        assert metadata["hardline"]["ownership"] == "external"
+        assert metadata["hardline"]["tmux"]["target"] == target
+    finally:
+        context.close_test_tab()
+        cleanup_spawned_citizen(slug)
+        cleanup_external_tmux_session(external_session)
 
 
 def scenario_stopped_citizens_stay_stopped_across_managed_server_restart(context: BabsBddContext) -> None:
@@ -788,6 +882,91 @@ def scenario_ticket_detail_renders_body_and_history(context: BabsBddContext) -> 
         cleanup_ticket(context.tickets_root, ticket_id)
 
 
+def scenario_ticket_new_form_creates_chat_ready_detail(context: BabsBddContext) -> None:
+    title = f"BDD New Ticket {int(time.time() * 1000)}"
+    body = "Created from the browser-harness new Ticket form."
+    ticket_id = None
+
+    try:
+        context.open_path("/tickets")
+        assert_element_visible("[data-testid='tickets-index']", "tickets index")
+        assert_element_visible('[data-testid="tickets-new"]', "new Ticket button")
+        assert js("Boolean(document.querySelector('[data-testid=\"tickets-new\"] [data-icon=\"plus\"]'))")
+
+        click_selector('[data-testid="tickets-new"]')
+        wait_until(
+            "browser to open new Ticket form",
+            lambda: js("window.location.pathname") == "/tickets/new",
+            timeout=10,
+        )
+        assert_element_visible('[data-testid="new-ticket-form"]', "new Ticket form")
+        wait_until(
+            "LiveView socket to connect on new Ticket form",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+
+        submit_new_ticket_form(title, "high", body)
+        wait_until(
+            "browser to redirect to created Ticket detail",
+            lambda: str(js("window.location.pathname") or "").startswith("/tickets/T-"),
+            timeout=20,
+        )
+        ticket_id = str(js("window.location.pathname")).split("/")[-1]
+
+        assert_element_visible("[data-testid='ticket-detail']", "created Ticket detail")
+        assert title in js("document.body.innerText")
+        assert body in js("document.body.innerText")
+        assert_element_visible('[data-testid="ticket-comments-chat"]', "Ticket comments chat")
+        assert_element_visible('[data-testid="ticket-comments-empty"]', "empty Ticket comments state")
+        assert_element_visible('[data-testid="ticket-comment-form"]', "Ticket chat composer")
+        assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"send\"]'))")
+
+        events = [event["event"] for event in ticket_history_events(context.tickets_root, ticket_id)]
+        assert "created" in events
+    finally:
+        if ticket_id is not None:
+            cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_chat_shows_captured_citizen_reply(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    reply = f"BDD captured Citizen reply {int(time.time() * 1000)}."
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Captured Reply Ticket", "Capture reply body.")
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-detail']", "ticket detail")
+        assert_element_visible('[data-testid="ticket-comments-empty"]', "empty Ticket comments state")
+
+        append_ticket_history_event(
+            context.tickets_root,
+            ticket_id,
+            {
+                "ts": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+                "event": "comment",
+                "by": "clare",
+                "ticket_id": ticket_id,
+                "body": reply,
+            },
+        )
+
+        wait_until(
+            "captured Citizen reply to appear in chat",
+            lambda: ticket_comment_message_contains(reply)
+            and "clare" in js("document.body.innerText"),
+            timeout=15,
+        )
+
+        events = ticket_history_events(context.tickets_root, ticket_id)
+        assert any(
+            event.get("event") == "comment" and event.get("by") == "clare" and event.get("body") == reply
+            for event in events
+        )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
 def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
     ticket_id = allocate_ticket_id(context.tickets_root)
 
@@ -932,13 +1111,15 @@ def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -
             timeout=20,
         )
         assert_element_visible('[data-testid="ticket-comment-form"]', "ticket comment form")
-        assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"message-square\"]'))")
+        assert_element_visible('[data-testid="ticket-comments-chat"]', "ticket comments chat")
+        assert_element_visible('[data-testid="ticket-comments-empty"]', "empty ticket comments state")
+        assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"send\"]'))")
 
         submit_ticket_comment(comment)
         wait_until(
             "ticket detail to show stored comment",
             lambda: "Comment stored" in js("document.body.innerText")
-            and comment in js("document.body.innerText"),
+            and ticket_comment_message_contains(comment),
             timeout=20,
         )
         wait_until(
@@ -1018,6 +1199,67 @@ def submit_ticket_comment(comment: str) -> None:
         js(script)
     finally:
         js("delete window.__babsBddTicketComment")
+
+
+def submit_new_ticket_form(title: str, priority: str, body: str) -> None:
+    values = json.dumps({"title": title, "priority": priority, "body": body})
+    js(f"window.__babsBddTicketValues = {values}")
+    script = """
+        const values = window.__babsBddTicketValues;
+        const setValue = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (!element) throw new Error(`missing Ticket form field ${selector}`);
+          element.value = value;
+          element.dispatchEvent(new Event("input", {bubbles: true}));
+          element.dispatchEvent(new Event("change", {bubbles: true}));
+        };
+        setValue('[data-testid="ticket-title"]', values.title);
+        setValue('[data-testid="ticket-priority"]', values.priority);
+        setValue('[data-testid="ticket-body"]', values.body);
+        const form = document.querySelector('[data-testid="new-ticket-form"]');
+        if (!form) throw new Error("missing new Ticket form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddTicketValues")
+
+
+def submit_attach_form(slug: str, target: str) -> None:
+    values = json.dumps({"slug": slug, "target": target})
+    js(f"window.__babsBddAttachValues = {values}")
+    script = """
+        const values = window.__babsBddAttachValues;
+        const setValue = (selector, value) => {
+          const element = document.querySelector(selector);
+          if (!element) throw new Error(`missing attach form field ${selector}`);
+          element.value = value;
+          element.dispatchEvent(new Event("input", {bubbles: true}));
+          element.dispatchEvent(new Event("change", {bubbles: true}));
+        };
+        setValue('[data-testid="attach-citizen-select"]', values.slug);
+        setValue('[data-testid="attach-target-select"]', values.target);
+        const form = document.querySelector('[data-testid="attach-form"]');
+        if (!form) throw new Error("missing attach form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddAttachValues")
+
+
+def ticket_comment_message_contains(comment: str) -> bool:
+    comment_json = json.dumps(comment)
+    return bool(
+        js(
+            f"""
+            Array.from(document.querySelectorAll('[data-testid="ticket-comment-message"]'))
+              .some((element) => element.innerText.includes({comment_json}))
+            """
+        )
+    )
 
 
 def assert_control_disabled(selector: str, label: str) -> None:
@@ -1172,9 +1414,69 @@ def terminal_text() -> str:
 
 def send_tmux_output(slug: str, marker: str) -> None:
     subprocess.run(
-        ["tmux", "send-keys", "-t", f"babs-{slug}", f"printf '{marker}\\n'", "Enter"],
+        ["tmux", "send-keys", "-t", f"babs-{slug}:0.0", f"printf '{marker}\\n'", "Enter"],
         check=True,
     )
+
+
+def start_external_tmux_session(session_name: str) -> None:
+    cwd = workspace_root() / session_name
+    cleanup_external_tmux_session(session_name)
+    cwd.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["tmux", "new-session", "-d", "-s", session_name, "-c", str(cwd), "/bin/zsh -f"],
+        check=True,
+    )
+    wait_until(
+        f"external tmux session {session_name} to start",
+        lambda: external_tmux_session_alive(session_name),
+        timeout=10,
+    )
+
+
+def cleanup_external_tmux_session(session_name: str) -> None:
+    if not session_name.startswith("bdd-external-"):
+        raise AssertionError(f"refusing to clean non-BDD external tmux session: {session_name}")
+
+    subprocess.run(
+        ["tmux", "kill-session", "-t", session_name],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    shutil.rmtree(workspace_root() / session_name, ignore_errors=True)
+
+
+def external_tmux_session_alive(session_name: str) -> bool:
+    return (
+        subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
+def external_tmux_capture_contains(session_name: str, marker: str) -> bool:
+    result = subprocess.run(
+        ["tmux", "capture-pane", "-p", "-t", session_name, "-S", "-80"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+
+    return result.returncode == 0 and marker in result.stdout
+
+
+def external_tmux_pane_id(session_name: str) -> str:
+    result = subprocess.run(
+        ["tmux", "list-panes", "-t", session_name, "-F", "#{pane_id}"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+
+    return result.stdout.strip()
 
 
 def create_shell_citizen_from_ui(context: BabsBddContext, slug: str) -> None:
@@ -1276,7 +1578,9 @@ def transcript_payload_contains(slug: str, marker: str, direction: str) -> bool:
     if not transcript.exists():
         return False
 
-    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]:
+    # Ticket runtime protocol prompts can push the matching input event far back
+    # in transcript.jsonl, so keep this window larger than a short terminal tail.
+    for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]:
         try:
             record = json.loads(line)
             if record.get("slug") != slug or record.get("direction") != direction:
@@ -1289,6 +1593,25 @@ def transcript_payload_contains(slug: str, marker: str, direction: str) -> bool:
             return True
 
     return False
+
+
+def latest_transcript_output_stream_id(slug: str) -> int | None:
+    transcript = transcript_path(slug)
+
+    if not transcript.exists():
+        return None
+
+    for line in reversed(transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-2000:]):
+        try:
+            record = json.loads(line)
+        except Exception:  # noqa: BLE001 - malformed transcript rows are ignored by design.
+            continue
+
+        if record.get("slug") == slug and record.get("direction") == "output":
+            stream_id = record.get("stream_id")
+            return stream_id if isinstance(stream_id, int) else None
+
+    return None
 
 
 def transcript_path(slug: str) -> Path:
@@ -1371,6 +1694,11 @@ metadata: {{"source": "browser-harness"}}
     ticket_history_path(root, ticket_id).write_text(
         json.dumps({"ts": now, "event": "created", "by": "bdd"}, separators=(",", ":")) + "\n"
     )
+
+
+def append_ticket_history_event(root: Path, ticket_id: str, event: dict) -> None:
+    with ticket_history_path(root, ticket_id).open("a") as history_file:
+        history_file.write(json.dumps(event, separators=(",", ":")) + "\n")
 
 
 def cleanup_ticket(root: Path, ticket_id: str) -> None:

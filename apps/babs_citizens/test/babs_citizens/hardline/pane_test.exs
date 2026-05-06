@@ -44,6 +44,21 @@ defmodule Babs.Citizens.Hardline.PaneTest do
     assert {:error, :not_found} = Pane.cwd(slug)
   end
 
+  test "tmux target call returns the attached tmux target" do
+    state = %{
+      session: "%42"
+    }
+
+    assert {:reply, {:ok, "%42"}, ^state} =
+             Pane.handle_call(:tmux_target, {self(), make_ref()}, state)
+  end
+
+  test "tmux_target/1 returns not_found when no pane is registered" do
+    slug = "missing-target-pane-#{System.unique_integer([:positive])}"
+
+    assert {:error, :not_found} = Pane.tmux_target(slug)
+  end
+
   test "flush_transcript/1 returns not_found when no pane is registered" do
     slug = "missing-flush-pane-#{System.unique_integer([:positive])}"
 
@@ -70,6 +85,91 @@ defmodule Babs.Citizens.Hardline.PaneTest do
              Pane.handle_call(:flush_transcript, {self(), make_ref()}, state)
 
     assert :ok = Transcript.close(io)
+  end
+
+  test "system injection auto-submits prompts for AI CLIs and records the submitted input" do
+    parent = self()
+
+    state = %{
+      attach: %{os_pid: 456},
+      config: %CitizenConfig{
+        id: "BAB-CIT-AI",
+        slug: "ai-pane",
+        display_name: "AI Pane",
+        cli: "claude",
+        cli_args: [],
+        cwd: System.tmp_dir!()
+      },
+      input_seq: 0,
+      stream_id: 1,
+      transcript_io: nil,
+      system_delivery: fn _config, %{os_pid: 456}, data, _opts ->
+        send(parent, {:injected, data <> "\r"})
+        {:ok, data <> "\r"}
+      end
+    }
+
+    assert {:noreply, next_state} = Pane.handle_cast({:inject, "hello", :system}, state)
+
+    assert_receive {:injected, "hello\r"}
+    assert next_state.input_seq == 1
+  end
+
+  test "system injection call returns after the pane accepts the prompt" do
+    parent = self()
+
+    state = %{
+      attach: %{os_pid: 456},
+      config: %CitizenConfig{
+        id: "BAB-CIT-SYNC",
+        slug: "sync-pane",
+        display_name: "Sync Pane",
+        cli: "codex",
+        cli_args: [],
+        cwd: System.tmp_dir!()
+      },
+      input_seq: 0,
+      stream_id: 1,
+      transcript_io: nil,
+      system_delivery: fn _config, %{os_pid: 456}, data, _opts ->
+        send(parent, {:injected, data})
+        {:ok, data <> "\r"}
+      end
+    }
+
+    assert {:reply, :ok, next_state} =
+             Pane.handle_call({:inject, "sync", :system}, {self(), make_ref()}, state)
+
+    assert_receive {:injected, "sync"}
+    assert next_state.input_seq == 1
+  end
+
+  test "manual injection and shell system prompts do not auto-submit" do
+    parent = self()
+
+    state = %{
+      attach: %{os_pid: 456},
+      config: %CitizenConfig{
+        id: "BAB-CIT-SHELL",
+        slug: "shell-pane",
+        display_name: "Shell Pane",
+        cli: "/bin/zsh",
+        cli_args: ["-f"],
+        cwd: System.tmp_dir!()
+      },
+      input_seq: 0,
+      stream_id: 1,
+      transcript_io: nil,
+      runner: fn %{os_pid: 456}, data -> send(parent, {:injected, data}) end
+    }
+
+    assert {:noreply, next_state} = Pane.handle_cast({:inject, "manual", :manual}, state)
+    assert_receive {:injected, "manual"}
+    assert next_state.input_seq == 1
+
+    assert {:noreply, final_state} = Pane.handle_cast({:inject, "system", :system}, next_state)
+    assert_receive {:injected, "system"}
+    assert final_state.input_seq == 2
   end
 
   test "stdout handler tolerates pre-transcript hot-reload state" do

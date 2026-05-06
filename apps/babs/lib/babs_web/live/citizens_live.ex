@@ -270,6 +270,25 @@ defmodule BabsWeb.CitizensLive do
         color: var(--danger);
       }
 
+      .ownership-badge,
+      .lifecycle-reminder {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        margin-top: 5px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 2px 7px;
+        color: var(--wait);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .lifecycle-reminder {
+        margin-top: 0;
+        color: var(--muted);
+      }
+
       .status-pill {
         display: inline-flex;
         align-items: center;
@@ -334,6 +353,9 @@ defmodule BabsWeb.CitizensLive do
             <a class="button" href={TicketPath.index(@socket_token)} data-testid="citizens-nav-tickets">
               <BabsWeb.Icon.icon name="list" /> Tickets
             </a>
+            <a class="button" href={CitizenPath.attach(@socket_token)} data-testid="citizens-nav-attach">
+              <BabsWeb.Icon.icon name="link" /> Attach tmux
+            </a>
             <a class="button button-primary" href={CitizenPath.new(@socket_token)}>
               <BabsWeb.Icon.icon name="plus" /> New Citizen
             </a>
@@ -384,6 +406,13 @@ defmodule BabsWeb.CitizensLive do
             <div class="citizen-main">
               <span class="citizen-name">{citizen.display_name}</span>
               <span class="citizen-slug">{citizen.slug}</span>
+              <span
+                :if={citizen.ownership_badge}
+                class="ownership-badge"
+                data-testid={"citizen-ownership-#{citizen.slug}"}
+              >
+                {citizen.ownership_badge}
+              </span>
             </div>
 
             <div
@@ -396,7 +425,7 @@ defmodule BabsWeb.CitizensLive do
 
             <div class="citizen-meta">{citizen.cli_label}</div>
             <div class={if citizen.last_error, do: "citizen-error", else: "citizen-meta"}>
-              {citizen.last_error || citizen.cwd_label}
+              {citizen.last_error || citizen.target_label || citizen.cwd_label}
             </div>
 
              <div class="citizen-actions" data-lifecycle-scope={citizen.slug}>
@@ -441,7 +470,7 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Starting"
                  data-testid={"citizen-start-#{citizen.slug}"}
                >
-                <BabsWeb.Icon.icon name="play" /> Start
+                <BabsWeb.Icon.icon name="play" /> {button_label(citizen, :start)}
               </button>
                <button
                  :if={action?(citizen, :stop)}
@@ -455,8 +484,15 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Stopping"
                  data-testid={"citizen-stop-#{citizen.slug}"}
                >
-                <BabsWeb.Icon.icon name="square" /> Stop
+                <BabsWeb.Icon.icon name="square" /> {button_label(citizen, :stop)}
               </button>
+              <span
+                :if={action?(citizen, :stop) && citizen.lifecycle_reminder}
+                class="lifecycle-reminder"
+                data-testid={"citizen-lifecycle-reminder-#{citizen.slug}"}
+              >
+                {citizen.lifecycle_reminder}
+              </span>
                <button
                  :if={action?(citizen, :restart)}
                  type="button"
@@ -466,7 +502,7 @@ defmodule BabsWeb.CitizensLive do
                  phx-disable-with="Restarting"
                  data-testid={"citizen-restart-#{citizen.slug}"}
                >
-                <BabsWeb.Icon.icon name="rotate-cw" /> Restart
+                <BabsWeb.Icon.icon name="rotate-cw" /> {button_label(citizen, :restart)}
               </button>
             </div>
           </article>
@@ -496,6 +532,13 @@ defmodule BabsWeb.CitizensLive do
   end
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
+
+  defp button_label(%{imported?: true}, :start), do: "Attach"
+  defp button_label(%{imported?: true}, :stop), do: "Detach"
+  defp button_label(%{imported?: true}, :restart), do: "Reattach"
+  defp button_label(_citizen, :start), do: "Start"
+  defp button_label(_citizen, :stop), do: "Stop"
+  defp button_label(_citizen, :restart), do: "Restart"
 
   defp lifecycle_click(slug, action) do
     selector = lifecycle_button_selector(slug)

@@ -198,6 +198,20 @@ defmodule BabsWeb.TerminalLive do
         color: var(--danger);
       }
 
+      .ownership-badge,
+      .lifecycle-reminder {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 8px;
+        color: var(--wait);
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .lifecycle-reminder {
+        color: var(--muted);
+      }
+
       .status-dot {
         width: 8px;
         height: 8px;
@@ -289,7 +303,14 @@ defmodule BabsWeb.TerminalLive do
             <span class="status-dot" aria-hidden="true"></span>
             <span class="terminal-tab-label">{citizen.slug}</span>
           </a>
-        </div>
+         </div>
+        <span
+          :if={ownership_badge(active_tab(@tabs, @slug))}
+          class="ownership-badge"
+          data-testid="terminal-ownership-badge"
+        >
+          {ownership_badge(active_tab(@tabs, @slug))}
+        </span>
         <div
           class="terminal-actions"
           data-testid="terminal-lifecycle-controls"
@@ -302,10 +323,10 @@ defmodule BabsWeb.TerminalLive do
             phx-click={lifecycle_click(@slug, :start)}
             disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Starting"
-            data-testid="terminal-start"
-          >
-            Start
-          </button>
+             data-testid="terminal-start"
+           >
+             {button_label(active_tab(@tabs, @slug), :start)}
+           </button>
           <button
             :if={action?(active_tab(@tabs, @slug), :stop)}
             type="button"
@@ -316,10 +337,17 @@ defmodule BabsWeb.TerminalLive do
             phx-click={lifecycle_click(@slug, :stop)}
             disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Stopping"
-            data-testid="terminal-stop"
+             data-testid="terminal-stop"
+           >
+             {button_label(active_tab(@tabs, @slug), :stop)}
+           </button>
+          <span
+            :if={action?(active_tab(@tabs, @slug), :stop) && lifecycle_reminder(active_tab(@tabs, @slug))}
+            class="lifecycle-reminder"
+            data-testid="terminal-lifecycle-reminder"
           >
-            Stop
-          </button>
+            {lifecycle_reminder(active_tab(@tabs, @slug))}
+          </span>
           <button
             :if={action?(active_tab(@tabs, @slug), :restart)}
             type="button"
@@ -327,10 +355,10 @@ defmodule BabsWeb.TerminalLive do
             phx-click={lifecycle_click(@slug, :restart)}
             disabled={lifecycle_busy?(@lifecycle_inflight, @slug)}
             phx-disable-with="Restarting"
-            data-testid="terminal-restart"
-          >
-            Restart
-          </button>
+             data-testid="terminal-restart"
+           >
+             {button_label(active_tab(@tabs, @slug), :restart)}
+           </button>
         </div>
         <a
           class="terminal-link"
@@ -415,7 +443,10 @@ defmodule BabsWeb.TerminalLive do
       actions: [:open, :full, :stop, :restart],
       cli_label: "",
       cwd_label: "",
-      last_error: nil
+      last_error: nil,
+      imported?: false,
+      ownership_badge: nil,
+      lifecycle_reminder: nil
     }
   end
 
@@ -431,6 +462,21 @@ defmodule BabsWeb.TerminalLive do
   end
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
+
+  defp ownership_badge(citizen), do: Map.get(citizen, :ownership_badge)
+  defp lifecycle_reminder(citizen), do: Map.get(citizen, :lifecycle_reminder)
+
+  defp button_label(citizen, :start) do
+    if Map.get(citizen, :imported?), do: "Attach", else: "Start"
+  end
+
+  defp button_label(citizen, :stop) do
+    if Map.get(citizen, :imported?), do: "Detach", else: "Stop"
+  end
+
+  defp button_label(citizen, :restart) do
+    if Map.get(citizen, :imported?), do: "Reattach", else: "Restart"
+  end
 
   defp lifecycle_click(slug, action) do
     selector = lifecycle_button_selector(slug)
@@ -486,6 +532,13 @@ defmodule BabsWeb.TerminalLive do
         {:error, reason}
         |> assign_lifecycle_result(socket, action, slug)
         |> redirect(to: CitizenPath.index(socket.assigns.socket_token))
+
+      {:ok, _pid} = result when action == :restart ->
+        result
+        |> assign_lifecycle_result(socket, action, slug)
+        |> redirect(
+          to: CitizenPath.terminal(slug, socket.assigns.socket_token, full?: socket.assigns.full?)
+        )
 
       result ->
         result

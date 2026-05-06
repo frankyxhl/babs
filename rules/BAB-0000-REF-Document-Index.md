@@ -28,6 +28,7 @@
 | 1110 | ADR | Two OTP Apps Plus Tmux Detach |
 | 1111 | ADR | Ticket as Universal Coordination Primitive |
 | 1112 | ADR | Multi AI CLI Citizen Configuration |
+| 1113 | ADR | Imported Tmux Session Attach |
 | 1500 | SOP | Add a New Citizen Subtree |
 | 1502 | SOP | PTY Stability Validation |
 | 1503 | SOP | Phase Delivery Workflow |
@@ -60,6 +61,10 @@
 | 2221 | CHG | Implement Phase 9 10 Assignment and State Machine |
 | 2222 | CHG | Implement Phase 11 Approval UI |
 | 2223 | CHG | Implement Phase 12 Cross Citizen Ticket Comments |
+| 2224 | PRP | Phase 12a PFC Informed Hardline Relay Reliability |
+| 2225 | PRP | Phase 13 Imported Tmux Session Attach |
+| 2226 | CHG | Implement Phase 12a Relay Reliability |
+| 2227 | CHG | Implement Phase 13 Imported Tmux Session Attach |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

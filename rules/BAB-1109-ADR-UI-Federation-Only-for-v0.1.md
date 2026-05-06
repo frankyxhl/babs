@@ -1,7 +1,7 @@
 # ADR-1109: UI Federation Only for v0.1 (No Cross-Node A2A)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
+**Last updated:** 2026-05-06
 **Last reviewed:** 2026-05-03
 **Status:** Accepted
 **Amends:** `BAB-1104` (A2A scope is now intra-node-only in v0.1; cross-node restored only as read-only UI federation)
@@ -49,7 +49,7 @@ A second Babs node, given a peer URL + auth token, can mount the peer's tickets 
 
 - `BAB-1104` is **amended**, not replaced. Its intra-node A2A design stays. Its inter-node HTTP design is re-scoped to read-only federation only in v0.1.
 - v0.2+ may add cross-node A2A; this ADR does not preclude that. The decision here is timing.
-- Phase 16 (PWA + Federation, in `BAB-2300`) implements the read-only federation API.
+- Phase 17 (PWA + Federation, in `BAB-2300`) implements the read-only federation API.
 - Multi-node Babs operators must accept that v0.1 is "one operator, multiple machines" not "multiple operators coordinating."
 - Tailscale remains the assumed network layer; no public internet exposure in v0.1.
 
@@ -65,3 +65,4 @@ A second Babs node, given a peer URL + auth token, can mount the peer's tickets 
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial decision; restricts cross-node to read-only UI federation in v0.1 | Claude Code |
+| 2026-05-06 | Update PWA/Federation phase reference after imported tmux attach inserted as Phase 13 | Codex |

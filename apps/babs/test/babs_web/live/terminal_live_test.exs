@@ -110,6 +110,38 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ ~s(data-testid="terminal-restart")
   end
 
+  test "default mode labels imported external-owned terminal controls as attach semantics" do
+    html =
+      %{
+        slug: "imported-one",
+        socket_token: "",
+        full?: false,
+        tabs: [
+          tab("imported-one", :up)
+          |> Map.merge(%{
+            imported?: true,
+            ownership_badge: "Imported · External-owned",
+            lifecycle_reminder: "Detach only · tmux stays running",
+            target_label: "operator:0.0"
+          })
+        ],
+        lifecycle_inflight: %{}
+      }
+      |> BabsWeb.TerminalLive.render()
+      |> rendered_to_string()
+
+    assert html =~ ~s(data-testid="terminal-ownership-badge")
+    assert html =~ "Imported · External-owned"
+    assert html =~ ~s(data-testid="terminal-lifecycle-reminder")
+    assert html =~ "Detach only · tmux stays running"
+    assert html =~ ~s(data-testid="terminal-stop")
+    assert html =~ "Detach"
+    assert html =~ ~s(data-testid="terminal-restart")
+    assert html =~ "Reattach"
+    refute html =~ ">Stop</button>"
+    refute html =~ ">Restart</button>"
+  end
+
   test "active citizen tab preserves non-up status while other non-up tabs are hidden" do
     html =
       %{
@@ -155,7 +187,7 @@ defmodule BabsWeb.TerminalLiveTest do
     assert_redirect(view, "/citizens?socket_token=socket-token")
   end
 
-  test "restart action invokes lifecycle boundary and keeps terminal shell rendered" do
+  test "restart action invokes lifecycle boundary and redirects to a fresh terminal page" do
     parent = self()
 
     Application.put_env(:babs, BabsWeb.TerminalLive,
@@ -176,10 +208,7 @@ defmodule BabsWeb.TerminalLiveTest do
     |> render_click()
 
     assert_receive {:terminal_lifecycle_action, :restart, "clare"}
-    html = render_async(view, 1_000)
-    assert html =~ ~s(data-testid="terminal")
-    assert html =~ ~s(data-testid="terminal-restart")
-    assert html =~ "Restarted clare"
+    assert_redirect(view, "/citizens/clare?socket_token=socket-token")
   end
 
   test "restart failure redirects to index instead of leaving stale terminal" do
@@ -263,9 +292,8 @@ defmodule BabsWeb.TerminalLiveTest do
     assert disabled_button?(html, "terminal-restart")
 
     send(task_pid, :release_restart)
-    html = render_async(view, 1_000)
 
-    assert html =~ "Restarted clare"
+    assert_redirect(view, "/citizens/clare?socket_token=socket-token")
   end
 
   test "mount assigns the citizen slug, mode, and tabs" do

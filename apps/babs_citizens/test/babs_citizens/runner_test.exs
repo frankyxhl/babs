@@ -59,7 +59,20 @@ defmodule Babs.Citizens.RunnerTest do
     assert Runner.session_name("clare") == "babs-clare"
     assert Runner.slug_from_session("babs-clare") == {:ok, "clare"}
     assert Runner.slug_from_session("personal-clare") == :error
-    assert Runner.attach_command("babs-clare") == ~c"tmux attach-session -t babs-clare"
+
+    assert Runner.attach_command("babs-clare") ==
+             ~c"tmux select-pane -t 'babs-clare' \\; attach-session -t 'babs-clare'"
+
+    assert Runner.attach_command("%42", "external-work") ==
+             ~c"tmux select-pane -t '%42' \\; attach-session -t 'external-work'"
+  end
+
+  test "detects AI CLI configs that should receive submit after Babs prompt injection" do
+    assert Runner.ai_cli?(%{cli: "claude", cli_args: []})
+    assert Runner.ai_cli?(%{cli: "codex", cli_args: []})
+    assert Runner.ai_cli?(%{cli: "gh", cli_args: ["copilot"]})
+    refute Runner.ai_cli?(%{cli: "gh", cli_args: ["repo", "view"]})
+    refute Runner.ai_cli?(%{cli: "/bin/zsh", cli_args: ["-f"]})
   end
 
   test "refuses to kill unmanaged sessions" do

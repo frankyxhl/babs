@@ -11,6 +11,8 @@ defmodule Babs.Citizens.Tickets.Injector do
   @spec prompt(Ticket.t(), String.t()) :: String.t()
   def prompt(%Ticket{} = ticket, slug) when is_binary(slug) do
     """
+    #{runtime_protocol(ticket, slug)}
+
     [Babs Ticket #{ticket.id} assigned]
     Title: #{ticket.title}
     State: in_progress
@@ -19,7 +21,7 @@ defmodule Babs.Citizens.Tickets.Injector do
 
     #{String.trim(ticket.body)}
 
-    Please acknowledge the assignment and work in this terminal.
+    Acknowledge this assignment by replying through `bb ticket comment`.
     """
   end
 
@@ -27,6 +29,8 @@ defmodule Babs.Citizens.Tickets.Injector do
   def feedback_prompt(%Ticket{} = ticket, slug, feedback)
       when is_binary(slug) and is_binary(feedback) do
     """
+    #{runtime_protocol(ticket, slug)}
+
     [Babs Ticket #{ticket.id} rejected]
     State: in_progress
     Assignee: #{slug}
@@ -34,7 +38,7 @@ defmodule Babs.Citizens.Tickets.Injector do
     Feedback from user:
     #{String.trim(feedback)}
 
-    Please address the feedback and continue work in this terminal.
+    Address the feedback and reply through `bb ticket comment`.
     """
   end
 
@@ -42,6 +46,8 @@ defmodule Babs.Citizens.Tickets.Injector do
   def comment_prompt(%Ticket{} = ticket, slug, by, body)
       when is_binary(slug) and is_binary(by) and is_binary(body) do
     """
+    #{runtime_protocol(ticket, slug)}
+
     [Babs Ticket #{ticket.id} comment]
     State: #{ticket.state}
     Assignee: #{slug}
@@ -140,7 +146,20 @@ defmodule Babs.Citizens.Tickets.Injector do
     Keyword.get(opts, :citizen_starter, fn slug -> Lifecycle.start_registered_citizen(slug) end)
   end
 
-  defp pane_injector(opts), do: Keyword.get(opts, :pane_injector, &Pane.inject/2)
+  defp pane_injector(opts), do: Keyword.get(opts, :pane_injector, &Pane.inject_system/2)
 
   defp redact(reason), do: Catalog.redact_reason(reason)
+
+  defp runtime_protocol(ticket, slug) do
+    """
+    You are #{slug}, a Babs Citizen.
+    This message was delivered through the Babs Ticket/Billboard system.
+    Read the ticket context, do the requested work in this terminal, and write durable replies back to the ticket history with:
+
+    bb ticket comment #{ticket.id} "your response"
+
+    Do not only answer in the terminal. The durable response must be a ticket comment.
+    """
+    |> String.trim()
+  end
 end

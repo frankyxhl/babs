@@ -9,8 +9,10 @@ defmodule Babs.Citizens.ReattachScanner do
 
   alias Babs.Citizens.Citizen.Config
   alias Babs.Citizens.Catalog
+  alias Babs.Citizens.ImportedHardline
   alias Babs.Citizens.Lifecycle
   alias Babs.Citizens.Runner
+  alias Babs.Citizens.TmuxInventory
 
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
@@ -42,12 +44,12 @@ defmodule Babs.Citizens.ReattachScanner do
     end
   end
 
-  def scan_rows(rows) when is_list(rows) do
+  def scan_rows(rows, opts \\ []) when is_list(rows) do
     case Runner.list_sessions_result() do
       {:ok, sessions} ->
         rows
-        |> plan_rows(sessions)
-        |> Enum.map(&run_row_action/1)
+        |> plan_rows(sessions, opts)
+        |> Enum.map(&run_row_action(&1, opts))
 
       {:error, reason} ->
         [run_action({:tmux_error, reason})]
@@ -99,7 +101,9 @@ defmodule Babs.Citizens.ReattachScanner do
     config_errors ++ reattach_actions ++ start_actions
   end
 
-  def plan_rows(rows, sessions) when is_list(rows) and is_list(sessions) do
+  def plan_rows(rows, sessions, opts \\ []) when is_list(rows) and is_list(sessions) do
+    target_exists? = Keyword.get(opts, :target_exists?, &TmuxInventory.target_exists?/1)
+
     existing_slug_set =
       sessions
       |> Enum.flat_map(fn session ->
@@ -118,6 +122,9 @@ defmodule Babs.Citizens.ReattachScanner do
         row.status == "failed" ->
           {:skip, row.slug, :failed}
 
+        row.status == "running" and ImportedHardline.external?(row) ->
+          plan_imported_row(row, target_exists?)
+
         row.status == "running" and MapSet.member?(existing_slug_set, row.slug) ->
           {:reattach, row}
 
@@ -131,6 +138,21 @@ defmodule Babs.Citizens.ReattachScanner do
           {:skip, row.slug, :unknown_status}
       end
     end)
+  end
+
+  defp plan_imported_row(row, target_exists?) do
+    target = ImportedHardline.operational_target(row)
+
+    cond do
+      not is_binary(target) or target == "" ->
+        {:fail_import_target, row, :missing_import_target}
+
+      target_exists?.(target) ->
+        {:reattach_imported, row}
+
+      true ->
+        {:fail_import_target, row, {:import_target_missing, target}}
+    end
   end
 
   defp run_action({:config_error, reason}) do
@@ -171,20 +193,42 @@ defmodule Babs.Citizens.ReattachScanner do
     event
   end
 
-  defp run_row_action({:skip, slug, status}) do
+  defp run_row_action(action, opts)
+
+  defp run_row_action({:skip, slug, status}, _opts) do
     event = {:skip, slug, status}
     maybe_log_event(event)
     event
   end
 
-  defp run_row_action({:fail_missing_cwd, row, reason}) do
+  defp run_row_action({:fail_missing_cwd, row, reason}, _opts) do
     Catalog.mark_failed(row.slug, reason)
     event = {:error, row.slug, reason}
     maybe_log_event(event)
     event
   end
 
-  defp run_row_action({action, row}) when action in [:start, :reattach] do
+  defp run_row_action({:fail_import_target, row, reason}, _opts) do
+    Catalog.mark_import_attach_failed(row, reason)
+    event = {:error, row.slug, reason}
+    maybe_log_event(event)
+    event
+  end
+
+  defp run_row_action({:reattach_imported, row}, opts) do
+    result = Lifecycle.start_registered_citizen(row.slug, opts)
+
+    event =
+      case result do
+        {:ok, _pid} -> {:ok, row.slug}
+        {:error, reason} -> {:error, row.slug, reason}
+      end
+
+    maybe_log_event(event)
+    event
+  end
+
+  defp run_row_action({action, row}, _opts) when action in [:start, :reattach] do
     config = Catalog.to_config(row)
     session = Runner.session_name(config.slug)
 

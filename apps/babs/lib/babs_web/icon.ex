@@ -44,6 +44,12 @@ defmodule BabsWeb.Icon do
 
   defp paths("folder-open"), do: ["M6 14 8 4h14l-2 10Z", "M2 8h4l2 4h14l-2 8H4Z"]
 
+  defp paths("link"),
+    do: [
+      "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71",
+      "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"
+    ]
+
   defp paths("list"),
     do: ["M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"]
 
@@ -74,6 +80,8 @@ defmodule BabsWeb.Icon do
     ]
 
   defp paths("rotate-cw"), do: ["M21 12a9 9 0 1 1-2.64-6.36", "M21 3v6h-6"]
+
+  defp paths("send"), do: ["m22 2-7 20-4-9-9-4Z", "M22 2 11 13"]
 
   defp paths("route"),
     do: [

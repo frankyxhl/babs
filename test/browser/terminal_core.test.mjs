@@ -6,24 +6,212 @@ import {
   connectionStatus,
   decodeBase64Bytes,
   decodeTerminalOutput,
-  printableAsciiPaste,
-  resizePayload
+  installTerminalKeyboardHandler,
+  resizePayload,
+  terminalShouldOwnKey,
+  utf8ByteLength
 } from "../../apps/babs/priv/static/js/terminal_core.js";
 
 describe("terminal_core allowedInput", () => {
-  it("allows shell controls, arrows, printable ASCII, and bounded paste", () => {
+  it("allows terminal-compatible xterm keyboard and paste data", () => {
     assert.equal(allowedInput("\r"), true);
+    assert.equal(allowedInput("\u0002"), true);
     assert.equal(allowedInput("\u0003"), true);
     assert.equal(allowedInput("\u001b[A"), true);
+    assert.equal(allowedInput("\u001b[1;5D"), true);
+    assert.equal(allowedInput("\u001bOP"), true);
+    assert.equal(allowedInput("\u001bb"), true);
+    assert.equal(allowedInput("\u001b[200~paste\u001b[201~"), true);
+    assert.equal(allowedInput("こんにちは"), true);
     assert.equal(allowedInput("printf 'ok\\n'"), true);
     assert.equal(allowedInput("x".repeat(4096)), true);
   });
 
-  it("rejects empty paste, unicode, escape sequences outside arrows, and oversized input", () => {
-    assert.equal(printableAsciiPaste(""), false);
-    assert.equal(allowedInput("こんにちは"), false);
-    assert.equal(allowedInput("\u001b[200~paste"), false);
+  it("rejects empty input, nul bytes, unsafe terminal controls, and oversized input", () => {
+    assert.equal(allowedInput(""), false);
+    assert.equal(allowedInput("\u0000"), false);
+    assert.equal(allowedInput("\u001b]52;c;clipboard\u0007"), false);
+    assert.equal(allowedInput("\u001bPpayload"), false);
+    assert.equal(allowedInput("\u001b[?1;2c"), false);
+    assert.equal(allowedInput("\u001b[>0;276;0c"), false);
+    assert.equal(allowedInput("\u001b[24;80R"), false);
+    assert.equal(allowedInput("\u001b[24;80R\n"), false);
+    assert.equal(allowedInput("pasted\u001b[?1;2c text"), false);
+    assert.equal(allowedInput("\u001b[0n"), false);
     assert.equal(allowedInput("x".repeat(4097)), false);
+  });
+
+  it("counts input length by UTF-8 bytes", () => {
+    assert.equal(utf8ByteLength("你"), 3);
+    assert.equal(allowedInput("你".repeat(1365)), true);
+    assert.equal(allowedInput("你".repeat(1366)), false);
+  });
+});
+
+describe("terminal_core keyboard ownership", () => {
+  function keyEvent(attrs) {
+    let prevented = false;
+
+    return {
+      type: "keydown",
+      key: "a",
+      ctrlKey: false,
+      altKey: false,
+      metaKey: false,
+      preventDefault() {
+        prevented = true;
+      },
+      prevented() {
+        return prevented;
+      },
+      ...attrs
+    };
+  }
+
+  it("claims terminal shortcut keys while preserving browser Meta shortcuts", () => {
+    assert.equal(terminalShouldOwnKey(keyEvent({ ctrlKey: true, key: "b" })), true);
+    assert.equal(terminalShouldOwnKey(keyEvent({ altKey: true, key: "b" })), true);
+    assert.equal(terminalShouldOwnKey(keyEvent({ key: "Tab" })), true);
+    assert.equal(terminalShouldOwnKey(keyEvent({ key: "F2" })), true);
+    assert.equal(terminalShouldOwnKey(keyEvent({ key: "ArrowLeft" })), true);
+    assert.equal(terminalShouldOwnKey(keyEvent({ metaKey: true, key: "r" })), false);
+    assert.equal(terminalShouldOwnKey(keyEvent({ type: "keyup", ctrlKey: true, key: "b" })), false);
+  });
+
+  it("installs a key handler that prevents browser defaults for terminal-owned keys", () => {
+    let handler = null;
+    const terminal = {
+      attachCustomKeyEventHandler(callback) {
+        handler = callback;
+      }
+    };
+
+    assert.equal(installTerminalKeyboardHandler(terminal), true);
+    assert.equal(typeof handler, "function");
+
+    const ctrlB = keyEvent({ ctrlKey: true, key: "b" });
+    assert.equal(handler(ctrlB), true);
+    assert.equal(ctrlB.prevented(), true);
+
+    const cmdR = keyEvent({ metaKey: true, key: "r" });
+    assert.equal(handler(cmdR), true);
+    assert.equal(cmdR.prevented(), false);
+  });
+
+  it("schedules terminal refocus after terminal-owned shortcuts", () => {
+    let handler = null;
+    const scheduledDelays = [];
+    let focusCount = 0;
+    const terminal = {
+      attachCustomKeyEventHandler(callback) {
+        handler = callback;
+      },
+      focus() {
+        focusCount += 1;
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    const escape = keyEvent({ key: "Escape" });
+    assert.equal(handler(escape), true);
+    assert.equal(escape.prevented(), true);
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+
+    const cmdR = keyEvent({ metaKey: true, key: "r" });
+    assert.equal(handler(cmdR), true);
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+  });
+
+  it("recovers terminal focus from page-level terminal shortcut events", () => {
+    let documentHandler = null;
+    const document = {
+      activeElement: null,
+      body: {},
+      addEventListener(type, callback, capture) {
+        assert.equal(type, "keydown");
+        assert.equal(capture, true);
+        documentHandler = callback;
+      }
+    };
+    const root = {
+      contains(element) {
+        return element === root;
+      }
+    };
+    const scheduledDelays = [];
+    let focusCount = 0;
+    const terminal = {
+      attachCustomKeyEventHandler() {},
+      focus() {
+        focusCount += 1;
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        document,
+        root,
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    document.activeElement = document.body;
+    documentHandler(keyEvent({ key: "Escape", target: document.body }));
+
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+  });
+
+  it("keeps refocus recovery available if terminal focus throws", () => {
+    let handler = null;
+    const scheduledDelays = [];
+    let attempts = 0;
+    const terminal = {
+      attachCustomKeyEventHandler(callback) {
+        handler = callback;
+      },
+      focus() {
+        attempts += 1;
+
+        if (attempts === 1) {
+          throw new Error("transient focus failure");
+        }
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    assert.doesNotThrow(() => handler(keyEvent({ key: "Escape" })));
+    assert.doesNotThrow(() => handler(keyEvent({ key: "Escape" })));
+    assert.deepEqual(scheduledDelays, [0, 30, 0, 30]);
+    assert.equal(attempts, 4);
+  });
+
+  it("does not fail when xterm custom key handlers are unavailable", () => {
+    assert.equal(installTerminalKeyboardHandler({}), false);
   });
 });
 

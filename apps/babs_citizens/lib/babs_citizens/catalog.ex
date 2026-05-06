@@ -8,7 +8,7 @@ defmodule Babs.Citizens.Catalog do
   require Logger
 
   alias Babs.Citizens.Citizen.Config, as: TomlConfig
-  alias Babs.Citizens.{CitizenConfig, CitizenRecord, Repo}
+  alias Babs.Citizens.{CitizenConfig, CitizenRecord, ImportedHardline, Repo}
 
   @sensitive_key_value ~r/("[a-z0-9_]*(?:secret|token)[a-z0-9_]*"|\b[a-z0-9_]*(?:secret|token)[a-z0-9_]*\b)(\s*(?:=>|:)\s*)("[^"]*"|[^\s,\]}]+)/i
   @sensitive_assignment ~r/\b([a-z0-9_]*(?:secret|token)[a-z0-9_]*=)([^\s,\]}]+)/i
@@ -110,6 +110,30 @@ defmodule Babs.Citizens.Catalog do
 
   def mark_failed(slug_or_record, reason),
     do: update_status(slug_or_record, "failed", redact_reason(reason))
+
+  def mark_imported_external(%CitizenRecord{} = record, pane, opts \\ []) when is_map(pane) do
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second))
+    metadata = ImportedHardline.put_external(record.metadata || %{}, pane, now)
+
+    record
+    |> CitizenRecord.changeset(%{metadata: metadata, status: "running", last_error: nil})
+    |> Repo.update()
+  end
+
+  def mark_import_attach_failed(%CitizenRecord{} = record, reason) do
+    metadata =
+      record.metadata
+      |> Kernel.||(%{})
+      |> ImportedHardline.put_last_attach_error(redact_reason(reason))
+
+    record
+    |> CitizenRecord.changeset(%{
+      metadata: metadata,
+      status: "failed",
+      last_error: redact_reason(reason)
+    })
+    |> Repo.update()
+  end
 
   def redact_reason(reason) do
     reason

@@ -8,9 +8,9 @@ defmodule BabsWeb.PaneChannel do
   alias Babs.Citizens.Hardline.Transcript
   alias Babs.Citizens.Runner
 
-  @allowed_controls ["\r", "\n", "\t", <<3>>, <<4>>, <<26>>, <<127>>]
-  @allowed_arrows ["\e[A", "\e[B", "\e[C", "\e[D"]
   @max_input_bytes 4096
+  @blocked_terminal_controls ["\e]", <<0x9D>>, <<0xC2, 0x9D>>, "\eP", "\e_", "\e^"]
+  @terminal_response_pattern ~r/(?:\e\[\?[0-9;]*c|\e\[>[0-9;]*c|\e\[[0-9;]*R|\e\[[0-9?;]*n)/
 
   @impl true
   def join("pane:" <> slug, _payload, socket) do
@@ -19,7 +19,12 @@ defmodule BabsWeb.PaneChannel do
     case Lifecycle.lookup(slug) do
       {:ok, _pid} ->
         send(self(), :send_snapshot)
-        {:ok, socket |> assign(:slug, slug) |> assign(:cwd, pane_cwd(slug))}
+
+        {:ok,
+         socket
+         |> assign(:slug, slug)
+         |> assign(:cwd, pane_cwd(slug))
+         |> assign(:pubsub_pid, Process.whereis(Babs.Citizens.PubSub))}
 
       {:error, :not_found} ->
         {:error, %{reason: "not_found"}}
@@ -28,6 +33,8 @@ defmodule BabsWeb.PaneChannel do
 
   @impl true
   def handle_in("input", %{"data" => data}, socket) when is_binary(data) do
+    socket = ensure_pubsub_subscription(socket)
+
     if allowed_input?(data) do
       Pane.inject(socket.assigns.slug, data)
     end
@@ -64,25 +71,38 @@ defmodule BabsWeb.PaneChannel do
   end
 
   defp send_initial_snapshot(%{assigns: %{cwd: cwd}} = socket) when is_binary(cwd) do
-    case Pane.flush_transcript(socket.assigns.slug) do
-      :ok ->
-        case Transcript.replay_output(cwd, slug: socket.assigns.slug) do
-          {:ok, ""} -> send_tmux_snapshot(socket)
-          {:ok, snapshot} -> push_snapshot(socket, snapshot)
-          {:error, _reason} -> send_tmux_snapshot(socket)
-        end
+    _ = Pane.flush_transcript(socket.assigns.slug)
+
+    case tmux_snapshot(socket) do
+      {:ok, snapshot} ->
+        push_snapshot(socket, snapshot)
 
       {:error, _reason} ->
-        send_tmux_snapshot(socket)
+        send_transcript_snapshot(socket, cwd)
     end
   end
 
-  defp send_initial_snapshot(socket), do: send_tmux_snapshot(socket)
+  defp send_initial_snapshot(socket) do
+    case tmux_snapshot(socket) do
+      {:ok, snapshot} -> push_snapshot(socket, snapshot)
+      {:error, _reason} -> :ok
+    end
+  end
 
-  defp send_tmux_snapshot(socket) do
-    session = Runner.session_name(socket.assigns.slug)
+  defp tmux_snapshot(socket) do
+    Runner.capture_pane(snapshot_target(socket.assigns.slug))
+  end
 
-    case Runner.capture_pane(session) do
+  defp snapshot_target(slug) do
+    case Pane.tmux_target(slug) do
+      {:ok, target} when is_binary(target) and target != "" -> target
+      _other -> Runner.session_name(slug)
+    end
+  end
+
+  defp send_transcript_snapshot(socket, cwd) do
+    case Transcript.replay_output(cwd, slug: socket.assigns.slug) do
+      {:ok, ""} -> :ok
       {:ok, snapshot} -> push_snapshot(socket, snapshot)
       {:error, _reason} -> :ok
     end
@@ -106,24 +126,31 @@ defmodule BabsWeb.PaneChannel do
   defp positive_integer(value) when is_integer(value) and value > 0, do: {:ok, value}
   defp positive_integer(_value), do: :error
 
-  def allowed_input?(data) when is_binary(data) and byte_size(data) <= @max_input_bytes do
-    data in @allowed_controls or data in @allowed_arrows or printable_ascii_paste?(data)
+  defp ensure_pubsub_subscription(socket) do
+    current_pid = Process.whereis(Babs.Citizens.PubSub)
+
+    if is_pid(current_pid) and socket.assigns[:pubsub_pid] != current_pid and
+         is_binary(socket.topic) do
+      :ok = Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, socket.topic)
+      assign(socket, :pubsub_pid, current_pid)
+    else
+      socket
+    end
+  end
+
+  def allowed_input?(data)
+      when is_binary(data) and byte_size(data) > 0 and byte_size(data) <= @max_input_bytes do
+    not contains_nul?(data) and not blocked_terminal_control?(data) and
+      not terminal_response?(data)
   end
 
   def allowed_input?(_data), do: false
 
-  defp printable_ascii_paste?(<<>>), do: false
+  defp contains_nul?(data), do: :binary.match(data, <<0>>) != :nomatch
 
-  defp printable_ascii_paste?(data) do
-    printable_ascii_bytes?(data)
+  defp blocked_terminal_control?(data) do
+    Enum.any?(@blocked_terminal_controls, &(:binary.match(data, &1) != :nomatch))
   end
 
-  defp printable_ascii_bytes?(<<>>), do: true
-
-  defp printable_ascii_bytes?(<<byte, rest::binary>>)
-       when byte in 0x20..0x7E or byte in [?\r, ?\n, ?\t, 0x7F] do
-    printable_ascii_bytes?(rest)
-  end
-
-  defp printable_ascii_bytes?(_data), do: false
+  defp terminal_response?(data), do: Regex.match?(@terminal_response_pattern, data)
 end

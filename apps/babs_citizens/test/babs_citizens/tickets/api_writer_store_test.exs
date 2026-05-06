@@ -5,6 +5,20 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
 
+  setup do
+    original = Application.get_env(:babs_citizens, :ai_reply_capture_enabled)
+    Application.put_env(:babs_citizens, :ai_reply_capture_enabled, false)
+
+    on_exit(fn ->
+      case original do
+        nil -> Application.delete_env(:babs_citizens, :ai_reply_capture_enabled)
+        value -> Application.put_env(:babs_citizens, :ai_reply_capture_enabled, value)
+      end
+    end)
+
+    :ok
+  end
+
   test "creates lists and shows tickets without Phoenix" do
     root = tmp_root()
 
@@ -131,6 +145,74 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     attempted = Enum.find(history, &(&1["event"] == "comment_notification_attempted"))
     assert attempted["by"] == "clare"
     assert attempted["injected_to"] == ["clare", "dylan"]
+  end
+
+  test "comment_ticket with notify_assignees false omits notification attempt history" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Captured reply",
+                 body: "Captured replies should not renotify assignees.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, %{delivery: :comment_stored}} =
+             Api.comment_ticket(ticket.id, %{body: "Captured answer.", by: "clare"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               notify_assignees: false
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert Enum.map(history, & &1["event"]) == ["created", "comment"]
+  end
+
+  test "comment_ticket tracks AI reply capture after successful notification injection" do
+    root = tmp_root()
+    parent = self()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Comment reply capture",
+                 body: "Comment notifications should be reply-captured.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, %{delivery: {:comment_notified, ["clare"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Please respond.", by: "user"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end,
+               reply_capture: fn turn ->
+                 send(parent, {:reply_capture, turn})
+                 :ok
+               end
+             )
+
+    assert_receive {:reply_capture,
+                    %{
+                      root: ^root,
+                      ticket_id: ticket_id,
+                      slug: "clare",
+                      started_at: "2026-05-06T00:01:00Z"
+                    }}
+
+    assert ticket_id == ticket.id
   end
 
   test "comment_ticket keeps comment durable when one assignee notification fails" do
@@ -299,6 +381,43 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
 
     assert Enum.at(history, 1)["to"] == ["clare"]
     assert Enum.at(history, 3)["injected_to"] == ["clare"]
+  end
+
+  test "assign_ticket tracks AI reply capture after successful injection" do
+    root = tmp_root()
+    parent = self()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Track reply", body: "Capture this reply."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, %{ticket: assigned, delivery: {:injected, "clare"}}} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end,
+               reply_capture: fn turn ->
+                 send(parent, {:reply_capture, turn})
+                 :ok
+               end
+             )
+
+    assert assigned.state == "in_progress"
+
+    assert_receive {:reply_capture,
+                    %{
+                      root: ^root,
+                      ticket_id: ticket_id,
+                      slug: "clare",
+                      started_at: "2026-05-06T00:01:00Z"
+                    }}
+
+    assert ticket_id == ticket.id
   end
 
   test "assign_ticket records start failure without changing ticket assignment" do
@@ -715,6 +834,44 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
       Enum.find(history, fn event -> event["event"] == "feedback_injection_attempted" end)
 
     assert attempted["injected_to"] == ["clare", "dylan"]
+  end
+
+  test "reject_ticket tracks AI reply capture after successful feedback injection" do
+    root = tmp_root()
+    parent = self()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Feedback reply capture", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    pending = %{ticket | state: "pending_approval", assignees: ["clare"]}
+    File.write!(Path.join(root, "#{ticket.id}.md"), TicketMarkdown.render(pending))
+
+    assert {:ok, %{delivery: {:feedback_injected, ["clare"]}}} =
+             Api.reject_ticket(ticket.id, "Please add the missing test.",
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end,
+               reply_capture: fn turn ->
+                 send(parent, {:reply_capture, turn})
+                 :ok
+               end
+             )
+
+    assert_receive {:reply_capture,
+                    %{
+                      root: ^root,
+                      ticket_id: ticket_id,
+                      slug: "clare",
+                      started_at: "2026-05-06T00:03:00Z"
+                    }}
+
+    assert ticket_id == ticket.id
   end
 
   test "oversized comments fail before rewriting ticket markdown" do
