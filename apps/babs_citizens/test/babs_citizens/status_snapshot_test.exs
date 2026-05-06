@@ -54,6 +54,33 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     assert snapshots["failed-one"] == [:start]
   end
 
+  test "exposes imported external ownership labels" do
+    insert_citizen!(%{
+      slug: "imported-one",
+      status: "running",
+      metadata: %{
+        "hardline" => %{
+          "ownership" => "external",
+          "tmux" => %{
+            "target" => "operator-work:0.0",
+            "pane_id" => "%101",
+            "session_name" => "operator-work",
+            "window_index" => "0",
+            "pane_index" => "0"
+          }
+        }
+      }
+    })
+
+    [snapshot] = StatusSnapshot.list()
+
+    assert snapshot.imported?
+    assert snapshot.ownership == "external"
+    assert snapshot.ownership_badge == "Imported · External-owned"
+    assert snapshot.lifecycle_reminder == "Detach only · tmux stays running"
+    assert snapshot.target_label == "operator-work:0.0"
+  end
+
   test "does not expose env values in display snapshots" do
     insert_citizen!(%{
       slug: "secret-env",

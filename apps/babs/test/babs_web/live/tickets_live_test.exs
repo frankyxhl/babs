@@ -65,6 +65,11 @@ defmodule BabsWeb.TicketsLiveTest do
     {:ok, _view, html} = live(build_conn(), "/tickets?socket_token=token-1")
 
     assert html =~ ~s(data-testid="tickets-index")
+    assert html =~ "--bg: #0d0d10"
+    refute html =~ "Phoenix.HTML.raw(styles())"
+    assert html =~ ~s(data-testid="tickets-new")
+    assert html =~ ~s(href="/tickets/new?socket_token=token-1")
+    assert html =~ ~s(data-icon="plus")
     assert html =~ ~s(data-testid="tickets-nav-citizens")
     assert html =~ ~s(href="/citizens?socket_token=token-1")
     assert html =~ ~s(data-icon="refresh")
@@ -98,6 +103,58 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "No tickets yet."
   end
 
+  test "GET /tickets/new routes to NewTicketLive before the ticket detail route" do
+    {:ok, _view, html} = live(build_conn(), "/tickets/new?socket_token=token-1")
+
+    assert html =~ ~s(data-testid="new-ticket-form")
+    assert html =~ ~s(href="/tickets?socket_token=token-1")
+    refute html =~ ~s(data-testid="ticket-detail-error")
+  end
+
+  test "new ticket form creates a ticket and redirects to detail", %{root: root} do
+    {:ok, view, _html} = live(build_conn(), "/tickets/new?socket_token=token-1")
+
+    assert {:error, {:redirect, %{to: to}}} =
+             view
+             |> form("[data-testid='new-ticket-form']",
+               ticket: %{
+                 title: "UI new ticket",
+                 body: "Created from the browser.",
+                 priority: "high"
+               }
+             )
+             |> render_submit()
+
+    assert to =~ ~r(\A/tickets/T-\d{4}-\d{2}-\d{2}-\d{3}\?socket_token=token-1\z)
+
+    id =
+      to
+      |> URI.parse()
+      |> Map.fetch!(:path)
+      |> Path.basename()
+
+    assert File.exists?(Path.join(root, "#{id}.md"))
+    assert {:ok, %{ticket: ticket}} = Api.show_ticket(id, tickets_root: root)
+    assert ticket.title == "UI new ticket"
+    assert ticket.body == "Created from the browser."
+    assert ticket.priority == "high"
+  end
+
+  test "new ticket form renders blank field validation without creating a file", %{root: root} do
+    {:ok, view, _html} = live(build_conn(), "/tickets/new")
+
+    html =
+      view
+      |> form("[data-testid='new-ticket-form']",
+        ticket: %{title: " ", body: "", priority: "normal"}
+      )
+      |> render_submit()
+
+    assert html =~ ~s(data-testid="title-error")
+    assert html =~ ~s(data-testid="body-error")
+    assert File.ls!(root) == []
+  end
+
   test "renders ticket detail with escaped body, frontmatter, warnings, and history", %{
     root: root
   } do
@@ -128,6 +185,8 @@ defmodule BabsWeb.TicketsLiveTest do
     {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
 
     assert html =~ ~s(data-testid="ticket-detail")
+    assert html =~ "--bg: #0d0d10"
+    refute html =~ "Phoenix.HTML.raw(styles())"
     assert html =~ "Inspect detail"
     assert html =~ "in_progress"
     assert html =~ "ghost"
@@ -140,14 +199,29 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "comment"
     assert html =~ "Detail comment."
     assert html =~ "Legacy comment without ticket_id."
+    assert html =~ ~s(data-testid="ticket-comments-chat")
+    assert html =~ ~s(data-testid="ticket-comment-message")
+    assert html =~ ~s(class="comment-author")
+    assert html =~ "clare"
     assert html =~ ~s(data-icon="arrow-left")
     assert html =~ ~s(data-icon="users")
+  end
+
+  test "ticket detail renders a chat empty state when there are no comments", %{root: root} do
+    ticket = create_ticket!(root, "No comments", "No chat yet.")
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-comments-empty")
+    assert html =~ "No comments yet."
   end
 
   test "renders controlled error for missing ticket ids" do
     {:ok, _view, html} = live(build_conn(), "/tickets/T-2026-05-06-404")
 
     assert html =~ ~s(data-testid="ticket-detail-error")
+    assert html =~ "--bg: #0d0d10"
+    refute html =~ "Phoenix.HTML.raw(styles())"
     assert html =~ "Ticket not found"
   end
 
@@ -241,7 +315,7 @@ defmodule BabsWeb.TicketsLiveTest do
 
     {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
     assert html =~ ~s(data-testid="ticket-comment-form")
-    assert html =~ ~s(data-icon="message-square")
+    assert html =~ ~s(data-icon="send")
 
     view
     |> form(~s(form[data-testid="ticket-comment-form"]), %{body: ""})

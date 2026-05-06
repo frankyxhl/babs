@@ -18,21 +18,46 @@ class FakeDocument extends EventTarget {
 }
 
 class FakeTerminal {
-  constructor() {
+  constructor(options = {}) {
     this.cols = 120;
     this.rows = 32;
+    this.options = options;
+    this.focusCount = 0;
+    FakeTerminal.instances.push(this);
   }
 
   loadAddon() {}
   open() {}
+  focus() {
+    this.focusCount += 1;
+  }
   writeln() {}
   write() {}
   onData() {}
+  attachCustomKeyEventHandler(handler) {
+    this.keyHandler = handler;
+  }
 }
+
+FakeTerminal.instances = [];
 
 class FakeFitAddon {
   fit() {}
 }
+
+class FakeResizeObserver {
+  constructor(callback) {
+    this.callback = callback;
+    this.observed = [];
+    FakeResizeObserver.instances.push(this);
+  }
+
+  observe(element) {
+    this.observed.push(element);
+  }
+}
+
+FakeResizeObserver.instances = [];
 
 class FakeSocket {
   constructor() {
@@ -71,6 +96,7 @@ function fakeWindow() {
     Terminal: FakeTerminal,
     FitAddon: { FitAddon: FakeFitAddon },
     TextDecoder,
+    ResizeObserver: FakeResizeObserver,
     addEventListener() {},
     setTimeout(callback) {
       callback();
@@ -89,6 +115,8 @@ function fakeElement(attrs = {}) {
 describe("terminal_client LiveView status ownership", () => {
   it("restores connected status after LiveView patches the badge back to connecting", () => {
     FakeSocket.instances = [];
+    FakeTerminal.instances = [];
+    FakeResizeObserver.instances = [];
 
     const root = fakeElement({
       id: "terminal",
@@ -112,6 +140,10 @@ describe("terminal_client LiveView status ownership", () => {
 
     FakeSocket.instances[0].channelInstance.ok();
     assert.equal(status.dataset.state, "connected");
+    assert.equal(FakeTerminal.instances[0].options.macOptionIsMeta, true);
+    assert.equal(FakeTerminal.instances[0].focusCount, 2);
+    assert.equal(typeof FakeTerminal.instances[0].keyHandler, "function");
+    assert.deepEqual(FakeResizeObserver.instances[0].observed, [root]);
 
     status.dataset.state = "connecting";
     status.textContent = "connecting";
@@ -123,6 +155,8 @@ describe("terminal_client LiveView status ownership", () => {
 
   it("restores connected status if LiveView replaces the badge element", () => {
     FakeSocket.instances = [];
+    FakeTerminal.instances = [];
+    FakeResizeObserver.instances = [];
 
     const root = fakeElement({
       id: "terminal",

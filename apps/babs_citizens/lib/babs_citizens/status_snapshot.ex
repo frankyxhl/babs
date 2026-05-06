@@ -8,7 +8,7 @@ defmodule Babs.Citizens.StatusSnapshot do
   state because this snapshot tracks lifecycle presence, not output activity.
   """
 
-  alias Babs.Citizens.{Catalog, CitizenRecord, Lifecycle}
+  alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Lifecycle}
 
   @known_cli_labels ~w(claude codex droid pi)
 
@@ -34,6 +34,11 @@ defmodule Babs.Citizens.StatusSnapshot do
       live_status: live_status,
       visual_state: visual_state,
       actions: actions(live_status),
+      ownership: ImportedHardline.ownership(record),
+      imported?: ImportedHardline.external?(record),
+      ownership_badge: ImportedHardline.badge(record),
+      lifecycle_reminder: ImportedHardline.reminder(record),
+      target_label: ImportedHardline.target_label(record),
       last_error: last_error(record)
     }
   end

@@ -14,6 +14,7 @@ defmodule Babs.Citizens.Application do
         {Registry, keys: :unique, name: Babs.Citizens.Tickets.WriterRegistry},
         Babs.Citizens.Tickets.WriterSupervisor,
         Babs.Citizens.Tickets.Watcher,
+        Babs.Citizens.Tickets.ReplyCapture,
         Babs.Citizens.Repo,
         {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
       ] ++ reattach_children()

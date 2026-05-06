@@ -7,6 +7,8 @@ defmodule BabsWeb.CitizenPath do
 
   def new(socket_token \\ ""), do: with_query("/citizens/new", socket_token)
 
+  def attach(socket_token \\ ""), do: with_query("/citizens/attach", socket_token)
+
   def terminal(slug, socket_token \\ "", opts \\ []) when is_binary(slug) do
     params =
       []

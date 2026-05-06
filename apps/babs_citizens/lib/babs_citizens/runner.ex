@@ -81,19 +81,22 @@ defmodule Babs.Citizens.Runner do
   def attach(session, opts \\ []) when is_binary(session) do
     rows = Keyword.get(opts, :rows, 32)
     cols = Keyword.get(opts, :cols, 100)
+    attach_session = Keyword.get(opts, :attach_session, session)
 
     with {:ok, _apps} <- Application.ensure_all_started(:erlexec),
          {:ok, pid, os_pid} <-
-           :exec.run(attach_command(session), [
+           :exec.run(attach_command(session, attach_session), [
              :stdin,
              :stdout,
              {:stderr, :stdout},
              {:pty, [{:echo, 0}]},
              {:winsz, {rows, cols}},
+             {:group, 0},
+             :kill_group,
              :monitor,
              {:env, [{"TERM", "xterm-256color"}]}
            ]) do
-      {:ok, %{pid: pid, os_pid: os_pid, session: session}}
+      {:ok, %{pid: pid, os_pid: os_pid, session: session, attach_session: attach_session}}
     end
   end
 
@@ -101,21 +104,82 @@ defmodule Babs.Citizens.Runner do
     :exec.send(os_pid, data)
   end
 
+  def paste_text(%{session: session}, data) when is_binary(data), do: paste_text(session, data)
+
+  def paste_text(session, data) when is_binary(session) and is_binary(data) do
+    buffer = "babs-#{System.unique_integer([:positive, :monotonic])}"
+
+    with :ok <- tmux_ok(["set-buffer", "-b", buffer, data]),
+         :ok <- tmux_ok(["paste-buffer", "-d", "-b", buffer, "-t", session]) do
+      :ok
+    end
+  end
+
+  def send_enter(%{session: session}), do: send_enter(session)
+
+  def send_enter(session) when is_binary(session) do
+    tmux_ok(["send-keys", "-t", session, "Enter"])
+  end
+
+  def ai_cli?(%{cli: cli, cli_args: cli_args}) when is_binary(cli) and is_list(cli_args) do
+    cli_name = cli |> Path.basename() |> String.downcase()
+
+    case {cli_name, cli_args} do
+      {"claude", _args} -> true
+      {"codex", _args} -> true
+      {"gh", ["copilot" | _rest]} -> true
+      _other -> false
+    end
+  end
+
+  def ai_cli?(_config), do: false
+
   def resize(%{os_pid: os_pid}, rows, cols)
       when is_integer(rows) and rows > 0 and is_integer(cols) and cols > 0 do
     :exec.winsz(os_pid, rows, cols)
   end
 
-  def detach(%{os_pid: os_pid}) do
-    case :exec.kill(os_pid, :sigterm) do
+  def detach(%{pid: pid, os_pid: os_pid}) when is_pid(pid) do
+    _ignored = detach_tmux_client(os_pid)
+
+    case stop_managed_process(pid) do
       :ok -> :ok
-      {:error, :not_found} -> :ok
-      {:error, {:not_found, _pid}} -> :ok
+      {:error, :not_found} -> stop_os_process(os_pid)
+      {:error, {:not_found, _pid}} -> stop_os_process(os_pid)
       {:error, _reason} = error -> error
     end
   end
 
-  def attach_command(session), do: String.to_charlist("tmux attach-session -t #{session}")
+  def detach(%{os_pid: os_pid}), do: stop_os_process(os_pid)
+
+  defp detach_tmux_client(os_pid) when is_integer(os_pid) do
+    case tmux_cmd(["detach-client", "-t", to_string(os_pid)]) do
+      {:ok, {_output, 0}} -> :ok
+      _other -> :ok
+    end
+  end
+
+  defp stop_managed_process(pid) do
+    case :exec.stop_and_wait(pid, 10_000) do
+      {:error, _reason} = error -> error
+      _exit_status -> :ok
+    end
+  end
+
+  defp stop_os_process(os_pid) do
+    case :exec.stop_and_wait(os_pid, 10_000) do
+      {:error, :not_found} -> :ok
+      {:error, {:not_found, _pid}} -> :ok
+      {:error, _reason} = error -> error
+      _exit_status -> :ok
+    end
+  end
+
+  def attach_command(target, attach_session \\ nil) do
+    quoted = shell_quote(target)
+    quoted_session = shell_quote(attach_session || target)
+    String.to_charlist("tmux select-pane -t #{quoted} \\; attach-session -t #{quoted_session}")
+  end
 
   def tmux_session_id(session), do: tmux_format(session, "\#{session_id}")
 
@@ -128,6 +192,8 @@ defmodule Babs.Citizens.Runner do
       _ -> {:error, :invalid_pane_pid}
     end
   end
+
+  def capture_pane(%{session: session}), do: capture_pane(session)
 
   def capture_pane(session, lines \\ 200)
       when is_binary(session) and is_integer(lines) and lines > 0 do
@@ -156,6 +222,14 @@ defmodule Babs.Citizens.Runner do
       else
         reraise(error, __STACKTRACE__)
       end
+  end
+
+  defp tmux_ok(args) do
+    case tmux_cmd(args) do
+      {:ok, {_output, 0}} -> :ok
+      {:ok, {output, status}} -> {:error, {:tmux_command_failed, status, output}}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   defp tmux_binary do
@@ -196,5 +270,9 @@ defmodule Babs.Citizens.Runner do
     bin = Path.join(root, "bin")
 
     if base == "", do: bin, else: bin <> ":" <> base
+  end
+
+  defp shell_quote(value) when is_binary(value) do
+    "'" <> String.replace(value, "'", "'\\''") <> "'"
   end
 end

@@ -54,6 +54,52 @@ defmodule Babs.Citizens.ReattachScannerSqliteTest do
     end)
   end
 
+  test "scan_rows reattaches imported external rows without babs session discovery" do
+    record =
+      insert_citizen!(%{
+        slug: "imported-reattach",
+        status: "running",
+        metadata: imported_metadata("operator-work:0.0", "%101")
+      })
+
+    parent = self()
+
+    assert ReattachScanner.scan_rows([record],
+             target_exists?: fn "%101" -> true end,
+             start_imported_pane: fn config, target, opts ->
+               send(
+                 parent,
+                 {:reattach_imported, config.slug, target, Keyword.fetch!(opts, :attach_session)}
+               )
+
+               {:ok, self()}
+             end
+           ) == [{:ok, record.slug}]
+
+    assert_receive {:reattach_imported, "imported-reattach", "%101", "operator-work"}
+    assert Repo.get!(CitizenRecord, record.id).status == "running"
+    refute Runner.tmux_session_alive?(Runner.session_name(record.slug))
+  end
+
+  test "scan_rows marks missing imported external targets failed without spawning babs session" do
+    record =
+      insert_citizen!(%{
+        slug: "imported-missing",
+        status: "running",
+        metadata: imported_metadata("missing-work:0.0", "%404")
+      })
+
+    assert ReattachScanner.scan_rows([record], target_exists?: fn "%404" -> false end) ==
+             [
+               {:error, record.slug, {:import_target_missing, "%404"}}
+             ]
+
+    failed = Repo.get!(CitizenRecord, record.id)
+    assert failed.status == "failed"
+    assert failed.last_error =~ "import_target_missing"
+    refute Runner.tmux_session_alive?(Runner.session_name(record.slug))
+  end
+
   defp with_tmux_binary(binary, fun) do
     original = Application.get_env(:babs_citizens, Babs.Citizens.Runner)
     Application.put_env(:babs_citizens, Babs.Citizens.Runner, tmux_binary: binary)
@@ -67,5 +113,20 @@ defmodule Babs.Citizens.ReattachScannerSqliteTest do
         Application.delete_env(:babs_citizens, Babs.Citizens.Runner)
       end
     end
+  end
+
+  defp imported_metadata(target, pane_id) do
+    %{
+      "hardline" => %{
+        "ownership" => "external",
+        "tmux" => %{
+          "target" => target,
+          "pane_id" => pane_id,
+          "session_name" => "operator-work",
+          "window_index" => "0",
+          "pane_index" => "0"
+        }
+      }
+    }
   end
 end

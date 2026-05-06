@@ -88,6 +88,32 @@ defmodule BabsWeb.TerminalControllerTest do
     refute conn.resp_body =~ ~s(data-testid="new-citizen-form")
   end
 
+  test "citizens attach route renders attach LiveView instead of slug terminal" do
+    previous = Application.get_env(:babs, BabsWeb.AttachCitizenLive)
+
+    Application.put_env(:babs, BabsWeb.AttachCitizenLive,
+      citizen_provider: fn -> [] end,
+      inventory_provider: fn _records -> [] end,
+      lifecycle_lookup: fn _slug -> {:error, :not_found} end
+    )
+
+    try do
+      conn = get(build_conn(), "/citizens/attach?socket_token=route-token")
+
+      assert conn.status == 200
+      assert conn.resp_body =~ ~s(data-testid="attach-citizen-page")
+      assert conn.resp_body =~ ~s(href="/citizens?socket_token=route-token")
+      refute conn.resp_body =~ ~s(data-testid="terminal")
+      refute conn.resp_body =~ "citizen not found: attach"
+    after
+      if previous do
+        Application.put_env(:babs, BabsWeb.AttachCitizenLive, previous)
+      else
+        Application.delete_env(:babs, BabsWeb.AttachCitizenLive)
+      end
+    end
+  end
+
   test "head returns citizen existence without rendering the terminal" do
     slug = "head-test-#{System.unique_integer([:positive])}"
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)

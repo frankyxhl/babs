@@ -5,6 +5,8 @@ defmodule BabsWeb.TicketPath do
 
   def index(socket_token \\ ""), do: with_query("/tickets", socket_token)
 
+  def new(socket_token \\ ""), do: with_query("/tickets/new", socket_token)
+
   def detail(id, socket_token \\ "") when is_binary(id) do
     with_query("/tickets/#{id}", socket_token)
   end

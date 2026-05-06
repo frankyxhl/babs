@@ -7,34 +7,40 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
   test "prompt includes ticket identity, path, assignee, and body" do
     prompt = Injector.prompt(ticket(), "clare")
 
+    assert prompt =~ "You are clare, a Babs Citizen."
+    assert prompt =~ "This message was delivered through the Babs Ticket/Billboard system."
     assert prompt =~ "[Babs Ticket T-2026-05-06-001 assigned]"
     assert prompt =~ "Title: Inject prompt"
     assert prompt =~ "State: in_progress"
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "Path: /tmp/T-2026-05-06-001.md"
     assert prompt =~ "Ticket body for the citizen."
+    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
     assert String.ends_with?(prompt, "\n")
   end
 
   test "feedback prompt includes rejection feedback for the assignee" do
     prompt = Injector.feedback_prompt(ticket(), "clare", "  Missing docs.  ")
 
+    assert prompt =~ "You are clare, a Babs Citizen."
     assert prompt =~ "[Babs Ticket T-2026-05-06-001 rejected]"
     assert prompt =~ "State: in_progress"
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "Feedback from user:\nMissing docs."
+    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
     assert String.ends_with?(prompt, "\n")
   end
 
   test "comment prompt includes provenance and trimmed body for the assignee" do
     prompt = Injector.comment_prompt(ticket(), "clare", "dylan", "  Please review the branch.  ")
 
+    assert prompt =~ "You are clare, a Babs Citizen."
     assert prompt =~ "[Babs Ticket T-2026-05-06-001 comment]"
     assert prompt =~ "State: in_progress"
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "From: dylan"
     assert prompt =~ "Please review the branch."
-    assert prompt =~ "bb ticket comment"
+    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
     assert String.ends_with?(prompt, "\n")
   end
 

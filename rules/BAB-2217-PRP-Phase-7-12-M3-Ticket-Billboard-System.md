@@ -78,7 +78,7 @@ This PRP keeps the implementation disciplined:
 6. **No hidden prompts.** Assignment/comment injection must be visible in the
    target Citizen terminal and persisted in Ticket history.
 7. **Operator remains Inspector in V0-M.** Approval and rejection are explicit
-   user actions. Auto-inspector Citizens start in Phase 14, not M3.
+   user actions. Auto-inspector Citizens start in Phase 15, not M3.
 
 ## Proposed Execution Slices
 
@@ -761,3 +761,4 @@ implementation.
 | 2026-05-06 | Align ADR/roadmap terminology after operator decision: comments are persisted to Billboard history first and terminal notifications are mirrors only | Codex |
 | 2026-05-06 | Mark PRP approved after Trinity R6 GLM/DeepSeek PASS with no blockers | Codex |
 | 2026-05-06 | Add Ticket UI icon requirement for all action buttons, matching existing operations-console style | Codex |
+| 2026-05-06 | Update auto-inspector phase reference after imported tmux attach inserted as Phase 13 | Codex |

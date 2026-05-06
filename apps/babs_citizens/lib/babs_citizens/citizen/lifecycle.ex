@@ -1,12 +1,14 @@
 defmodule Babs.Citizens.Lifecycle do
   @moduledoc """
-  Starts, stops, and reattaches Phase 1 Citizen hardlines.
+  Starts, stops, and reattaches Citizen hardlines.
   """
 
   alias Babs.Citizens.Citizen.Config
   alias Babs.Citizens.Catalog
   alias Babs.Citizens.Hardline.Pane
+  alias Babs.Citizens.ImportedHardline
   alias Babs.Citizens.Runner
+  alias Babs.Citizens.TmuxInventory
 
   @lock_registry Babs.Citizens.LifecycleRegistry
 
@@ -41,9 +43,9 @@ defmodule Babs.Citizens.Lifecycle do
 
   def restart_registered_citizen(slug, opts \\ []) when is_binary(slug) do
     with_slug_lock(slug, opts, fn ->
-      with {:ok, config} <- registered_config(slug),
+      with {:ok, record} <- registered_record(slug),
            :ok <- do_stop_citizen(slug) do
-        run_start_config(config, opts)
+        run_start_record(record, opts)
       end
     end)
   end
@@ -73,14 +75,9 @@ defmodule Babs.Citizens.Lifecycle do
     with_slug_lock(slug, opts, fn -> do_stop_citizen(slug) end)
   end
 
-  defp do_stop_citizen(slug) do
-    session = Runner.session_name(slug)
-
-    with :ok <- stop_pane(slug),
-         :ok <- stop_tmux_session(session) do
-      maybe_mark_stopped(slug)
-      :ok
-    end
+  def attach_imported_citizen(slug, target, opts \\ [])
+      when is_binary(slug) and is_binary(target) do
+    with_slug_lock(slug, opts, fn -> do_attach_imported_citizen(slug, target, opts) end)
   end
 
   def lookup(slug) when is_binary(slug) do
@@ -90,16 +87,57 @@ defmodule Babs.Citizens.Lifecycle do
     end
   end
 
-  defp do_start_registered_citizen(slug, opts) do
-    with {:ok, config} <- registered_config(slug) do
-      run_start_config(config, opts)
+  defp do_stop_citizen(slug) do
+    case Catalog.get_by_slug(slug) do
+      nil ->
+        stop_babs_owned(slug)
+
+      record ->
+        if ImportedHardline.external?(record) do
+          detach_external(slug)
+        else
+          stop_babs_owned(slug)
+        end
     end
   end
 
-  defp registered_config(slug) do
+  defp stop_babs_owned(slug) do
+    session = Runner.session_name(slug)
+
+    with :ok <- stop_pane(slug),
+         :ok <- stop_tmux_session(session) do
+      maybe_mark_stopped(slug)
+      :ok
+    end
+  end
+
+  defp detach_external(slug) do
+    with :ok <- stop_pane(slug) do
+      maybe_mark_stopped(slug)
+      :ok
+    end
+  end
+
+  defp do_start_registered_citizen(slug, opts) do
+    with {:ok, record} <- registered_record(slug) do
+      run_start_record(record, opts)
+    end
+  end
+
+  defp registered_record(slug) do
     case Catalog.get_by_slug(slug) do
       nil -> {:error, :not_found}
-      record -> {:ok, Catalog.to_config(record)}
+      record -> {:ok, record}
+    end
+  end
+
+  defp run_start_record(record, opts) do
+    if ImportedHardline.external?(record) do
+      run_start_imported(record, opts)
+    else
+      record
+      |> Catalog.to_config()
+      |> run_start_config(opts)
     end
   end
 
@@ -128,6 +166,74 @@ defmodule Babs.Citizens.Lifecycle do
     end
   end
 
+  defp do_attach_imported_citizen(slug, target, opts) do
+    with {:ok, record} <- registered_record(slug),
+         :ok <- ensure_no_active_pane(slug),
+         {:ok, pane} <- find_attachable_pane(target, opts),
+         {:ok, record} <- Catalog.mark_imported_external(record, pane),
+         {:ok, _pid} = ok <- run_start_imported(record, opts) do
+      ok
+    end
+  end
+
+  defp ensure_no_active_pane(slug) do
+    case lookup(slug) do
+      {:ok, _pid} -> {:error, :active_hardline_exists}
+      {:error, :not_found} -> :ok
+    end
+  end
+
+  defp find_attachable_pane(target, opts) do
+    pane_finder =
+      Keyword.get(opts, :find_attachable_pane, fn target ->
+        TmuxInventory.find_attachable(target, Catalog.list_citizens())
+      end)
+
+    pane_finder.(target)
+  end
+
+  defp run_start_imported(record, opts) do
+    target = ImportedHardline.operational_target(record)
+
+    result =
+      with target when is_binary(target) and target != "" <- target,
+           true <- imported_target_exists?(target, opts) do
+        start_imported_pane(record, target, opts)
+      else
+        nil -> {:error, :missing_import_target}
+        "" -> {:error, :missing_import_target}
+        false -> {:error, {:import_target_missing, target}}
+      end
+
+    case result do
+      {:ok, _pid} = ok ->
+        maybe_mark_running(record.slug)
+        ok
+
+      {:error, reason} = error ->
+        maybe_mark_import_failed(record, reason)
+        error
+    end
+  end
+
+  defp imported_target_exists?(target, opts) do
+    target_exists? = Keyword.get(opts, :target_exists?, &TmuxInventory.target_exists?/1)
+    target_exists?.(target)
+  end
+
+  defp start_imported_pane(record, target, opts) do
+    starter = Keyword.get(opts, :start_imported_pane, &start_pane/3)
+    attach_session = ImportedHardline.attach_session(record)
+    call_start_imported_pane(starter, Catalog.to_config(record), target, attach_session)
+  end
+
+  defp call_start_imported_pane(starter, config, target, attach_session) do
+    case :erlang.fun_info(starter, :arity) do
+      {:arity, 2} -> starter.(config, target)
+      {:arity, 3} -> starter.(config, target, attach_session: attach_session)
+    end
+  end
+
   defp maybe_start_tmux(config, session) do
     if Runner.tmux_session_alive?(session) do
       :ok
@@ -149,10 +255,10 @@ defmodule Babs.Citizens.Lifecycle do
     end
   end
 
-  defp start_pane(config, session) do
+  defp start_pane(config, session, opts \\ []) do
     child = %{
       id: {:hardline_pane, config.slug},
-      start: {Pane, :start_link, [[config: config, session: session]]},
+      start: {Pane, :start_link, [[config: config, session: session] ++ opts]},
       restart: :temporary
     }
 
@@ -250,6 +356,13 @@ defmodule Babs.Citizens.Lifecycle do
       {:ok, _record} -> :ok
       {:error, :not_found} -> :ok
       {:error, _changeset} -> :ok
+    end
+  end
+
+  defp maybe_mark_import_failed(record, reason) do
+    case Catalog.mark_import_attach_failed(record, reason) do
+      {:ok, _record} -> :ok
+      {:error, _changeset} -> maybe_mark_failed(record.slug, reason)
     end
   end
 end

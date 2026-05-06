@@ -37,7 +37,7 @@ defmodule BabsWeb.TicketsLive do
   def render(assigns) do
     ~H"""
     <style>
-      {Phoenix.HTML.raw(styles())}
+      <%= Phoenix.HTML.raw(styles()) %>
     </style>
 
     <div class="tickets-page" data-testid="tickets-index">
@@ -49,6 +49,9 @@ defmodule BabsWeb.TicketsLive do
           </div>
 
           <nav class="tickets-nav" aria-label="Ticket navigation">
+            <a class="button button-primary" href={TicketPath.new(@socket_token)} data-testid="tickets-new">
+              <BabsWeb.Icon.icon name="plus" /> New
+            </a>
             <a class="button" href={CitizenPath.index(@socket_token)} data-testid="tickets-nav-citizens">
               <BabsWeb.Icon.icon name="users" /> Citizens
             </a>
@@ -167,6 +170,7 @@ defmodule BabsWeb.TicketsLive do
       --ok: #43d17d;
       --wait: #d7ae55;
       --done: #8ea0ff;
+      --accent-text: #07100e;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -200,6 +204,8 @@ defmodule BabsWeb.TicketsLive do
       cursor: pointer;
     }
     .button:hover { border-color: var(--accent); }
+    .button-primary { border-color: transparent; background: var(--accent); color: var(--accent-text); font-weight: 700; }
+    .button-primary:hover { color: var(--accent-text); }
     .button-icon { width: 36px; padding: 7px; }
     .button-compact { min-height: 32px; padding: 5px 9px; font-size: 13px; }
     .icon { width: 16px; height: 16px; flex: 0 0 auto; }

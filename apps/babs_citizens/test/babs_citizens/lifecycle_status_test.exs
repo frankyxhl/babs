@@ -1,7 +1,7 @@
 defmodule Babs.Citizens.LifecycleStatusTest do
   use Babs.Citizens.RepoCase, async: false
 
-  alias Babs.Citizens.{Catalog, Lifecycle, Repo, Runner}
+  alias Babs.Citizens.{Catalog, ImportedHardline, Lifecycle, Repo, Runner}
   alias Babs.Citizens.Hardline.Pane
 
   test "start_registered_citizen loads SQLite config, starts, and marks running" do
@@ -198,6 +198,85 @@ defmodule Babs.Citizens.LifecycleStatusTest do
     assert Repo.get!(CitizenRecord, record.id).status == "running"
   end
 
+  test "attach_imported_citizen persists external metadata and starts pane without Babs session" do
+    record = insert_citizen!(%{slug: "attach-imported", status: "stopped"})
+    parent = self()
+
+    pane = imported_pane("operator-work:0.0", "%101")
+
+    start_imported_pane = fn config, target, opts ->
+      send(parent, {:start_imported, config.slug, target, Keyword.fetch!(opts, :attach_session)})
+      {:ok, self()}
+    end
+
+    assert {:ok, _pid} =
+             Lifecycle.attach_imported_citizen(record.slug, "operator-work:0.0",
+               find_attachable_pane: fn "operator-work:0.0" -> {:ok, pane} end,
+               target_exists?: fn "%101" -> true end,
+               start_imported_pane: start_imported_pane
+             )
+
+    assert_receive {:start_imported, "attach-imported", "%101", "operator-work"}
+
+    reloaded = Repo.get!(CitizenRecord, record.id)
+    assert reloaded.status == "running"
+    assert ImportedHardline.external?(reloaded)
+    assert ImportedHardline.target(reloaded) == "operator-work:0.0"
+    assert ImportedHardline.operational_target(reloaded) == "%101"
+    refute Runner.tmux_session_alive?(Runner.session_name(record.slug))
+  end
+
+  test "attach_imported_citizen refuses to replace an active hardline" do
+    record = insert_citizen!(%{slug: "active-import", status: "running"})
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+
+    assert {:error, :active_hardline_exists} =
+             Lifecycle.attach_imported_citizen(record.slug, "operator-work:0.0",
+               find_attachable_pane: fn _target ->
+                 flunk("active hardline must block tmux inventory lookup")
+               end
+             )
+  end
+
+  test "stop_citizen detaches imported external hardline without killing tmux" do
+    record =
+      insert_citizen!(%{
+        slug: "detach-imported",
+        status: "running",
+        metadata: imported_metadata("operator-work:0.0", "%101")
+      })
+
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+
+    with_tmux_binary("/definitely/missing/babs-tmux", fn ->
+      assert :ok = Lifecycle.stop_citizen(record.slug)
+    end)
+
+    assert Repo.get!(CitizenRecord, record.id).status == "stopped"
+  end
+
+  test "start_registered_citizen for missing imported target marks failed and never starts babs tmux" do
+    record =
+      insert_citizen!(%{
+        slug: "missing-import-target",
+        status: "running",
+        metadata: imported_metadata("missing-session:0.0", "%404")
+      })
+
+    assert {:error, {:import_target_missing, "%404"}} =
+             Lifecycle.start_registered_citizen(record.slug,
+               target_exists?: fn "%404" -> false end,
+               start_imported_pane: fn _config, _target ->
+                 flunk("missing imported targets must not start a pane")
+               end
+             )
+
+    failed = Repo.get!(CitizenRecord, record.id)
+    assert failed.status == "failed"
+    assert failed.last_error =~ "import_target_missing"
+    refute Runner.tmux_session_alive?(Runner.session_name(record.slug))
+  end
+
   test "start_config marks spawn failure in SQLite without leaking env values" do
     record =
       insert_citizen!(%{
@@ -278,5 +357,34 @@ defmodule Babs.Citizens.LifecycleStatusTest do
       {:ok, capture} -> String.contains?(capture, marker)
       {:error, _reason} -> false
     end
+  end
+
+  defp imported_pane(target, pane_id) do
+    %{
+      session_name: "operator-work",
+      window_index: "0",
+      window_name: "main",
+      pane_index: "0",
+      pane_id: pane_id,
+      target: target,
+      current_command: "zsh",
+      current_path: System.tmp_dir!(),
+      attached?: false
+    }
+  end
+
+  defp imported_metadata(target, pane_id) do
+    %{
+      "hardline" => %{
+        "ownership" => "external",
+        "tmux" => %{
+          "target" => target,
+          "pane_id" => pane_id,
+          "session_name" => "operator-work",
+          "window_index" => "0",
+          "pane_index" => "0"
+        }
+      }
+    }
   end
 end

@@ -8,6 +8,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Citizen.Config, as: CitizenConfig
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
@@ -86,11 +87,16 @@ defmodule Babs.Citizens.Tickets.Writer do
            :ok <- detect_conflict(path, original, id),
            now <- now(opts),
            updated = %{ticket | updated_at: now},
-           events <- comment_events(ticket, body, now, by),
+           notify? <- Keyword.get(opts, :notify_assignees, true),
+           events <- comment_events(ticket, body, now, by, notify?),
            :ok <- validate_events(id, events),
            :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
            :ok <- append_events(state.root, id, events) do
-        inject_comment(state.root, updated, body, now, by, opts)
+        if notify? do
+          inject_comment(state.root, updated, body, now, by, opts)
+        else
+          {:ok, %{ticket: updated, delivery: :comment_stored}}
+        end
       end
 
     {:reply, result, state}
@@ -242,10 +248,10 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
-  defp comment_events(ticket, body, now, by) do
+  defp comment_events(ticket, body, now, by, notify?) do
     events = [comment_event(ticket, now, by, body)]
 
-    if ticket.assignees == [] do
+    if not notify? or ticket.assignees == [] do
       events
     else
       events ++ [comment_notification_attempted_event(ticket, now, by)]
@@ -266,6 +272,7 @@ defmodule Babs.Citizens.Tickets.Writer do
       case Injector.inject(slug, prompt, opts) do
         :ok ->
           with :ok <- History.append(root, id, injected_event(assigned, slug, now)) do
+            track_reply_capture(root, assigned, slug, now, opts)
             {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
           end
 
@@ -480,6 +487,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     with :ok <- Injector.prepare(slug, opts),
          :ok <- Injector.inject(slug, prompt, opts),
          :ok <- History.append(root, ticket.id, comment_notified_event(ticket, slug, now, by)) do
+      track_reply_capture(root, ticket, slug, now, opts)
       :ok
     else
       {:error, reason} ->
@@ -516,6 +524,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     with :ok <- Injector.prepare(slug, opts),
          :ok <- Injector.inject(slug, prompt, opts),
          :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
+      track_reply_capture(root, ticket, slug, now, opts)
       :ok
     else
       {:error, reason} ->
@@ -537,6 +546,22 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+  end
+
+  defp track_reply_capture(root, ticket, slug, now, opts) do
+    capture = Keyword.get(opts, :reply_capture, &ReplyCapture.track/1)
+
+    if is_function(capture, 1) do
+      _ignored =
+        capture.(%{
+          root: root,
+          ticket_id: ticket.id,
+          slug: slug,
+          started_at: now
+        })
+    end
+
+    :ok
   end
 
   defp validate_events(id, events) do

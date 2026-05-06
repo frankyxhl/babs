@@ -6,6 +6,7 @@ defmodule Babs.Citizens.Hardline.Pane do
   use GenServer
 
   alias Babs.Citizens.Hardline.Transcript
+  alias Babs.Citizens.Hardline.SystemDelivery
   alias Babs.Citizens.Runner
 
   require Logger
@@ -19,7 +20,13 @@ defmodule Babs.Citizens.Hardline.Pane do
   end
 
   def inject(slug, data) when is_binary(slug) and is_binary(data) do
-    GenServer.cast(via(slug), {:inject, data})
+    GenServer.cast(via(slug), {:inject, data, :manual})
+  end
+
+  def inject_system(slug, data) when is_binary(slug) and is_binary(data) do
+    GenServer.call(via(slug), {:inject, data, :system}, system_delivery_timeout_ms())
+  catch
+    :exit, _reason -> {:error, :not_found}
   end
 
   def resize(slug, rows, cols) when is_binary(slug) do
@@ -28,6 +35,12 @@ defmodule Babs.Citizens.Hardline.Pane do
 
   def cwd(slug) when is_binary(slug) do
     GenServer.call(via(slug), :cwd)
+  catch
+    :exit, _reason -> {:error, :not_found}
+  end
+
+  def tmux_target(slug) when is_binary(slug) do
+    GenServer.call(via(slug), :tmux_target)
   catch
     :exit, _reason -> {:error, :not_found}
   end
@@ -50,10 +63,13 @@ defmodule Babs.Citizens.Hardline.Pane do
 
   @impl true
   def init(opts) do
+    Process.flag(:trap_exit, true)
+
     config = Keyword.fetch!(opts, :config)
     session = Keyword.get(opts, :session, Runner.session_name(config.slug))
+    attach_session = Keyword.get(opts, :attach_session, session)
 
-    case Runner.attach(session) do
+    case Runner.attach(session, attach_session: attach_session) do
       {:ok, attach} ->
         transcript_io =
           case Transcript.open(config.cwd) do
@@ -89,6 +105,10 @@ defmodule Babs.Citizens.Hardline.Pane do
     {:reply, {:ok, state.config.cwd}, state}
   end
 
+  def handle_call(:tmux_target, _from, state) do
+    {:reply, {:ok, state.session}, state}
+  end
+
   @impl true
   def handle_call(:flush_transcript, _from, state) do
     case Transcript.flush(Map.get(state, :transcript_io)) do
@@ -104,21 +124,19 @@ defmodule Babs.Citizens.Hardline.Pane do
     end
   end
 
+  def handle_call({:inject, data, source}, _from, state) when source in [:manual, :system] do
+    {result, state} = inject_into_state(data, source, state)
+    {:reply, result, state}
+  end
+
   @impl true
   def handle_cast({:inject, data}, state) do
-    Runner.inject(state.attach, data)
+    handle_cast({:inject, data, :manual}, state)
+  end
 
-    next_input_seq = state.input_seq + 1
-
-    write_transcript(state, %{
-      slug: state.config.slug,
-      direction: :input,
-      stream_id: state.stream_id,
-      seq: next_input_seq,
-      payload: data
-    })
-
-    {:noreply, %{state | input_seq: next_input_seq}}
+  def handle_cast({:inject, data, source}, state) when source in [:manual, :system] do
+    {_result, state} = inject_into_state(data, source, state)
+    {:noreply, state}
   end
 
   @impl true
@@ -176,6 +194,12 @@ defmodule Babs.Citizens.Hardline.Pane do
 
   defp via(slug), do: {:via, Registry, {Babs.Citizens.PaneRegistry, slug}}
 
+  defp system_delivery_timeout_ms do
+    :babs_citizens
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:system_delivery_timeout_ms, 5_000)
+  end
+
   defp write_transcript(state, record) do
     # During dev hot reload, pre-transcript Pane state can briefly run new code.
     case Map.get(state, :transcript_io) do
@@ -194,6 +218,67 @@ defmodule Babs.Citizens.Hardline.Pane do
 
             :ok
         end
+    end
+  end
+
+  defp inject_into_state(data, source, state) do
+    {result, delivered_data} = deliver_into_state(data, source, state)
+
+    next_input_seq = state.input_seq + 1
+
+    write_transcript(state, %{
+      slug: state.config.slug,
+      direction: :input,
+      stream_id: state.stream_id,
+      seq: next_input_seq,
+      payload: delivered_data
+    })
+
+    if source == :system, do: flush_transcript_for_system_injection(state)
+
+    {normalize_inject_result(result), %{state | input_seq: next_input_seq}}
+  end
+
+  defp normalize_inject_result(:ok), do: :ok
+  defp normalize_inject_result(other), do: {:error, other}
+
+  defp runner(state), do: Map.get(state, :runner, &Runner.inject/2)
+
+  defp deliver_into_state(data, :manual, state) do
+    {runner(state).(state.attach, data), data}
+  end
+
+  defp deliver_into_state(data, :system, state) do
+    delivery = Map.get(state, :system_delivery, &SystemDelivery.deliver/4)
+    opts = system_delivery_opts(state)
+
+    case delivery.(state.config, state.attach, data, opts) do
+      {:ok, delivered_data} -> {:ok, delivered_data}
+      {:error, reason, delivered_data} -> {{:error, reason}, delivered_data}
+      other -> {{:error, other}, data}
+    end
+  end
+
+  defp system_delivery_opts(state) do
+    opts = Map.get(state, :system_delivery_opts, [])
+    ops = opts |> Keyword.get(:ops, %{}) |> Map.new() |> Map.put_new(:inject, runner(state))
+    Keyword.put(opts, :ops, ops)
+  end
+
+  defp flush_transcript_for_system_injection(state) do
+    case Transcript.flush(Map.get(state, :transcript_io)) do
+      :ok ->
+        :ok
+
+      {:error, :no_transcript} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning(
+          "babs hardline transcript flush failed for #{state.config.slug}: #{inspect(reason)}"
+        )
+
+        :ok
     end
   end
 

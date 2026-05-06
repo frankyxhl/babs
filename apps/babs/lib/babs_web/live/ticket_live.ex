@@ -104,7 +104,7 @@ defmodule BabsWeb.TicketLive do
   def render(%{error: nil} = assigns) do
     ~H"""
     <style>
-      {Phoenix.HTML.raw(styles())}
+      <%= Phoenix.HTML.raw(styles()) %>
     </style>
 
     <div class="tickets-page" data-testid="ticket-detail">
@@ -219,33 +219,6 @@ defmodule BabsWeb.TicketLive do
                   </button>
                 </form>
 
-                <form
-                  :if={commentable?(@ticket)}
-                  class="comment-form"
-                  phx-submit="comment"
-                  data-testid="ticket-comment-form"
-                >
-                  <textarea
-                    name="body"
-                    class="comment-body"
-                    rows="4"
-                    required
-                    disabled={ticket_action_busy?(@ticket_action_inflight)}
-                    data-testid="ticket-comment-body"
-                    aria-label="Ticket comment"
-                  ></textarea>
-                  <button
-                    type="submit"
-                    class="button"
-                    disabled={ticket_action_busy?(@ticket_action_inflight)}
-                    data-testid="ticket-comment"
-                    aria-label="Add ticket comment"
-                    title="Add ticket comment"
-                  >
-                    <BabsWeb.Icon.icon name="message-square" /> Comment
-                  </button>
-                </form>
-
                 <button
                   :for={slug <- @ticket.assignees}
                   :if={unassignable?(@ticket)}
@@ -297,6 +270,63 @@ defmodule BabsWeb.TicketLive do
           </aside>
         </section>
 
+        <section class="chat-panel" data-testid="ticket-comments-chat">
+          <header class="chat-header">
+            <div>
+              <h2>Comments</h2>
+              <p class="chat-subtitle">Citizen replies and operator messages</p>
+            </div>
+          </header>
+
+          <div :if={comment_events(@history) == []} class="chat-empty" data-testid="ticket-comments-empty">
+            No comments yet.
+          </div>
+
+          <ol :if={comment_events(@history) != []} class="chat-list">
+            <li
+              :for={comment <- comment_events(@history)}
+              class={comment_class(comment)}
+              data-testid="ticket-comment-message"
+            >
+              <div class="comment-bubble">
+                <div class="comment-meta">
+                  <span class="comment-author">{comment["by"] || "unknown"}</span>
+                  <time>{comment["ts"]}</time>
+                </div>
+                <p>{comment["body"]}</p>
+              </div>
+            </li>
+          </ol>
+
+          <form
+            :if={commentable?(@ticket)}
+            class="chat-compose"
+            phx-submit="comment"
+            data-testid="ticket-comment-form"
+          >
+            <textarea
+              name="body"
+              class="comment-body"
+              rows="3"
+              required
+              disabled={ticket_action_busy?(@ticket_action_inflight)}
+              data-testid="ticket-comment-body"
+              aria-label="Ticket comment"
+              placeholder="Write a message to this ticket..."
+            ></textarea>
+            <button
+              type="submit"
+              class="button button-primary"
+              disabled={ticket_action_busy?(@ticket_action_inflight)}
+              data-testid="ticket-comment"
+              aria-label="Add ticket comment"
+              title="Add ticket comment"
+            >
+              <BabsWeb.Icon.icon name="send" /> Send
+            </button>
+          </form>
+        </section>
+
         <section class="history-panel">
           <h2>History</h2>
           <ol class="history-list">
@@ -320,7 +350,7 @@ defmodule BabsWeb.TicketLive do
   def render(assigns) do
     ~H"""
     <style>
-      {Phoenix.HTML.raw(styles())}
+      <%= Phoenix.HTML.raw(styles()) %>
     </style>
 
     <div class="tickets-page" data-testid="ticket-detail-error">
@@ -388,6 +418,7 @@ defmodule BabsWeb.TicketLive do
       --ok: #43d17d;
       --wait: #d7ae55;
       --done: #8ea0ff;
+      --accent-text: #07100e;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -414,7 +445,7 @@ defmodule BabsWeb.TicketLive do
     .ticket-flash-error { border-color: rgba(220, 107, 107, 0.55); background: rgba(220, 107, 107, 0.12); }
     .tickets-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
     .ticket-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
-    .reject-form, .comment-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
+    .reject-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
     .reject-feedback, .comment-body {
       width: 100%;
       min-height: 92px;
@@ -443,12 +474,14 @@ defmodule BabsWeb.TicketLive do
       cursor: pointer;
     }
     .button:disabled { cursor: wait; opacity: 0.62; }
+    .button-primary { border-color: transparent; background: var(--accent); color: var(--accent-text); font-weight: 700; }
+    .button-primary:hover { color: var(--accent-text); }
     .button-danger { color: var(--danger); }
     .back-link { min-height: 30px; padding: 5px 9px; color: var(--muted); font-size: 13px; }
     .button:hover, .back-link:hover { border-color: var(--accent); color: var(--text); }
     .icon { width: 16px; height: 16px; flex: 0 0 auto; }
     .detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr); gap: 14px; align-items: start; }
-    .detail-main, .detail-side, .summary-panel, .history-panel, .error-panel {
+    .detail-main, .detail-side, .summary-panel, .chat-panel, .history-panel, .error-panel {
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--panel);
@@ -483,6 +516,35 @@ defmodule BabsWeb.TicketLive do
     .state-pending_approval { color: var(--accent); }
     .state-closed { color: var(--done); }
     .state-cancelled { color: var(--danger); }
+    .chat-panel { display: grid; gap: 12px; }
+    .chat-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+    .chat-subtitle { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+    .chat-empty {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .chat-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+    .comment-message { display: flex; justify-content: flex-start; }
+    .comment-message.comment-user { justify-content: flex-end; }
+    .comment-bubble {
+      width: fit-content;
+      max-width: min(720px, 88%);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 9px 11px;
+    }
+    .comment-user .comment-bubble {
+      border-color: rgba(85, 179, 166, 0.45);
+      background: rgba(85, 179, 166, 0.14);
+    }
+    .comment-meta { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 12px; }
+    .comment-author { color: var(--text); font-weight: 700; }
+    .comment-bubble p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .chat-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
     .history-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
     .history-event { border-top: 1px solid var(--line); padding-top: 8px; }
     .history-event:first-child { border-top: 0; padding-top: 0; }
@@ -495,6 +557,7 @@ defmodule BabsWeb.TicketLive do
       .tickets-header { flex-direction: column; }
       .tickets-nav { justify-content: flex-start; flex-wrap: wrap; }
       .detail-grid { grid-template-columns: minmax(0, 1fr); }
+      .chat-compose { grid-template-columns: minmax(0, 1fr); }
     }
     @media (max-width: 560px) {
       .tickets-page { padding: 18px 10px; }
@@ -531,6 +594,16 @@ defmodule BabsWeb.TicketLive do
        do: feedback
 
   defp history_event_text(_event), do: nil
+
+  defp comment_events(history) do
+    Enum.filter(history, fn
+      %{"event" => "comment", "body" => body} when is_binary(body) and body != "" -> true
+      _event -> false
+    end)
+  end
+
+  defp comment_class(%{"by" => "user"}), do: "comment-message comment-user"
+  defp comment_class(_comment), do: "comment-message"
 
   defp start_ticket_action(socket, action, fun) do
     if ticket_action_busy?(socket.assigns.ticket_action_inflight) do

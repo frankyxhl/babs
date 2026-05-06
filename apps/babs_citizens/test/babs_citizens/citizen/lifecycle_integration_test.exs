@@ -23,6 +23,7 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
     assert :ok = DynamicSupervisor.terminate_child(Babs.Citizens.DynamicSupervisor, pid)
     assert Runner.tmux_session_alive?(session)
     assert {:error, :not_found} = Lifecycle.lookup(config.slug)
+    assert wait_for_attach_client?(session, false, 5_000)
 
     assert {:ok, reattached_pid} = Lifecycle.reattach(config)
     assert is_pid(reattached_pid)
@@ -30,6 +31,21 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
 
     assert :ok = Lifecycle.stop_citizen(config.slug)
     refute Runner.tmux_session_alive?(session)
+  end
+
+  test "detaching a pane stops its tmux attach client" do
+    config = sentinel_config()
+    session = Runner.session_name(config.slug)
+
+    on_exit(fn -> Runner.kill_session(session) end)
+
+    assert :ok = Runner.start_session(config)
+    assert {:ok, attach} = Runner.attach(session)
+    assert wait_for_attach_client?(session, true, 2_000)
+
+    assert :ok = Runner.detach(attach)
+    assert wait_for_attach_client?(session, false, 5_000)
+    assert Runner.tmux_session_alive?(session)
   end
 
   defp sentinel_config do
@@ -71,6 +87,32 @@ defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
     case Runner.capture_pane(session) do
       {:ok, capture} -> String.contains?(capture, marker)
       {:error, _reason} -> false
+    end
+  end
+
+  defp wait_for_attach_client?(session, expected, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_attach_client?(session, expected, deadline)
+  end
+
+  defp do_wait_for_attach_client?(session, expected, deadline) do
+    cond do
+      attach_client_alive?(session) == expected ->
+        true
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        false
+
+      true ->
+        Process.sleep(100)
+        do_wait_for_attach_client?(session, expected, deadline)
+    end
+  end
+
+  defp attach_client_alive?(session) do
+    case System.cmd("tmux", ["list-clients"], stderr_to_stdout: true) do
+      {output, 0} -> String.contains?(output, session)
+      {_output, _status} -> false
     end
   end
 end

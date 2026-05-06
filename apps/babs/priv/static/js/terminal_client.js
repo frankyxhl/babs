@@ -1,5 +1,11 @@
 import { Socket } from "./phoenix.mjs";
-import { allowedInput, connectionStatus, decodeTerminalOutput, resizePayload } from "./terminal_core.js";
+import {
+  allowedInput,
+  connectionStatus,
+  decodeTerminalOutput,
+  installTerminalKeyboardHandler,
+  resizePayload
+} from "./terminal_core.js";
 
 function applyConnectionStatus(status, state, slug) {
   const next = connectionStatus(state, slug);
@@ -44,6 +50,8 @@ export function bootTerminal(options = {}) {
     cursorBlink: true,
     fontFamily: '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: 13,
+    macOptionIsMeta: true,
+    scrollback: 10_000,
     theme: {
       background: "#000000",
       foreground: "#e7eaf0",
@@ -56,6 +64,8 @@ export function bootTerminal(options = {}) {
 
   terminal.loadAddon(fit);
   terminal.open(root);
+  installTerminalKeyboardHandler(terminal);
+  terminal.focus?.();
   fit.fit();
 
   const socket = new SocketCtor("/socket", { params: { token: root.dataset.socketToken || "" } });
@@ -71,6 +81,7 @@ export function bootTerminal(options = {}) {
     .receive("ok", () => {
       setConnectionStatus("connected");
       terminal.writeln("\r\n[babs connected]\r\n");
+      terminal.focus?.();
     })
     .receive("error", (reason) => {
       setConnectionStatus("error");
@@ -89,10 +100,18 @@ export function bootTerminal(options = {}) {
   };
 
   win.addEventListener("resize", resize);
+
+  let resizeObserver = null;
+
+  if (typeof win.ResizeObserver === "function") {
+    resizeObserver = new win.ResizeObserver(resize);
+    resizeObserver.observe(root);
+  }
+
   win.setTimeout(resize, 0);
 
   root.__babsTerminal = terminal;
-  win.__babsTerminalClient = { terminal, fit, socket, channel, resize };
+  win.__babsTerminalClient = { terminal, fit, socket, channel, resize, resizeObserver };
 
-  return { terminal, fit, socket, channel, resize };
+  return { terminal, fit, socket, channel, resize, resizeObserver };
 }

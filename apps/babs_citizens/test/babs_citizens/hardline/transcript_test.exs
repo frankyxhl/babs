@@ -38,6 +38,22 @@ defmodule Babs.Citizens.Hardline.TranscriptTest do
     assert :ok = Transcript.close(io)
   end
 
+  test "append/2 is immediately visible to external readers before close", %{cwd: cwd} do
+    {:ok, io} = Transcript.open(cwd)
+
+    assert :ok =
+             Transcript.append(io, %{
+               slug: "clare",
+               direction: :output,
+               stream_id: 1,
+               seq: 1,
+               payload: "visible now\n"
+             })
+
+    assert File.read!(Transcript.path(cwd)) =~ Base.encode64("visible now\n")
+    assert :ok = Transcript.close(io)
+  end
+
   test "encode/1 emits a single JSON line with the documented fields", %{cwd: _cwd} do
     timestamp = ~U[2026-05-05 12:34:56.789012Z]
 

@@ -11,13 +11,13 @@
 
 ## What Is It?
 
-The master roadmap of Babs from Phase 0 (PTY validation) through Phase 16 (V0-L complete: Mayor + federation). Replaces the earlier 5-phase plan in full.
+The master roadmap of Babs from Phase 0 (PTY validation) through Phase 17 (V0-L complete: Mayor + federation). Replaces the earlier 5-phase plan in full.
 
 Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
-- **Flywheel** (Phase 2-16): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~16-30 weeks (per Trinity 2× multiplier).
+- **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-16 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
 
 ---
 
@@ -28,9 +28,9 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 | **M0** | 0, optional 0a/0b/0c | PTY substrate validated; optional browser manager console, full-window terminal mode, and browser test harness available for easier hardline operation |
 | **M1** | 1 | **Flywheel ignited** — single Citizen running in browser, can edit Babs and survive reload |
 | **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
-| **M2.5** | 6.5 | Manual ticket dogfood validation (Trinity-mandated) |
-| **M3** | 7-12 | **V0-M complete** — filesystem-first ticket-driven multi-agent system |
-| **M4** | 13-16 | **V0-L complete** — Mayor + Inspector autonomy; PWA + read-only federation |
+| **M2.5** | 6.5 | Manual ticket dogfood validation (waived as gate; retained as reference) |
+| **M3** | 7-12a | **V0-M complete** — filesystem-first ticket-driven multi-agent system with reliable hardline delivery and AI CLI reply capture |
+| **M4** | 13-17 | **V0-L complete** — imported tmux attach; Mayor + Inspector autonomy; PWA + read-only federation |
 
 ---
 
@@ -204,39 +204,79 @@ plan.
 **Implementation CHG**: `BAB-2223` defines the Phase 12 `bb ticket comment`,
 Ticket detail comment form, notification mirrors, BDD, validation, and review
 plan.
-**Current status**: Implemented locally on `codex/m3-phase-12-ticket-comments`.
-Local validation and Trinity implementation review passed; PR is next.
+**Current status**: Merged in PR #20.
 **Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. Ticket/Billboard history is the authoritative communication surface for all participants, including the author; terminal notifications may mirror history but are not authoritative.
 **Acceptance**: T-001 assigned to clare + dylan; clare `bb ticket comment T-001 "Backend done"`; clare and dylan both see the persisted comment in Ticket/Billboard history within 1s
 **Estimate**: 3-5 days
 
-### 🎯 M3 = V0-M complete (~4-7 weeks flywheel time)
+### Phase 12a — PFC-Informed Hardline Relay Reliability
 
-### Phase 13 — Citizen Roles
+**Planning doc**: `BAB-2224` PRP
+**Implementation CHG**: `BAB-2226`
+**Current status**: Implemented locally with final validation passing. ExUnit
+225 `:babs_citizens` tests and 72 `:babs` tests pass; clean coverage is
+`:babs_citizens` 81.35% and `:babs` 87.34%; JS tests, browser-harness BDD,
+Playwright E2E, Gate A, Alfred validation, format, compile, and whitespace
+checks pass.
+**Scope**: Borrow the reliable mechanics from `prefrontal-cortex` without
+copying its Discord relay architecture. System-delivered Ticket prompts use
+adaptive paste/submit confirmation for AI CLIs instead of raw bytes plus a
+guessed Enter. Claude/Codex replies are read from their upstream AI CLI JSONL
+transcripts when available, matched to the Ticket turn, and persisted back to
+Ticket history as Citizen comments. Pane capture remains diagnostic/fallback;
+Ticket/Billboard history remains authoritative.
+**Acceptance**: Assigning a Ticket to Clare/Dylan submits without a manual
+Enter; a matched AI CLI reply is captured into `.history.jsonl` as a Citizen
+comment; `/tickets/<id>` chat updates through the watcher path; stale or
+unmatched JSONL never creates a comment.
+**Estimate**: 4-7 days
+
+### 🎯 M3 = V0-M complete (~7-11 weeks flywheel time)
+
+### Phase 13 — Imported Tmux Session Attach
+
+**Planning doc**: `BAB-2225` PRP; `BAB-1113` ADR
+**Implementation CHG**: `BAB-2227`
+**Current status**: Implemented locally with final validation passing alongside
+Phase 12a. Browser-harness BDD and Playwright E2E both cover imported external
+tmux attach, terminal input, Detach, and proof that the external tmux session
+stays alive.
+**Scope**: Browser-driven import/attach workflow for tmux panes that already
+exist outside Babs. Imported sessions default to external ownership: Babs can
+stream, inject, persist transcript, detach, and reattach, but Stop/Detach does
+not kill the external tmux session. UI shows an explicit `Imported ·
+External-owned` style badge wherever lifecycle controls are available.
+**Acceptance**: Create a tmux session outside Babs, attach it to an existing
+stopped/detached Citizen from the browser, use the normal terminal and Ticket
+injection paths, detach without killing the external tmux session, and reattach
+after Babs restart when the tmux target still exists.
+**Estimate**: 4-7 days
+
+### Phase 14 — Citizen Roles
 
 **Scope**: `citizens.role` SQLite field (was reserved in Phase 3) becomes user-settable. UI shows role; `/citizens/new` form has role field. Tickets can specify `assignee_role` instead of named `assignee`. Babs picks an idle Citizen of that role (round-robin).
 **Acceptance**: Create T-002 with `assignee_role: developer`; Babs auto-routes to first idle developer-role citizen
 **Estimate**: 3-5 days
 
-### Phase 14 — Inspector Role (Auto-Approval)
+### Phase 15 — Inspector Role (Auto-Approval)
 
 **Scope**: Dedicated Citizen with `role: inspector`. SOP: "When a ticket reaches Pending Approval, read the body + acceptance criteria + assignee's last comments; decide approve or reject with reasoning". Inspector becomes the default `inspector` for new tickets. User can override.
 **Acceptance**: T-003 reaches Pending Approval; inspector citizen wakes up (notified via PubSub on state change), reads ticket, writes approve/reject decision; user can intervene
 **Estimate**: 7-10 days (LLM protocol design)
 
-### Phase 15 — Mayor Citizen (research-grade)
+### Phase 16 — Mayor Citizen (research-grade)
 
 **Scope**: Citizen with `is_mayor: true`. Listens for tickets with `assignees: []` (the billboard). Outputs proposal: `bb propose <root-ticket> --children "T-A: BA work; T-B: Developer work; ..."`. Proposal becomes draft tickets in a special state; UI shows them awaiting user approval. User can edit/cull/approve. On approve, drafts are written to the configured tickets root and routed to citizens by role.
 **Acceptance**: User creates T-100 = "Build a hello world site" (no assignee). Mayor proposes 4 children. User removes one ("designer"), approves rest. 3 children auto-routed to citizens by role. All 3 progress through the lifecycle.
 **Estimate**: 14-21 days (LLM protocol research)
 
-### Phase 16 — PWA + Mobile + Read-Only Federation
+### Phase 17 — PWA + Mobile + Read-Only Federation
 
 **Scope**: PWA manifest + service worker for installable browser app; mobile-responsive breakpoints; read-only federation API (per `BAB-1109`) — Tailscale-connected Babs nodes expose `/api/v1/tickets`, `/api/v1/citizens`, `/api/v1/citizens/<name>/transcript`; remote nodes mount as `remote://<peer>/...` namespace in UI.
 **Acceptance**: Install PWA on iPhone; view desktop's running citizens. Configure laptop Babs to peer with desktop Babs; laptop's UI shows desktop tickets read-only.
 **Estimate**: 14-21 days
 
-### 🎯 M4 = V0-L complete (~6-9 weeks flywheel time)
+### 🎯 M4 = V0-L complete (~12-18 weeks flywheel time)
 
 ---
 
@@ -247,14 +287,16 @@ Local validation and Trinity implementation review passed; PR is next.
 | Phase 0 (manual) | 3-4 days | 4-6 days |
 | Phase 1 (manual) | 7-10 days | 14-21 days |
 | Phase 2-6 (V0-S flywheel) | 16-25 days | 32-50 days |
-| Phase 6.5 (dogfood) | 1-2 days | 2-3 days |
+| Phase 6.5 (dogfood, waived as gate) | 0 days | 0 days |
 | Phase 7-12 (V0-M flywheel) | 21-33 days | 42-66 days |
-| Phase 13-14 (V0-L early) | 10-15 days | 20-30 days |
-| Phase 15 (Mayor) | 14-21 days | 28-42 days |
-| Phase 16 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~90-130 days (~13-19 weeks)** | **~170-260 days (~24-37 weeks, 6-9 months)** |
+| Phase 12a (relay reliability) | 4-7 days | 8-14 days |
+| Phase 13 (imported tmux attach) | 4-7 days | 8-14 days |
+| Phase 14-15 (V0-L early) | 10-15 days | 20-30 days |
+| Phase 16 (Mayor) | 14-21 days | 28-42 days |
+| Phase 17 (Polish) | 14-21 days | 28-42 days |
+| **Total** | **~93-143 days (~13-21 weeks)** | **~184-285 days (~26-41 weeks, 6-10 months)** |
 
-**Be honest**: The realistic column is the operating estimate. Plan for 6-9 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
+**Be honest**: The realistic column is the operating estimate. Plan for 6-10 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
 ---
 
@@ -267,8 +309,9 @@ Per the design intent (and Trinity confirmation), velocity increases as more cap
 | Phase 2-6 | 1× | Single citizen, sequential work |
 | Phase 7-9 | 1.5× | Multi-citizen, can split frontend / backend in parallel |
 | Phase 10-12 | 2× | Tickets-create-tickets meta-loop |
-| Phase 13-14 | 3× | Inspector automation removes user-as-bottleneck |
-| Phase 15-16 | 5× | Mayor self-plans the roadmap; user becomes director only |
+| Phase 12a-13 | 2× | Reliable delivery/reply capture plus imported tmux attach reduce manual intervention and context loss |
+| Phase 14-15 | 3× | Inspector automation removes user-as-bottleneck |
+| Phase 16-17 | 5× | Mayor self-plans the roadmap; user becomes director only |
 
 These are aspirational. Trinity flagged that AI rework cycles + context exhaustion can reduce effective speedup; observed velocity informs whether to invest in V0-L at all or freeze at V0-M.
 
@@ -328,6 +371,13 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-06 | Mark `BAB-2218` execution contract approved and align Phase 7 acceptance with `bb ticket new` / documented bridge wording | Codex |
 | 2026-05-06 | Add `BAB-2219` Phase 7 Ticket storage core implementation CHG reference | Codex |
 | 2026-05-06 | Mark `BAB-2219` approved after Trinity R3 GLM/DeepSeek PASS and advisory fold-in | Codex |
+| 2026-05-06 | Add Phase 12a (`BAB-2224`) after Phase 12 for PFC-informed adaptive hardline delivery and AI CLI JSONL reply capture | Codex |
+| 2026-05-06 | Add Phase 13 imported external tmux session attach (`BAB-2225`/`BAB-1113`) with explicit `Imported · External-owned` lifecycle labeling, shift V0-L role/inspector/mayor/federation phases to 14-17, and update timeline estimates | Codex |
+| 2026-05-06 | Fold Trinity R1 findings by splitting Phase 12a into its own timeline row and marking Phase 6.5 waived as 0-day gate cost | Codex |
+| 2026-05-06 | Fold Trinity R2 advisories by marking M2.5 waived in the milestone map and clarifying Phase 12a-13 acceleration rationale | Codex |
+| 2026-05-06 | Fold Trinity R3 advisory by aligning M3/M4 flywheel-time labels with the timeline table | Codex |
+| 2026-05-06 | Add `BAB-2226` Phase 12a implementation CHG reference | Codex |
+| 2026-05-06 | Record Phase 12 PR #20 merge, Phase 12a/13 local implementation validation, and `BAB-2227` Phase 13 CHG reference | Codex |
 | 2026-05-06 | Record local Phase 7 Ticket storage implementation and temporary Mix command bridge | Codex |
 | 2026-05-06 | Record Phase 7 Trinity implementation review pass and post-review fixes | Codex |
 | 2026-05-06 | Mark Phase 7 PR #16 merged and add `BAB-2220` Phase 8 Ticket UI and watcher CHG reference | Codex |
