@@ -314,6 +314,13 @@ def scenarios() -> list[Scenario]:
             then="the Invalid section shows the malformed file without crashing",
             run=scenario_malformed_ticket_is_visible,
         ),
+        Scenario(
+            name="ticket assignment auto starts stopped citizen",
+            given="a stopped shell citizen and an open Billboard Ticket exist",
+            when="the operator assigns the Ticket from /tickets/<id>",
+            then="the citizen starts, the Ticket moves to in_progress, and the prompt is injected",
+            run=scenario_ticket_assignment_auto_starts_stopped_citizen,
+        ),
     ]
 
 
@@ -786,6 +793,68 @@ def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
         cleanup_ticket(context.tickets_root, ticket_id)
 
 
+def scenario_ticket_assignment_auto_starts_stopped_citizen(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-ticket")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    body = f"BDD assignment body for {slug}."
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        context.open_path("/citizens")
+        click_selector(f'[data-testid="citizen-stop-{slug}"]')
+        wait_for_index_status(slug, "stopped")
+
+        write_ticket(context.tickets_root, ticket_id, "BDD Assign Ticket", body)
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to connect on ticket detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible(f'[data-testid="ticket-assign-{slug}"]', f"assign button for {slug}")
+        assert js(
+            f"Boolean(document.querySelector('[data-testid=\"ticket-assign-{slug}\"] [data-icon=\"user-plus\"]'))"
+        )
+
+        click_selector(f'[data-testid="ticket-assign-{slug}"]')
+
+        wait_until(
+            "ticket detail to show assignment success",
+            lambda: f"Assigned to {slug}" in js("document.body.innerText"),
+            timeout=20,
+        )
+        wait_until(
+            "ticket detail to show in_progress state and unassign control",
+            lambda: "in_progress" in js("document.body.innerText")
+            and f"ticket-unassign-{slug}" in js("document.body.innerHTML"),
+            timeout=20,
+        )
+        wait_until(
+            "ticket prompt to be recorded as terminal input",
+            lambda: transcript_input_contains(slug, body),
+            timeout=20,
+        )
+
+        assert_element_visible(
+            '[data-testid="ticket-transition-pending_approval"]',
+            "pending approval transition button",
+        )
+        assert js(
+            "Boolean(document.querySelector('[data-testid=\"ticket-transition-pending_approval\"] [data-icon=\"route\"]'))"
+        )
+        click_selector('[data-testid="ticket-transition-pending_approval"]')
+        wait_until(
+            "ticket detail to show pending approval",
+            lambda: "Moved to pending_approval" in js("document.body.innerText")
+            and "pending_approval" in js("document.body.innerText")
+            and f"ticket-unassign-{slug}" not in js("document.body.innerHTML"),
+            timeout=20,
+        )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
 def assert_element_visible(selector: str, label: str) -> None:
     if not wait_for_element(selector, timeout=15, visible=True):
         raise AssertionError(f"{label} was not visible: {selector}")
@@ -802,6 +871,7 @@ def click_selector(selector: str) -> None:
         f"""
         const e = document.querySelector({selector_json});
         if (!e) return null;
+        e.scrollIntoView({{block: "center", inline: "center"}});
         const r = e.getBoundingClientRect();
         return {{x: r.left + r.width / 2, y: r.top + r.height / 2}};
         """
@@ -1031,6 +1101,14 @@ def tmux_session_count(slug: str) -> int:
 
 
 def transcript_contains(slug: str, marker: str) -> bool:
+    return transcript_payload_contains(slug, marker, "output")
+
+
+def transcript_input_contains(slug: str, marker: str) -> bool:
+    return transcript_payload_contains(slug, marker, "input")
+
+
+def transcript_payload_contains(slug: str, marker: str, direction: str) -> bool:
     transcript = transcript_path(slug)
 
     if not transcript.exists():
@@ -1039,7 +1117,7 @@ def transcript_contains(slug: str, marker: str) -> bool:
     for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]:
         try:
             record = json.loads(line)
-            if record.get("slug") != slug or record.get("direction") != "output":
+            if record.get("slug") != slug or record.get("direction") != direction:
                 continue
             payload = base64.b64decode(record.get("b64", "")).decode("utf-8", "replace")
         except Exception:  # noqa: BLE001 - malformed transcript rows are ignored by design.

@@ -58,6 +58,10 @@ defmodule BabsWeb.Icon do
   defp paths("play"), do: ["m5 3 14 9-14 9V3Z"]
   defp paths("plus"), do: ["M5 12h14", "M12 5v14"]
 
+  defp paths("ban"), do: ["M4.93 4.93 19.07 19.07", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20"]
+
+  defp paths("check"), do: ["M20 6 9 17l-5-5"]
+
   defp paths("refresh"),
     do: [
       "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
@@ -67,6 +71,18 @@ defmodule BabsWeb.Icon do
     ]
 
   defp paths("rotate-cw"), do: ["M21 12a9 9 0 1 1-2.64-6.36", "M21 3v6h-6"]
+
+  defp paths("route"),
+    do: [
+      "M2 9h6",
+      "M16 15h6",
+      "M8 9a4 4 0 0 1 4 4v0a4 4 0 0 0 4 4",
+      "M8 9l3-3",
+      "M8 9l3 3",
+      "M16 15l-3-3",
+      "M16 15l-3 3"
+    ]
+
   defp paths("square"), do: ["M5 5h14v14H5z"]
 
   defp paths("triangle-alert"),
@@ -82,6 +98,16 @@ defmodule BabsWeb.Icon do
       "M9 7a4 4 0 1 0 0.01 0",
       "M22 21v-2a4 4 0 0 0-3-3.87",
       "M16 3.13a4 4 0 0 1 0 7.75"
+    ]
+
+  defp paths("undo"), do: ["M9 14 4 9l5-5", "M4 9h10a6 6 0 0 1 0 12h-5"]
+
+  defp paths("user-plus"),
+    do: [
+      "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
+      "M9 7a4 4 0 1 0 0.01 0",
+      "M19 8v6",
+      "M22 11h-6"
     ]
 
   defp paths(_name), do: ["M12 5v14", "M5 12h14"]

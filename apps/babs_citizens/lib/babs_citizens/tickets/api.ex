@@ -44,9 +44,45 @@ defmodule Babs.Citizens.Tickets.Api do
           {:ok, map()} | {:error, term()}
   def comment_ticket(id, attrs, opts \\ []) do
     with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
          {:ok, root} <- Config.ensure_root(opts),
-         {:ok, pid} <- WriterSupervisor.start_writer(id, Keyword.put(opts, :tickets_root, root)) do
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
       Writer.comment(pid, id, attrs, opts)
+    end
+  end
+
+  @spec assign_ticket(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def assign_ticket(id, slug, opts \\ []) when is_binary(slug) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.assign(pid, id, slug, opts)
+    end
+  end
+
+  @spec unassign_ticket(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def unassign_ticket(id, slug, opts \\ []) when is_binary(slug) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.unassign(pid, id, slug, opts)
+    end
+  end
+
+  @spec transition_ticket(String.t(), String.t(), String.t() | nil, keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def transition_ticket(id, to_state, event, opts \\ []) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.transition(pid, id, to_state, event, opts)
     end
   end
 
@@ -127,4 +163,10 @@ defmodule Babs.Citizens.Tickets.Api do
 
   defp attr(attrs, key) when is_list(attrs),
     do: Keyword.get(attrs, key) || Keyword.get(attrs, Atom.to_string(key))
+
+  defp runtime_opts(opts) do
+    :babs_citizens
+    |> Application.get_env(:ticket_runtime_opts, [])
+    |> Keyword.merge(opts)
+  end
 end

@@ -167,20 +167,24 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 8 — Ticket Index UI + Render
 
-**Implementation CHG**: `BAB-2220` drafts the Phase 8 Ticket UI, detail render, watcher, icon, BDD, and validation plan.
-**Current status**: Implemented locally on `codex/m3-phase-8-ticket-ui`; local ExUnit, coverage, JS, browser-harness BDD, Playwright E2E smoke, Gate A, Alfred validation, and whitespace checks pass. Trinity implementation review passed with GLM and DeepSeek; pending PR.
+**Implementation CHG**: `BAB-2220` defines the Phase 8 Ticket UI, detail render, watcher, icon, BDD, and validation plan.
+**Current status**: Merged in PR #17.
 **Scope**: `/tickets` list page (grouped by state); `/tickets/<id>` view (frontmatter table + markdown body + history timeline); filesystem watcher (FSEvents on macOS) drives live UI updates.
 **Acceptance**: Browse all tickets; click one, see full content; manually edit ticket file in editor → UI updates within 1s
 **Estimate**: 5-7 days
 
 ### Phase 9 — Ticket → Citizen Assignment
 
+**Implementation CHG**: `BAB-2221` is approved and owns PR C for Phase 9 assignment plus Phase 10 state-machine work.
+**Current status**: Implemented locally on `codex/m3-phase-9-10-assignment-state`; local validation and Trinity implementation review passed, PR is next.
 **Scope**: UI button "Assign to clare" → ticket `assignees` field updated → ticket body **injected as clare's initial prompt** via `Hardline.Pane.inject/2`; state transitions to `in_progress`; history event written.
 **Acceptance**: Create T-001 = "Add health check endpoint"; assign to clare; clare's terminal receives the body as input and starts working
 **Estimate**: 4-6 days
 
 ### Phase 10 — Ticket State Machine
 
+**Implementation CHG**: `BAB-2221` owns the Phase 10 implementation together with Phase 9 as PR C.
+**Current status**: Implemented locally on `codex/m3-phase-9-10-assignment-state`; local validation and Trinity implementation review passed, PR is next.
 **Scope**: Open / In Progress / Pending Approval / Closed / Cancelled plus Rejected and Unassigned transition events. Each transition writes to `.history.jsonl`. UI shows state badge. Illegal transitions are rejected with error message.
 **Acceptance**: All paths walkable: Open → In Progress → Pending Approval → Closed; Reject from Pending Approval returns to In Progress with feedback comment in history; Cancel terminates from any non-closed state
 **Estimate**: 3-5 days
@@ -319,3 +323,5 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-06 | Record Phase 7 Trinity implementation review pass and post-review fixes | Codex |
 | 2026-05-06 | Mark Phase 7 PR #16 merged and add `BAB-2220` Phase 8 Ticket UI and watcher CHG reference | Codex |
 | 2026-05-06 | Record local Phase 8 Ticket UI and watcher implementation plus validation pass | Codex |
+| 2026-05-06 | Mark Phase 8 PR #17 merged and add `BAB-2221` Phase 9-10 assignment/state-machine CHG reference | Codex |
+| 2026-05-06 | Mark `BAB-2221` approved after Trinity R2 GLM/DeepSeek PASS | Codex |
