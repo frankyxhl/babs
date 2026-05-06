@@ -36,7 +36,8 @@ defmodule Babs.Citizens.MixProject do
       {:erlexec, "~> 2.3"},
       {:jason, "~> 1.4"},
       {:phoenix_pubsub, "~> 2.1"},
-      {:toml, "~> 0.7.0"}
+      {:toml, "~> 0.7.0"},
+      {:yaml_elixir, "~> 2.12"}
     ]
   end
 

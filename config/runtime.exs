@@ -17,6 +17,7 @@ end
 
 socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
 workspace_root = non_empty_env.("BABS_WORKSPACE_ROOT")
+tickets_root = non_empty_env.("BABS_TICKETS_ROOT")
 
 citizens_db_path =
   case non_empty_env.("BABS_CITIZENS_DB_PATH") do
@@ -66,11 +67,23 @@ if config_env() == :prod and is_nil(socket_auth_token) do
   """
 end
 
-if workspace_root do
-  config :babs_citizens, root: babs_root, workspace_root: workspace_root
-else
-  config :babs_citizens, root: babs_root
-end
+citizens_config = [root: babs_root]
+
+citizens_config =
+  if workspace_root do
+    Keyword.put(citizens_config, :workspace_root, Path.expand(workspace_root, babs_root))
+  else
+    citizens_config
+  end
+
+citizens_config =
+  if tickets_root do
+    Keyword.put(citizens_config, :tickets_root, Path.expand(tickets_root, babs_root))
+  else
+    citizens_config
+  end
+
+config :babs_citizens, citizens_config
 
 config :babs, Babs.DevReloader, root: babs_root
 config :babs, BabsWeb.UserSocket, auth_token: socket_auth_token
