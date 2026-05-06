@@ -110,5 +110,7 @@ defmodule BabsWeb.Icon do
       "M22 11h-6"
     ]
 
+  defp paths("x"), do: ["M18 6 6 18", "M6 6l12 12"]
+
   defp paths(_name), do: ["M12 5v14", "M5 12h14"]
 end

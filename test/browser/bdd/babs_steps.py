@@ -850,6 +850,49 @@ def scenario_ticket_assignment_auto_starts_stopped_citizen(context: BabsBddConte
             and f"ticket-unassign-{slug}" not in js("document.body.innerHTML"),
             timeout=20,
         )
+
+        feedback = f"BDD rejection feedback for {slug}."
+        context.open_path("/citizens")
+        click_selector(f'[data-testid="citizen-stop-{slug}"]')
+        wait_for_index_status(slug, "stopped")
+
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to reconnect on pending ticket detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible('[data-testid="ticket-reject-form"]', "reject feedback form")
+        assert js("Boolean(document.querySelector('[data-testid=\"ticket-reject\"] [data-icon=\"x\"]'))")
+        submit_rejection_feedback(feedback)
+        wait_until(
+            "ticket detail to show rejection",
+            lambda: "Rejected ticket" in js("document.body.innerText")
+            and "in_progress" in js("document.body.innerText"),
+            timeout=20,
+        )
+        wait_until(
+            "rejection feedback to be recorded as terminal input",
+            lambda: transcript_input_contains(slug, feedback),
+            timeout=25,
+        )
+
+        click_selector('[data-testid="ticket-transition-pending_approval"]')
+        wait_until(
+            "ticket detail to return to pending approval",
+            lambda: "Moved to pending_approval" in js("document.body.innerText")
+            and "pending_approval" in js("document.body.innerText"),
+            timeout=20,
+        )
+        assert_element_visible('[data-testid="ticket-approve"]', "approve button")
+        assert js("Boolean(document.querySelector('[data-testid=\"ticket-approve\"] [data-icon=\"check\"]'))")
+        click_selector('[data-testid="ticket-approve"]')
+        wait_until(
+            "ticket detail to show approved closed state",
+            lambda: "Approved ticket" in js("document.body.innerText")
+            and "closed" in js("document.body.innerText"),
+            timeout=20,
+        )
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)
@@ -879,6 +922,25 @@ def click_selector(selector: str) -> None:
     if not rect:
         raise AssertionError(f"element not found for click: {selector}")
     click_at_xy(rect["x"], rect["y"])
+
+
+def submit_rejection_feedback(feedback: str) -> None:
+    js(f"window.__babsBddRejectFeedback = {json.dumps(feedback)}")
+    script = """
+        const feedback = window.__babsBddRejectFeedback;
+        const textarea = document.querySelector('[data-testid="ticket-reject-feedback"]');
+        if (!textarea) throw new Error("missing reject feedback textarea");
+        textarea.value = feedback;
+        textarea.dispatchEvent(new Event("input", {bubbles: true}));
+        textarea.dispatchEvent(new Event("change", {bubbles: true}));
+        const form = document.querySelector('[data-testid="ticket-reject-form"]');
+        if (!form) throw new Error("missing reject feedback form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddRejectFeedback")
 
 
 def assert_control_disabled(selector: str, label: str) -> None:

@@ -228,19 +228,42 @@ Exit condition:
 - A Ticket can move from Billboard to a Citizen and through pending approval
   using tested API/UI paths.
 
-### PR D: Phase 11-12 Approval and Comments
+### PR D1: Phase 11 Approval UI
 
 Scope:
 
 - Add approval/reject UI.
-- Approval, rejection, cancellation, and comment controls include semantic
+- Approval, rejection, cancellation, and feedback controls include semantic
   icons and accessible labels.
 - Reject requires feedback and moves back to `in_progress`.
 - Approve closes Ticket.
-- Cancel remains terminal abort; if assignees exist, record history and mirror a
-  notification when possible.
+- Existing Phase 9-10 cancel behavior remains available; new cancel-time
+  notification mirrors are deferred outside Phase 11 unless separately scoped.
+- Rejection feedback writes Ticket history first, then mirrors to all current
+  assignees; stopped assignees are auto-started when possible.
+- Stopped/missing assignee delivery failures are advisory, not history
+  corruption.
+
+Tests:
+
+- Approve/reject action tests.
+- Reject requires feedback.
+- Feedback history and notification mirror.
+- Stopped assignee advisory.
+- Browser-harness approve/reject flow.
+
+Exit condition:
+
+- Operator can request changes or approve a pending-approval Ticket from the
+  browser.
+
+### PR D2: Phase 12 Cross-Citizen Comments
+
+Scope:
+
 - Add `bb ticket comment`.
 - Add Ticket detail comment form.
+- Comment controls include semantic icons and accessible labels.
 - Comment writes history first.
 - Ticket/Billboard history is visible to all participants, including author.
 - Terminal notifications mirror comments to assignees, including author when
@@ -250,14 +273,11 @@ Scope:
 
 Tests:
 
-- Approve/reject action tests.
-- Reject requires feedback.
-- Feedback history and notification mirror.
 - Comment CLI/API/UI.
 - Author sees own comment through history.
 - Multi-assignee comment visibility for Clare and Dylan.
 - Stopped assignee advisory.
-- Browser-harness approve/reject/comment flow.
+- Browser-harness comment flow.
 
 Exit condition:
 
@@ -320,7 +340,8 @@ Rules:
   - `codex/m3-phase-7-ticket-core`
   - `codex/m3-phase-8-ticket-ui`
   - `codex/m3-phase-9-10-assignment-state`
-  - `codex/m3-phase-11-12-approval-comments`
+  - `codex/m3-phase-11-approval-ui`
+  - `codex/m3-phase-12-ticket-comments`
 - Commit each slice after local validation and Trinity review pass.
 - Push branches and open PRs with `gh` as `ryosaeba1985`.
 - PRs should be non-draft unless validation is explicitly incomplete and the
@@ -424,3 +445,4 @@ Template:
 | 2026-05-06 | Address Trinity R1 findings by linking `BAB-1504` and clarifying PR A browser-test omissions | Codex |
 | 2026-05-06 | Add M3 UI action-button icon requirement matching existing operations-console style | Codex |
 | 2026-05-06 | Mark contract approved after Trinity R2 GLM/DeepSeek PASS with no blockers | Codex |
+| 2026-05-06 | Split original PR D into Phase 11 approval UI and Phase 12 cross-Citizen comments slices for reviewable continuous delivery | Codex |

@@ -51,6 +51,26 @@ defmodule BabsWeb.TicketLive do
      end)}
   end
 
+  def handle_event("approve", _params, socket) do
+    {:noreply,
+     start_ticket_action(socket, :approve, fn ->
+       Api.approve_ticket(socket.assigns.id)
+     end)}
+  end
+
+  def handle_event("reject", %{"feedback" => feedback}, socket) do
+    case String.trim(feedback || "") do
+      "" ->
+        {:noreply, put_flash(socket, :error, "Rejection feedback is required")}
+
+      value ->
+        {:noreply,
+         start_ticket_action(socket, :reject, fn ->
+           Api.reject_ticket(socket.assigns.id, value)
+         end)}
+    end
+  end
+
   @impl true
   def handle_async({:ticket_action, action}, {:ok, result}, socket) do
     {:noreply, apply_ticket_action_result(socket, action, result)}
@@ -147,6 +167,46 @@ defmodule BabsWeb.TicketLive do
                 </button>
 
                 <button
+                  :if={approvable?(@ticket)}
+                  type="button"
+                  class="button"
+                  phx-click="approve"
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid="ticket-approve"
+                  aria-label="Approve ticket"
+                  title="Approve ticket"
+                >
+                  <BabsWeb.Icon.icon name="check" /> Approve
+                </button>
+
+                <form
+                  :if={rejectable?(@ticket)}
+                  class="reject-form"
+                  phx-submit="reject"
+                  data-testid="ticket-reject-form"
+                >
+                  <textarea
+                    name="feedback"
+                    class="reject-feedback"
+                    rows="4"
+                    required
+                    disabled={ticket_action_busy?(@ticket_action_inflight)}
+                    data-testid="ticket-reject-feedback"
+                    aria-label="Rejection feedback"
+                  ></textarea>
+                  <button
+                    type="submit"
+                    class="button button-danger"
+                    disabled={ticket_action_busy?(@ticket_action_inflight)}
+                    data-testid="ticket-reject"
+                    aria-label="Reject ticket"
+                    title="Reject ticket"
+                  >
+                    <BabsWeb.Icon.icon name="x" /> Reject
+                  </button>
+                </form>
+
+                <button
                   :for={slug <- @ticket.assignees}
                   :if={unassignable?(@ticket)}
                   type="button"
@@ -203,7 +263,9 @@ defmodule BabsWeb.TicketLive do
             <li :for={event <- @history} class="history-event" data-testid="ticket-history-event">
               <span class="history-event-name">{event["event"]}</span>
               <span class="history-event-meta">{event["ts"]} by {event["by"]}</span>
-              <p :if={event["body"]} class="history-event-body">{event["body"]}</p>
+              <p :if={history_event_text(event)} class="history-event-body">
+                {history_event_text(event)}
+              </p>
             </li>
           </ol>
         </section>
@@ -312,6 +374,19 @@ defmodule BabsWeb.TicketLive do
     .ticket-flash-error { border-color: rgba(220, 107, 107, 0.55); background: rgba(220, 107, 107, 0.12); }
     .tickets-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
     .ticket-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+    .reject-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
+    .reject-feedback {
+      width: 100%;
+      min-height: 92px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 10px;
+      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .reject-feedback:disabled { opacity: 0.62; }
     .button, .back-link {
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -402,9 +477,19 @@ defmodule BabsWeb.TicketLive do
   defp ready_for_approval?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
   defp unassignable?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
   defp cancellable?(ticket), do: ticket.state in ["open", "in_progress", "pending_approval"]
+  defp approvable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
+  defp rejectable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
 
   defp ticket_action_busy?(nil), do: false
   defp ticket_action_busy?(_action), do: true
+
+  defp history_event_text(%{"body" => body}) when is_binary(body) and body != "", do: body
+
+  defp history_event_text(%{"feedback" => feedback})
+       when is_binary(feedback) and feedback != "",
+       do: feedback
+
+  defp history_event_text(_event), do: nil
 
   defp start_ticket_action(socket, action, fun) do
     if ticket_action_busy?(socket.assigns.ticket_action_inflight) do
@@ -433,6 +518,8 @@ defmodule BabsWeb.TicketLive do
   defp ticket_action_success({:assign, slug}), do: "Assigned to #{slug}"
   defp ticket_action_success({:transition, to_state, _event}), do: "Moved to #{to_state}"
   defp ticket_action_success({:unassign, slug}), do: "Unassigned #{slug}"
+  defp ticket_action_success(:approve), do: "Approved ticket"
+  defp ticket_action_success(:reject), do: "Rejected ticket"
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil

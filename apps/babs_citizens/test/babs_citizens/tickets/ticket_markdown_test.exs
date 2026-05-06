@@ -54,10 +54,12 @@ defmodule Babs.Citizens.Tickets.TicketMarkdownTest do
   end
 
   test "enforces billboard state invariant for empty assignees" do
-    content = sample_markdown("assignees: []\nstate: in_progress\n")
+    for state <- ["in_progress", "pending_approval", "closed"] do
+      content = sample_markdown("assignees: []\nstate: #{state}\n")
 
-    assert {:error, {:invalid_frontmatter, {:invalid_billboard_state, "in_progress"}}} =
-             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+      assert {:error, {:invalid_frontmatter, {:invalid_billboard_state, ^state}}} =
+               TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+    end
   end
 
   test "requires first markdown H1 and body content" do

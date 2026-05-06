@@ -211,7 +211,17 @@ defmodule BabsWeb.TicketsLiveTest do
   end
 
   test "transition and unassign actions show only legal phase controls", %{root: root} do
+    parent = self()
     Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    Application.put_env(:babs_citizens, :ticket_runtime_opts,
+      citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+      pane_lookup: fn "clare" -> {:ok, self()} end,
+      pane_injector: fn "clare", prompt ->
+        send(parent, {:feedback, prompt})
+        :ok
+      end
+    )
 
     ticket =
       create_ticket!(root, "Transitionable", "Move through states.",
@@ -231,10 +241,56 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "Moved to pending_approval"
     assert html =~ "pending_approval"
     refute html =~ ~s(data-testid="ticket-unassign-clare")
+    assert html =~ ~s(data-testid="ticket-approve")
+    assert html =~ ~s(data-testid="ticket-reject-form")
+    assert html =~ ~s(data-icon="check")
+    assert html =~ ~s(data-icon="x")
     assert html =~ ~s(data-testid="ticket-transition-cancelled")
 
     assert {:error, {:invalid_transition, "pending_approval", "open"}} =
              Api.unassign_ticket(ticket.id, "clare", tickets_root: root)
+
+    view
+    |> form(~s(form[data-testid="ticket-reject-form"]), %{feedback: ""})
+    |> render_submit()
+
+    assert render(view) =~ "Rejection feedback is required"
+
+    view
+    |> form(~s(form[data-testid="ticket-reject-form"]), %{feedback: "Add docs."})
+    |> render_submit()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Rejected ticket"
+    assert html =~ "in_progress"
+    assert html =~ "Add docs."
+    assert html =~ ~s(data-testid="ticket-unassign-clare")
+    assert_receive {:feedback, prompt}
+    assert prompt =~ "Add docs."
+  end
+
+  test "approve action closes pending approval ticket", %{root: root} do
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    ticket =
+      create_ticket!(root, "Approvable", "Close this.",
+        state: "pending_approval",
+        assignees: ["clare"]
+      )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    assert html =~ ~s(data-testid="ticket-approve")
+    assert html =~ ~s(data-testid="ticket-reject-form")
+
+    view
+    |> element(~s(button[data-testid="ticket-approve"]))
+    |> render_click()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Approved ticket"
+    assert html =~ "closed"
+    refute html =~ ~s(data-testid="ticket-approve")
+    refute html =~ ~s(data-testid="ticket-reject-form")
   end
 
   defp create_ticket!(root, title, body, opts \\ []) do
