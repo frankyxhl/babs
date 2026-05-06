@@ -66,7 +66,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
                now: "2026-05-06T00:00:00Z"
              )
 
-    assert {:ok, %{ticket: updated, delivery: :deferred}} =
+    assert {:ok, %{ticket: updated, delivery: {:comment_notified, []}}} =
              Api.comment_ticket(ticket.id, %{body: "Working on it.", by: "clare"},
                tickets_root: root,
                now: "2026-05-06T00:01:00Z"
@@ -77,6 +77,179 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
     assert Enum.map(history, & &1["event"]) == ["created", "comment"]
     assert List.last(history)["body"] == "Working on it."
+    assert List.last(history)["ticket_id"] == ticket.id
+  end
+
+  test "comment_ticket notifies every current assignee including the author" do
+    root = tmp_root()
+    parent = self()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Comment fanout",
+                 body: "Coordinate through ticket comments.",
+                 state: "in_progress",
+                 assignees: ["clare", "dylan"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, %{delivery: {:comment_notified, ["clare", "dylan"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Branch is ready.", by: "clare"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn slug when slug in ["clare", "dylan"] -> %{slug: slug} end,
+               pane_lookup: fn slug when slug in ["clare", "dylan"] -> {:ok, self()} end,
+               pane_injector: fn slug, prompt ->
+                 send(parent, {:comment_prompt, slug, prompt})
+                 :ok
+               end
+             )
+
+    assert_receive {:comment_prompt, "clare", clare_prompt}
+    assert_receive {:comment_prompt, "dylan", dylan_prompt}
+    assert clare_prompt =~ "From: clare"
+    assert clare_prompt =~ "Branch is ready."
+    assert dylan_prompt =~ "Branch is ready."
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    events = Enum.map(history, & &1["event"])
+
+    assert events == [
+             "created",
+             "comment",
+             "comment_notification_attempted",
+             "comment_notified",
+             "comment_notified"
+           ]
+
+    assert Enum.find(history, &(&1["event"] == "comment"))["by"] == "clare"
+
+    attempted = Enum.find(history, &(&1["event"] == "comment_notification_attempted"))
+    assert attempted["by"] == "clare"
+    assert attempted["injected_to"] == ["clare", "dylan"]
+  end
+
+  test "comment_ticket keeps comment durable when one assignee notification fails" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Partial comment fanout",
+                 body: "One pane will fail.",
+                 state: "pending_approval",
+                 assignees: ["clare", "dylan"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok,
+            %{
+              delivery:
+                {:comment_notification_failed, ["clare"],
+                 [{"dylan", {:ticket_injection_failed, "dylan", message}}]}
+            }} =
+             Api.comment_ticket(ticket.id, %{body: "Please inspect.", by: "dylan"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn slug when slug in ["clare", "dylan"] -> %{slug: slug} end,
+               pane_lookup: fn slug when slug in ["clare", "dylan"] -> {:ok, self()} end,
+               pane_injector: fn
+                 "clare", _prompt -> :ok
+                 "dylan", _prompt -> {:error, %{api_token: "fixture-value"}}
+               end
+             )
+
+    refute message =~ "fixture-value"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    events = Enum.map(history, & &1["event"])
+
+    assert events == [
+             "created",
+             "comment",
+             "comment_notification_attempted",
+             "comment_notified",
+             "comment_notification_failed"
+           ]
+
+    assert Enum.find(history, &(&1["event"] == "comment"))["body"] == "Please inspect."
+    refute List.last(history)["error"] =~ "fixture-value"
+  end
+
+  test "comment_ticket rejects terminal tickets and invalid authors before rewriting" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{title: "Closed comment", body: "This should stay closed."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    closed = %{ticket | state: "closed", assignees: ["clare"]}
+    File.write!(Path.join(root, "#{ticket.id}.md"), TicketMarkdown.render(closed))
+
+    assert {:error, {:terminal_ticket, ticket_id, "closed"}} =
+             Api.comment_ticket(ticket.id, %{body: "Please reopen.", by: "clare"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z"
+             )
+
+    assert ticket_id == ticket.id
+
+    assert {:error, {:invalid_comment_author, "not valid!"}} =
+             Api.comment_ticket(ticket.id, %{body: "Please reopen.", by: "not valid!"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z"
+             )
+
+    assert {:ok, %{ticket: unchanged, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert unchanged.updated_at == "2026-05-06T00:00:00Z"
+    assert Enum.map(history, & &1["event"]) == ["created"]
+  end
+
+  test "concurrent comment_ticket attempts serialize and preserve every comment" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Concurrent comments", body: "Collect notes."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    results =
+      1..6
+      |> Task.async_stream(
+        fn index ->
+          Api.comment_ticket(ticket.id, %{body: "Note #{index}", by: "clare"},
+            tickets_root: root,
+            now: "2026-05-06T00:01:00Z"
+          )
+        end,
+        max_concurrency: 6,
+        timeout: 5_000
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    assert Enum.all?(results, &match?({:ok, %{delivery: {:comment_notified, []}}}, &1))
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert Enum.count(history, &(&1["event"] == "comment")) == 6
+
+    assert Enum.map(Enum.filter(history, &(&1["event"] == "comment")), & &1["body"])
+           |> Enum.sort() ==
+             Enum.map(1..6, &"Note #{&1}")
   end
 
   test "assign_ticket persists assignment before injecting prompt" do
@@ -566,6 +739,39 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              Api.show_ticket(ticket.id, tickets_root: root)
 
     assert unchanged.updated_at == "2026-05-06T00:00:00Z"
+    assert Enum.map(history, & &1["event"]) == ["created"]
+  end
+
+  test "oversized comment notification attempts fail before rewriting ticket markdown" do
+    root = tmp_root()
+    assignees = Enum.map(1..2_000, &"assignee-#{&1}")
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Large notification attempt",
+                 body: "Initial body.",
+                 state: "in_progress",
+                 assignees: assignees
+               },
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    ticket_id = ticket.id
+
+    assert {:error, {:history_event_too_large, ^ticket_id}} =
+             Api.comment_ticket(ticket.id, %{body: "Small comment.", by: "clare"},
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z"
+             )
+
+    assert {:ok, %{ticket: unchanged, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert unchanged.updated_at == "2026-05-06T00:00:00Z"
+    assert unchanged.assignees == assignees
     assert Enum.map(history, & &1["event"]) == ["created"]
   end
 

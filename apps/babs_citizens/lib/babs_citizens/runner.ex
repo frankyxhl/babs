@@ -15,10 +15,7 @@ defmodule Babs.Citizens.Runner do
   def slug_from_session(_session), do: :error
 
   def new_session_args(config) do
-    env_args =
-      config.env
-      |> Enum.sort()
-      |> Enum.flat_map(fn {key, value} -> ["-e", "#{key}=#{value}"] end)
+    env_args = env_args(config.env || %{}) ++ env_args(babs_env(config))
 
     ["new-session", "-d", "-s", session_name(config.slug), "-c", config.cwd] ++
       env_args ++ [config.cli | config.cli_args]
@@ -165,5 +162,39 @@ defmodule Babs.Citizens.Runner do
     :babs_citizens
     |> Application.get_env(__MODULE__, [])
     |> Keyword.get(:tmux_binary, "tmux")
+  end
+
+  defp env_args(env) do
+    env
+    |> Enum.sort()
+    |> Enum.flat_map(fn {key, value} -> ["-e", "#{key}=#{value}"] end)
+  end
+
+  defp babs_env(config) do
+    root =
+      :babs_citizens
+      |> Application.get_env(:root, File.cwd!())
+      |> Path.expand()
+
+    env = %{
+      "BABS_CITIZEN_SLUG" => config.slug,
+      "BABS_ROOT" => root,
+      "PATH" => babs_path(root, config.env || %{})
+    }
+
+    case Application.get_env(:babs_citizens, :tickets_root) do
+      value when is_binary(value) and value != "" ->
+        Map.put(env, "BABS_TICKETS_ROOT", Path.expand(value, root))
+
+      _value ->
+        env
+    end
+  end
+
+  defp babs_path(root, citizen_env) do
+    base = Map.get(citizen_env || %{}, "PATH") || System.get_env("PATH") || ""
+    bin = Path.join(root, "bin")
+
+    if base == "", do: bin, else: bin <> ":" <> base
   end
 end

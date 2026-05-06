@@ -321,6 +321,13 @@ def scenarios() -> list[Scenario]:
             then="the citizen starts, the Ticket moves to in_progress, and the prompt is injected",
             run=scenario_ticket_assignment_auto_starts_stopped_citizen,
         ),
+        Scenario(
+            name="ticket comment notifies assigned citizen",
+            given="an in-progress Ticket is assigned to a running citizen",
+            when="the operator submits a Ticket comment from /tickets/<id>",
+            then="the comment appears in history and is injected into the assignee terminal",
+            run=scenario_ticket_comment_notifies_assigned_citizen,
+        ),
     ]
 
 
@@ -661,8 +668,7 @@ def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
         before = terminal_geometry()
         assert before["width"] > 400
         assert before["height"] > 250
-        assert before["top"] >= 40
-        assert status_geometry()["height"] <= 40
+        assert_terminal_mode_geometry(before)
 
         cdp(
             "Emulation.setDeviceMetricsOverride",
@@ -674,15 +680,19 @@ def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
         wait(1)
 
         after = terminal_geometry()
+        if abs(after["viewport_width"] - 1200) > 4:
+            raise SkipScenario(
+                f"CDP viewport override did not apply in this browser-harness session: {after}"
+            )
+
         assert abs(after["width"] - 1200) <= 4, after
-        assert after["top"] >= 40, after
-        assert abs((after["height"] + after["top"]) - after["viewport_height"]) <= 6, after
+        assert_terminal_mode_geometry(after)
         assert rendered_xterm_row_count() > 0
 
         context.connect_citizen("sentinel", full=True)
         full = terminal_geometry()
         assert abs(full["top"]) <= 2, full
-        assert abs(full["width"] - 1200) <= 4, full
+        assert abs(full["width"] - full["viewport_width"]) <= 4, full
         assert abs(full["height"] - full["viewport_height"]) <= 4, full
         assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in full mode")
     finally:
@@ -898,6 +908,54 @@ def scenario_ticket_assignment_auto_starts_stopped_citizen(context: BabsBddConte
         cleanup_spawned_citizen(slug)
 
 
+def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-comment")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    body = f"BDD comment assignment body for {slug}."
+    comment = f"BDD comment update for {slug}."
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        write_ticket(context.tickets_root, ticket_id, "BDD Comment Ticket", body)
+
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to connect on comment ticket detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        click_selector(f'[data-testid="ticket-assign-{slug}"]')
+        wait_until(
+            "ticket detail to show assigned comment target",
+            lambda: f"Assigned to {slug}" in js("document.body.innerText")
+            and f"ticket-unassign-{slug}" in js("document.body.innerHTML"),
+            timeout=20,
+        )
+        assert_element_visible('[data-testid="ticket-comment-form"]', "ticket comment form")
+        assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"message-square\"]'))")
+
+        submit_ticket_comment(comment)
+        wait_until(
+            "ticket detail to show stored comment",
+            lambda: "Comment stored" in js("document.body.innerText")
+            and comment in js("document.body.innerText"),
+            timeout=20,
+        )
+        wait_until(
+            "ticket comment to be recorded as terminal input",
+            lambda: transcript_input_contains(slug, comment),
+            timeout=25,
+        )
+
+        events = [event["event"] for event in ticket_history_events(context.tickets_root, ticket_id)]
+        assert "comment" in events
+        assert "comment_notification_attempted" in events
+        assert "comment_notified" in events
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
 def assert_element_visible(selector: str, label: str) -> None:
     if not wait_for_element(selector, timeout=15, visible=True):
         raise AssertionError(f"{label} was not visible: {selector}")
@@ -941,6 +999,25 @@ def submit_rejection_feedback(feedback: str) -> None:
         js(script)
     finally:
         js("delete window.__babsBddRejectFeedback")
+
+
+def submit_ticket_comment(comment: str) -> None:
+    js(f"window.__babsBddTicketComment = {json.dumps(comment)}")
+    script = """
+        const comment = window.__babsBddTicketComment;
+        const textarea = document.querySelector('[data-testid="ticket-comment-body"]');
+        if (!textarea) throw new Error("missing ticket comment textarea");
+        textarea.value = comment;
+        textarea.dispatchEvent(new Event("input", {bubbles: true}));
+        textarea.dispatchEvent(new Event("change", {bubbles: true}));
+        const form = document.querySelector('[data-testid="ticket-comment-form"]');
+        if (!form) throw new Error("missing ticket comment form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddTicketComment")
 
 
 def assert_control_disabled(selector: str, label: str) -> None:
@@ -1060,10 +1137,33 @@ def terminal_geometry() -> dict:
         """
         const e = document.querySelector('[data-testid="terminal"]');
         const r = e.getBoundingClientRect();
-        return {left: r.left, top: r.top, width: r.width, height: r.height};
+        const page = document.querySelector('.terminal-page');
+        const chrome = document.querySelector('[data-testid="terminal-chrome"]');
+        const cr = chrome?.getBoundingClientRect();
+        return {
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+          mode: page?.dataset.mode || "",
+          chrome_height: cr?.height || 0
+        };
         """
     )
     return {**rect, "viewport_width": info["w"], "viewport_height": info["h"]}
+
+
+def assert_terminal_mode_geometry(geometry: dict) -> None:
+    if geometry["mode"] == "full":
+        assert abs(geometry["top"]) <= 2, geometry
+        assert abs(geometry["height"] - geometry["viewport_height"]) <= 4, geometry
+        return
+
+    assert geometry["mode"] == "tabs", geometry
+    assert geometry["chrome_height"] >= 40, geometry
+    assert abs(geometry["top"] - geometry["chrome_height"]) <= 4, geometry
+    assert status_geometry()["height"] <= 40
+    assert abs((geometry["height"] + geometry["top"]) - geometry["viewport_height"]) <= 6, geometry
 
 
 def terminal_text() -> str:
@@ -1286,6 +1386,14 @@ def ticket_history_path(root: Path, ticket_id: str) -> Path:
     return root / f"{ticket_id}.history.jsonl"
 
 
+def ticket_history_events(root: Path, ticket_id: str) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in ticket_history_path(root, ticket_id).read_text().splitlines()
+        if line.strip()
+    ]
+
+
 def workspace_root() -> Path:
     global WORKSPACE_ROOT  # noqa: PLW0603 - cached helper avoids recomputing paths in polling loops.
 
@@ -1302,7 +1410,7 @@ def workspace_root() -> Path:
     else:
         path = RUNTIME_ROOT / "workspaces"
 
-    WORKSPACE_ROOT = path.resolve()
+    WORKSPACE_ROOT = path.absolute()
     return WORKSPACE_ROOT
 
 

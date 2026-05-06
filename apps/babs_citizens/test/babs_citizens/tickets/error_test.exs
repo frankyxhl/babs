@@ -30,11 +30,21 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
     assert Error.message({:invalid_history_event, :empty_feedback}) ==
              "Rejection feedback is required"
 
+    assert Error.message({:invalid_history_event, :empty_body}) ==
+             "Comment body is required"
+
     assert Error.message({:no_assignees, "T-2026-05-06-001"}) ==
              "Ticket T-2026-05-06-001 has no assignees"
 
     assert Error.message({:invalid_slug, ""}) == "Invalid Citizen slug: \"\""
+
+    assert Error.message({:invalid_comment_author, "not valid"}) ==
+             "Invalid Ticket comment author: \"not valid\""
+
     assert Error.message({:unknown_citizen, "ghost"}) == "Unknown Citizen: ghost"
+
+    assert Error.message({:terminal_ticket, "T-2026-05-06-001", "closed"}) ==
+             "Ticket T-2026-05-06-001 is closed and cannot be commented on"
 
     assert Error.message({:citizen_start_failed, "clare", "raw credential value"}) ==
              "Citizen clare could not be started"
@@ -47,5 +57,8 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:feedback_injection_failed, "T-2026-05-06-001", []}) ==
              "Ticket T-2026-05-06-001 feedback could not be injected into every assignee"
+
+    assert Error.message({:comment_notification_failed, "T-2026-05-06-001", []}) ==
+             "Ticket T-2026-05-06-001 comment notification failed for one or more assignees"
   end
 end

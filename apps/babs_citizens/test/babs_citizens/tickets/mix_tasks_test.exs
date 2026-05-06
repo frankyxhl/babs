@@ -50,7 +50,35 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
       end)
 
     assert comment_output =~ "T-2026-05-06-001 comment stored"
-    assert comment_output =~ "live delivery is deferred until Phase 12"
+    assert comment_output =~ "no assignees to notify"
+
+    option_like_comment_output =
+      capture_io(fn ->
+        Mix.Task.rerun("babs.ticket.comment", ["T-2026-05-06-001", "--by"])
+      end)
+
+    assert option_like_comment_output =~ "T-2026-05-06-001 comment stored"
+    assert option_like_comment_output =~ "no assignees to notify"
+
+    history_events = history_events(root, "T-2026-05-06-001")
+    assert List.last(history_events)["body"] == "--by"
+    assert List.last(history_events)["by"] == "user"
+
+    leading_by_output =
+      capture_io(fn ->
+        Mix.Task.rerun("babs.ticket.comment", [
+          "--by",
+          "clare",
+          "T-2026-05-06-001",
+          "Leading author option."
+        ])
+      end)
+
+    assert leading_by_output =~ "T-2026-05-06-001 comment stored"
+
+    history_events = history_events(root, "T-2026-05-06-001")
+    assert List.last(history_events)["body"] == "Leading author option."
+    assert List.last(history_events)["by"] == "clare"
   end
 
   test "mix babs.ticket.assign/transition/reject/approve/unassign bridge mutates tickets", %{
@@ -87,6 +115,22 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
     assert assign_output =~ "prompt injected"
     assert_receive {:injected, prompt}
     assert prompt =~ "Assign through the temporary Mix bridge."
+
+    comment_output =
+      capture_io(fn ->
+        Mix.Task.rerun("babs.ticket.comment", [
+          "T-2026-05-06-001",
+          "CLI comment to Clare.",
+          "--by",
+          "clare"
+        ])
+      end)
+
+    assert comment_output =~ "T-2026-05-06-001 comment stored"
+    assert comment_output =~ "notified clare"
+    assert_receive {:injected, comment_prompt}
+    assert comment_prompt =~ "CLI comment to Clare."
+    assert comment_prompt =~ "From: clare"
 
     transition_output =
       capture_io(fn ->
@@ -141,4 +185,12 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:babs_citizens, key)
   defp restore_env(key, value), do: Application.put_env(:babs_citizens, key, value)
+
+  defp history_events(root, id) do
+    root
+    |> Path.join("#{id}.history.jsonl")
+    |> File.read!()
+    |> String.split("\n", trim: true)
+    |> Enum.map(&Jason.decode!/1)
+  end
 end

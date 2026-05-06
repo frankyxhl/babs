@@ -5,6 +5,7 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   use GenServer
 
+  alias Babs.Citizens.Citizen.Config, as: CitizenConfig
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
   alias Babs.Citizens.Tickets.Error
@@ -78,17 +79,18 @@ defmodule Babs.Citizens.Tickets.Writer do
     result =
       with {:ok, original} <- read_current(path, id),
            {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
-           :ok <- run_before_write(path, opts),
-           :ok <- detect_conflict(path, original, id),
            {:ok, body} <- comment_body(attrs),
            {:ok, by} <- comment_by(attrs),
+           :ok <- ensure_commentable(ticket),
+           :ok <- run_before_write(path, opts),
+           :ok <- detect_conflict(path, original, id),
            now <- now(opts),
-           event <- comment_event(now, by, body),
-           :ok <- History.validate_appendable(id, event),
            updated = %{ticket | updated_at: now},
+           events <- comment_events(ticket, body, now, by),
+           :ok <- validate_events(id, events),
            :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
-           :ok <- History.append(state.root, id, event) do
-        {:ok, %{ticket: updated, delivery: :deferred}}
+           :ok <- append_events(state.root, id, events) do
+        inject_comment(state.root, updated, body, now, by, opts)
       end
 
     {:reply, result, state}
@@ -230,13 +232,24 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
-  defp comment_event(now, by, body) do
+  defp comment_event(ticket, now, by, body) do
     %{
       "ts" => now,
       "event" => "comment",
       "by" => by,
+      "ticket_id" => ticket.id,
       "body" => body
     }
+  end
+
+  defp comment_events(ticket, body, now, by) do
+    events = [comment_event(ticket, now, by, body)]
+
+    if ticket.assignees == [] do
+      events
+    else
+      events ++ [comment_notification_attempted_event(ticket, now, by)]
+    end
   end
 
   defp persist_assignment(root, path, original, assigned, slug, opts) do
@@ -404,6 +417,83 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
+  defp comment_notification_attempted_event(ticket, now, by) do
+    %{
+      "ts" => now,
+      "event" => "comment_notification_attempted",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "injected_to" => ticket.assignees,
+      "kind" => "ticket_comment"
+    }
+  end
+
+  defp comment_notified_event(ticket, slug, now, by) do
+    %{
+      "ts" => now,
+      "event" => "comment_notified",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug],
+      "kind" => "ticket_comment"
+    }
+  end
+
+  defp comment_notification_failed_event(ticket, slug, now, by, reason) do
+    %{
+      "ts" => now,
+      "event" => "comment_notification_failed",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug],
+      "kind" => "ticket_comment",
+      "error" => error_text(reason)
+    }
+  end
+
+  defp inject_comment(root, ticket, body, now, by, opts) do
+    results =
+      Enum.map(ticket.assignees, fn slug ->
+        {slug, deliver_comment(root, ticket, slug, body, now, by, opts)}
+      end)
+
+    ok_slugs =
+      results
+      |> Enum.filter(fn {_slug, result} -> result == :ok end)
+      |> Enum.map(fn {slug, :ok} -> slug end)
+
+    failures =
+      results
+      |> Enum.filter(fn {_slug, result} -> match?({:error, _reason}, result) end)
+      |> Enum.map(fn {slug, {:error, reason}} -> {slug, reason} end)
+
+    if failures == [] do
+      {:ok, %{ticket: ticket, delivery: {:comment_notified, ok_slugs}}}
+    else
+      {:ok, %{ticket: ticket, delivery: {:comment_notification_failed, ok_slugs, failures}}}
+    end
+  end
+
+  defp deliver_comment(root, ticket, slug, body, now, by, opts) do
+    prompt = Injector.comment_prompt(ticket, slug, by, body)
+
+    with :ok <- Injector.prepare(slug, opts),
+         :ok <- Injector.inject(slug, prompt, opts),
+         :ok <- History.append(root, ticket.id, comment_notified_event(ticket, slug, now, by)) do
+      :ok
+    else
+      {:error, reason} ->
+        _ignored =
+          History.append(
+            root,
+            ticket.id,
+            comment_notification_failed_event(ticket, slug, now, by, reason)
+          )
+
+        {:error, reason}
+    end
+  end
+
   defp inject_feedback(root, ticket, feedback, now, by, opts) do
     failures =
       ticket.assignees
@@ -473,6 +563,11 @@ defmodule Babs.Citizens.Tickets.Writer do
     if assignees == [], do: {:error, {:no_assignees, id}}, else: :ok
   end
 
+  defp ensure_commentable(%{state: state, id: id}) when state in ["closed", "cancelled"],
+    do: {:error, {:terminal_ticket, id, state}}
+
+  defp ensure_commentable(_ticket), do: :ok
+
   defp read_current(path, id) do
     case File.read(path) do
       {:ok, content} -> {:ok, content}
@@ -515,12 +610,21 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp comment_by(attrs) do
     case fetch_attr(attrs, :by) || "user" do
       value when is_binary(value) ->
-        if String.trim(value) == "",
-          do: {:error, {:invalid_history_event, {:missing_keys, ["by"]}}},
-          else: {:ok, value}
+        trimmed = String.trim(value)
+
+        cond do
+          trimmed == "" ->
+            {:error, {:invalid_comment_author, value}}
+
+          trimmed == "user" or CitizenConfig.valid_slug?(trimmed) ->
+            {:ok, trimmed}
+
+          true ->
+            {:error, {:invalid_comment_author, value}}
+        end
 
       _ ->
-        {:error, {:invalid_history_event, {:missing_keys, ["by"]}}}
+        {:error, {:invalid_comment_author, fetch_attr(attrs, :by)}}
     end
   end
 

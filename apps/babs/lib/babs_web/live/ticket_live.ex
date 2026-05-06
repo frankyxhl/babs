@@ -71,6 +71,19 @@ defmodule BabsWeb.TicketLive do
     end
   end
 
+  def handle_event("comment", %{"body" => body}, socket) do
+    case String.trim(body || "") do
+      "" ->
+        {:noreply, put_flash(socket, :error, "Comment body is required")}
+
+      value ->
+        {:noreply,
+         start_ticket_action(socket, {:comment, value}, fn ->
+           Api.comment_ticket(socket.assigns.id, %{body: value, by: "user"})
+         end)}
+    end
+  end
+
   @impl true
   def handle_async({:ticket_action, action}, {:ok, result}, socket) do
     {:noreply, apply_ticket_action_result(socket, action, result)}
@@ -203,6 +216,33 @@ defmodule BabsWeb.TicketLive do
                     title="Reject ticket"
                   >
                     <BabsWeb.Icon.icon name="x" /> Reject
+                  </button>
+                </form>
+
+                <form
+                  :if={commentable?(@ticket)}
+                  class="comment-form"
+                  phx-submit="comment"
+                  data-testid="ticket-comment-form"
+                >
+                  <textarea
+                    name="body"
+                    class="comment-body"
+                    rows="4"
+                    required
+                    disabled={ticket_action_busy?(@ticket_action_inflight)}
+                    data-testid="ticket-comment-body"
+                    aria-label="Ticket comment"
+                  ></textarea>
+                  <button
+                    type="submit"
+                    class="button"
+                    disabled={ticket_action_busy?(@ticket_action_inflight)}
+                    data-testid="ticket-comment"
+                    aria-label="Add ticket comment"
+                    title="Add ticket comment"
+                  >
+                    <BabsWeb.Icon.icon name="message-square" /> Comment
                   </button>
                 </form>
 
@@ -374,8 +414,8 @@ defmodule BabsWeb.TicketLive do
     .ticket-flash-error { border-color: rgba(220, 107, 107, 0.55); background: rgba(220, 107, 107, 0.12); }
     .tickets-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
     .ticket-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
-    .reject-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
-    .reject-feedback {
+    .reject-form, .comment-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
+    .reject-feedback, .comment-body {
       width: 100%;
       min-height: 92px;
       resize: vertical;
@@ -386,7 +426,7 @@ defmodule BabsWeb.TicketLive do
       padding: 8px 10px;
       font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
-    .reject-feedback:disabled { opacity: 0.62; }
+    .reject-feedback:disabled, .comment-body:disabled { opacity: 0.62; }
     .button, .back-link {
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -479,6 +519,7 @@ defmodule BabsWeb.TicketLive do
   defp cancellable?(ticket), do: ticket.state in ["open", "in_progress", "pending_approval"]
   defp approvable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
   defp rejectable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
+  defp commentable?(ticket), do: ticket.state not in ["closed", "cancelled"]
 
   defp ticket_action_busy?(nil), do: false
   defp ticket_action_busy?(_action), do: true
@@ -501,6 +542,17 @@ defmodule BabsWeb.TicketLive do
     end
   end
 
+  defp apply_ticket_action_result(
+         socket,
+         {:comment, _body},
+         {:ok, %{delivery: {:comment_notification_failed, _ok_slugs, failures}}}
+       ) do
+    socket
+    |> assign(:ticket_action_inflight, nil)
+    |> assign_ticket()
+    |> put_flash(:error, "Comment stored; notification failed for #{failed_slugs(failures)}")
+  end
+
   defp apply_ticket_action_result(socket, action, {:ok, _result}) do
     socket
     |> assign(:ticket_action_inflight, nil)
@@ -518,8 +570,15 @@ defmodule BabsWeb.TicketLive do
   defp ticket_action_success({:assign, slug}), do: "Assigned to #{slug}"
   defp ticket_action_success({:transition, to_state, _event}), do: "Moved to #{to_state}"
   defp ticket_action_success({:unassign, slug}), do: "Unassigned #{slug}"
+  defp ticket_action_success({:comment, _body}), do: "Comment stored"
   defp ticket_action_success(:approve), do: "Approved ticket"
   defp ticket_action_success(:reject), do: "Rejected ticket"
+
+  defp failed_slugs(failures) do
+    failures
+    |> Enum.map(fn {slug, _reason} -> slug end)
+    |> Enum.join(", ")
+  end
 
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil

@@ -194,17 +194,18 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Implementation CHG**: `BAB-2222` defines the Phase 11 approval/reject UI,
 feedback injection, temporary Mix bridge commands, BDD, validation, and review
 plan.
-**Current status**: Implemented locally on `codex/m3-phase-11-approval-ui`;
-local validation passed after Trinity implementation R3 advisory fixes,
-Trinity R4 passed with GLM and DeepSeek, PR #19 Codex R1 P2 remediation is
-validated locally with Trinity R5 PASS, and PR #19 Codex R2 P2 remediation is
-validated locally with Trinity R6 PASS.
+**Current status**: Merged in PR #19.
 **Scope**: Pending Approval tickets show "Approve" / "Reject" buttons. Reject requires feedback using an inline feedback form in the first implementation; modal polish is deferred. Approve transitions to Closed; Reject transitions back to In Progress with feedback comment injected into assignee's hardline.
 **Acceptance**: clare submits T-001 to Pending Approval; user rejects with feedback "missing docs"; clare receives feedback in terminal and continues; clare resubmits; user approves; ticket Closed
 **Estimate**: 2-4 days
 
 ### Phase 12 — Cross-Citizen Ticket Comments
 
+**Implementation CHG**: `BAB-2223` defines the Phase 12 `bb ticket comment`,
+Ticket detail comment form, notification mirrors, BDD, validation, and review
+plan.
+**Current status**: Implemented locally on `codex/m3-phase-12-ticket-comments`.
+Local validation and Trinity implementation review passed; PR is next.
 **Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. Ticket/Billboard history is the authoritative communication surface for all participants, including the author; terminal notifications may mirror history but are not authoritative.
 **Acceptance**: T-001 assigned to clare + dylan; clare `bb ticket comment T-001 "Backend done"`; clare and dylan both see the persisted comment in Ticket/Billboard history within 1s
 **Estimate**: 3-5 days

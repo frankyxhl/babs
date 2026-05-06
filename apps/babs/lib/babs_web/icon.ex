@@ -47,6 +47,9 @@ defmodule BabsWeb.Icon do
   defp paths("list"),
     do: ["M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"]
 
+  defp paths("message-square"),
+    do: ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"]
+
   defp paths("maximize"),
     do: [
       "M8 3H5a2 2 0 0 0-2 2v3",
