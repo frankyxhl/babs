@@ -15,6 +15,9 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:invalid_history_event, :empty_feedback}),
     do: "Rejection feedback is required"
 
+  def message({:invalid_history_event, :empty_body}),
+    do: "Comment body is required"
+
   def message({:invalid_history_event, reason}),
     do: "Invalid Ticket history event: #{inspect(reason)}"
 
@@ -49,6 +52,15 @@ defmodule Babs.Citizens.Tickets.Error do
 
   def message({:feedback_injection_failed, id, _failures}),
     do: "Ticket #{id} feedback could not be injected into every assignee"
+
+  def message({:invalid_comment_author, value}),
+    do: "Invalid Ticket comment author: #{inspect(value)}"
+
+  def message({:terminal_ticket, id, state}),
+    do: "Ticket #{id} is #{state} and cannot be commented on"
+
+  def message({:comment_notification_failed, id, _failures}),
+    do: "Ticket #{id} comment notification failed for one or more assignees"
 
   def message({:not_assigned, id, slug}), do: "Ticket #{id} is not assigned to #{slug}"
   def message({:write_conflict, id}), do: "Ticket #{id} changed while Babs was writing it"

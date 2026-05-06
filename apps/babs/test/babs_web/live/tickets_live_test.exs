@@ -5,6 +5,7 @@ defmodule BabsWeb.TicketsLiveTest do
   import Phoenix.LiveViewTest
 
   alias Babs.Citizens.Tickets.Api
+  alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Watcher
   alias Babs.Citizens.{CitizenRecord, Repo}
 
@@ -116,6 +117,14 @@ defmodule BabsWeb.TicketsLiveTest do
                now: "2026-05-06T00:05:00Z"
              )
 
+    assert :ok =
+             History.append(root, ticket.id, %{
+               "ts" => "2026-05-06T00:06:00Z",
+               "event" => "comment",
+               "by" => "clare",
+               "body" => "Legacy comment without ticket_id."
+             })
+
     {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
 
     assert html =~ ~s(data-testid="ticket-detail")
@@ -130,6 +139,7 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "created"
     assert html =~ "comment"
     assert html =~ "Detail comment."
+    assert html =~ "Legacy comment without ticket_id."
     assert html =~ ~s(data-icon="arrow-left")
     assert html =~ ~s(data-icon="users")
   end
@@ -208,6 +218,73 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-testid="ticket-unassign-clare")
     assert html =~ ~s(data-icon="route")
     assert html =~ ~s(data-icon="undo")
+  end
+
+  test "comment action stores history and notifies assignees", %{root: root} do
+    parent = self()
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    Application.put_env(:babs_citizens, :ticket_runtime_opts,
+      citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+      pane_lookup: fn "clare" -> {:ok, self()} end,
+      pane_injector: fn "clare", prompt ->
+        send(parent, {:comment_prompt, prompt})
+        :ok
+      end
+    )
+
+    ticket =
+      create_ticket!(root, "Commentable detail", "Send notes to Clare.",
+        state: "in_progress",
+        assignees: ["clare"]
+      )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    assert html =~ ~s(data-testid="ticket-comment-form")
+    assert html =~ ~s(data-icon="message-square")
+
+    view
+    |> form(~s(form[data-testid="ticket-comment-form"]), %{body: ""})
+    |> render_submit()
+
+    assert render(view) =~ "Comment body is required"
+
+    view
+    |> form(~s(form[data-testid="ticket-comment-form"]), %{body: "Operator note."})
+    |> render_submit()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Comment stored"
+    assert html =~ "Operator note."
+    assert_receive {:comment_prompt, prompt}
+    assert prompt =~ "Operator note."
+  end
+
+  test "comment action warns when notification fails but keeps stored history", %{root: root} do
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    Application.put_env(:babs_citizens, :ticket_runtime_opts,
+      citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+      pane_lookup: fn "clare" -> {:ok, self()} end,
+      pane_injector: fn "clare", _prompt -> {:error, %{api_token: "fixture-value"}} end
+    )
+
+    ticket =
+      create_ticket!(root, "Comment failure detail", "Keep stored comments.",
+        state: "in_progress",
+        assignees: ["clare"]
+      )
+
+    {:ok, view, _html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    view
+    |> form(~s(form[data-testid="ticket-comment-form"]), %{body: "Stored despite failure."})
+    |> render_submit()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Comment stored; notification failed for clare"
+    assert html =~ "Stored despite failure."
+    refute html =~ "fixture-value"
   end
 
   test "transition and unassign actions show only legal phase controls", %{root: root} do
@@ -291,6 +368,7 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "closed"
     refute html =~ ~s(data-testid="ticket-approve")
     refute html =~ ~s(data-testid="ticket-reject-form")
+    refute html =~ ~s(data-testid="ticket-comment-form")
   end
 
   defp create_ticket!(root, title, body, opts \\ []) do

@@ -38,6 +38,21 @@ defmodule Babs.Citizens.Tickets.Injector do
     """
   end
 
+  @spec comment_prompt(Ticket.t(), String.t(), String.t(), String.t()) :: String.t()
+  def comment_prompt(%Ticket{} = ticket, slug, by, body)
+      when is_binary(slug) and is_binary(by) and is_binary(body) do
+    """
+    [Babs Ticket #{ticket.id} comment]
+    State: #{ticket.state}
+    Assignee: #{slug}
+    From: #{by}
+
+    #{String.trim(body)}
+
+    This comment is persisted in Ticket history. Continue coordination through `bb ticket comment`.
+    """
+  end
+
   @spec prepare(String.t(), keyword()) :: :ok | {:error, term()}
   def prepare(slug, opts \\ []) when is_binary(slug) do
     with {:ok, _record} <- fetch_citizen(slug, opts),

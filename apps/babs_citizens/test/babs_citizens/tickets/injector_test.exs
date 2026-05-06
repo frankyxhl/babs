@@ -26,6 +26,18 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert String.ends_with?(prompt, "\n")
   end
 
+  test "comment prompt includes provenance and trimmed body for the assignee" do
+    prompt = Injector.comment_prompt(ticket(), "clare", "dylan", "  Please review the branch.  ")
+
+    assert prompt =~ "[Babs Ticket T-2026-05-06-001 comment]"
+    assert prompt =~ "State: in_progress"
+    assert prompt =~ "Assignee: clare"
+    assert prompt =~ "From: dylan"
+    assert prompt =~ "Please review the branch."
+    assert prompt =~ "bb ticket comment"
+    assert String.ends_with?(prompt, "\n")
+  end
+
   test "prepare validates the citizen exists" do
     assert {:error, {:unknown_citizen, "ghost"}} =
              Injector.prepare("ghost", citizen_fetcher: fn _slug -> nil end)

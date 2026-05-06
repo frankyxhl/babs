@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const paneSourcePath = "apps/babs_citizens/lib/babs_citizens/hardline/pane.ex";
 const webSourcePath = "apps/babs/lib/babs_web/channels/pane_channel.ex";
+const ticketsRoot = process.env.BABS_TICKETS_ROOT || "var/tickets";
 
 function commandExists(command) {
   try {
@@ -49,6 +51,65 @@ async function expectTerminalHasContent(page) {
   await expect
     .poll(async () => (await page.locator(".xterm").innerText()).trim().length)
     .toBeGreaterThan(0);
+}
+
+function allocateTicketId() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (let seq = 950; seq < 1000; seq += 1) {
+    const id = `T-${today}-${String(seq).padStart(3, "0")}`;
+    if (!existsSync(ticketMarkdownPath(id)) && !existsSync(ticketHistoryPath(id))) {
+      return id;
+    }
+  }
+
+  throw new Error("could not allocate E2E ticket id");
+}
+
+function ticketMarkdownPath(id) {
+  return join(ticketsRoot, `${id}.md`);
+}
+
+function ticketHistoryPath(id) {
+  return join(ticketsRoot, `${id}.history.jsonl`);
+}
+
+function writeTicket(id, title, body) {
+  mkdirSync(ticketsRoot, { recursive: true });
+  const now = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  writeFileSync(
+    ticketMarkdownPath(id),
+    `---
+id: "${id}"
+type: "assignment"
+state: "open"
+assigner: "e2e"
+assignees: []
+assignee_role: null
+inspector: "user"
+priority: "normal"
+parent_ticket: null
+created_at: "${now}"
+updated_at: "${now}"
+metadata: {"source":"playwright"}
+---
+
+# ${title}
+
+${body}
+`
+  );
+
+  writeFileSync(
+    ticketHistoryPath(id),
+    `${JSON.stringify({ ts: now, event: "created", by: "e2e", ticket_id: id })}\n`
+  );
+}
+
+function cleanupTicket(id) {
+  rmSync(ticketMarkdownPath(id), { force: true });
+  rmSync(ticketHistoryPath(id), { force: true });
 }
 
 test("sentinel terminal connects and forwards keyboard input to tmux", async ({ page }) => {
@@ -102,4 +163,26 @@ test("missing citizen returns 404", async ({ page }) => {
 
   expect(response.status()).toBe(404);
   await expect(page.locator("body")).toContainText("citizen not found");
+});
+
+test("ticket detail stores operator comments from the browser", async ({ page }) => {
+  const id = allocateTicketId();
+  const comment = "E2E operator comment";
+
+  try {
+    writeTicket(id, "E2E Comment Ticket", "Browser comment body.");
+    await page.goto(`/tickets/${id}`);
+
+    await expect(page.getByTestId("ticket-detail")).toBeVisible();
+    await expect(page.getByTestId("ticket-comment-form")).toBeVisible();
+    await expect(page.locator('[data-testid="ticket-comment"] [data-icon="message-square"]')).toBeVisible();
+
+    await page.getByTestId("ticket-comment-body").fill(comment);
+    await page.getByTestId("ticket-comment").click();
+
+    await expect(page.getByTestId("ticket-flash-info")).toContainText("Comment stored");
+    await expect(page.getByTestId("ticket-detail")).toContainText(comment);
+  } finally {
+    cleanupTicket(id);
+  }
 });

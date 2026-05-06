@@ -4,6 +4,16 @@ defmodule Babs.Citizens.RunnerTest do
   alias Babs.Citizens.{CitizenConfig, Runner}
 
   test "builds a detached Babs-owned tmux session command with cwd and env" do
+    original_root = Application.get_env(:babs_citizens, :root)
+    original_tickets_root = Application.get_env(:babs_citizens, :tickets_root)
+    Application.put_env(:babs_citizens, :root, "/tmp/babs-root")
+    Application.put_env(:babs_citizens, :tickets_root, "/tmp/babs-root/var/tickets")
+
+    on_exit(fn ->
+      restore_env(:root, original_root)
+      restore_env(:tickets_root, original_tickets_root)
+    end)
+
     config = %CitizenConfig{
       id: "BAB-CIT-0000",
       slug: "sentinel",
@@ -11,7 +21,7 @@ defmodule Babs.Citizens.RunnerTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       cwd: "/tmp/babs-sentinel",
-      env: %{"TERM" => "xterm-256color"}
+      env: %{"BABS_ROOT" => "/wrong-root", "PATH" => "/custom/bin", "TERM" => "xterm-256color"}
     }
 
     assert Runner.new_session_args(config) == [
@@ -22,7 +32,19 @@ defmodule Babs.Citizens.RunnerTest do
              "-c",
              "/tmp/babs-sentinel",
              "-e",
+             "BABS_ROOT=/wrong-root",
+             "-e",
+             "PATH=/custom/bin",
+             "-e",
              "TERM=xterm-256color",
+             "-e",
+             "BABS_CITIZEN_SLUG=sentinel",
+             "-e",
+             "BABS_ROOT=/tmp/babs-root",
+             "-e",
+             "BABS_TICKETS_ROOT=/tmp/babs-root/var/tickets",
+             "-e",
+             "PATH=/tmp/babs-root/bin:/custom/bin",
              "/bin/zsh",
              "-f"
            ]
@@ -94,4 +116,7 @@ defmodule Babs.Citizens.RunnerTest do
       end
     end
   end
+
+  defp restore_env(key, nil), do: Application.delete_env(:babs_citizens, key)
+  defp restore_env(key, value), do: Application.put_env(:babs_citizens, key, value)
 end
