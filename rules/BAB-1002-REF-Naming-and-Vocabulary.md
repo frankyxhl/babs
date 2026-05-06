@@ -1,8 +1,8 @@
 # REF-1002: Naming & Vocabulary
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-05
-**Last reviewed:** 2026-05-04
+**Last updated:** 2026-05-06
+**Last reviewed:** 2026-05-06
 **Status:** Active
 
 ---
@@ -33,20 +33,22 @@ Replaces the old `Tmux.Core` + `PaneSession` split. Origin: *The Matrix* hardlin
 
 ### Ticket
 
-The unified primitive for representing work in Babs. Each Ticket = one markdown file + one history JSONL file:
+The unified primitive for representing work in Babs. Each Ticket = one markdown file + one history JSONL file under the configured tickets root:
 
 ```
-tickets/T-2026-05-03-001.md
-tickets/T-2026-05-03-001.history.jsonl
+<tickets_root>/T-2026-05-03-001.md
+<tickets_root>/T-2026-05-03-001.history.jsonl
 ```
 
-Ticket has `type` field (`assignment`, `mission`, `proposal`, etc.) and a 6-state lifecycle (Open / In Progress / Pending Approval / Closed / Cancelled + Rejected transition). See `BAB-1111` for full schema.
+Ticket has `type` field (`assignment`, `mission`, `proposal`, etc.) and a five-state lifecycle (Open / In Progress / Pending Approval / Closed / Cancelled) plus transition events such as Rejected and Unassigned. See `BAB-1111` for full schema.
+The default tickets root is `<BABS_ROOT>/var/tickets`; Ticket files are runtime
+data and are not committed by default.
 
 Replaces three earlier separate concepts: Mission, Assignment, Need. The collapse into Ticket is per ServiceNow / Linear / Jira issue-typing precedent.
 
 ### Billboard
 
-The `tickets/` directory itself, viewed as a coordination surface. Tickets with `state: open, assignee: null` are "on the billboard" (unassigned, awaiting pickup or Mayor proposal). Subscription = filesystem watcher (FSEvents on macOS).
+The configured tickets root itself, viewed as a coordination surface. Tickets with `state: open, assignees: []` are "on the billboard" (unassigned, awaiting pickup or Mayor proposal). Subscription = filesystem watcher (FSEvents on macOS).
 
 There is no separate Billboard data structure — the filesystem is the billboard. See `BAB-1111`.
 
@@ -203,3 +205,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-05 | Record Elena as a post-Phase-1 GitHub Copilot CLI experimental seed, separate from Phase 1 gate seeds | Codex |
 | 2026-05-04 | Trinity review fix: update anti-pattern table to recommend `Hardline.Pane` and `Hardline` instead of legacy `PaneSession` and `Tmux.Core` terms | Codex |
 | 2026-05-05 | Phase 2a: introduce configurable `workspace_root`, migrate seed examples to `cwd = "<slug>"`, and clarify default resolved workspace paths | Codex |
+| 2026-05-06 | Normalize Ticket vocabulary to five states plus transition events, `assignees: []` Billboard representation, and gitignored runtime tickets root | Codex |

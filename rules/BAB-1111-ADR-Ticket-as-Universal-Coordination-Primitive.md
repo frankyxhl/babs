@@ -1,8 +1,8 @@
 # ADR-1111: Ticket as Universal Coordination Primitive
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-06
+**Last reviewed:** 2026-05-06
 **Status:** Accepted
 **Implementation gate:** Full implementation gated to V0-M / Phase 7+; see `BAB-2300`
 
@@ -32,11 +32,13 @@ The "Ticket-everything" simplification collapses three previously separate conce
 
 ### Schema
 
-Each Ticket is **two files** with the same stem:
+Each Ticket is **two files** with the same stem under the configured tickets
+root. The default tickets root is `<BABS_ROOT>/var/tickets`, which is runtime
+data and ignored by git.
 
 ```
-tickets/T-2026-05-03-001.md         # the ticket itself
-tickets/T-2026-05-03-001.history.jsonl  # append-only event log
+<tickets_root>/T-2026-05-03-001.md         # the ticket itself
+<tickets_root>/T-2026-05-03-001.history.jsonl  # append-only event log
 ```
 
 Ticket file = YAML frontmatter + Markdown body:
@@ -53,6 +55,7 @@ inspector: user         # who approves
 priority: normal        # low | normal | high | urgent
 parent_ticket: null     # nullable; for ticket trees (mission → assignments)
 created_at: 2026-05-03T14:30:00Z
+updated_at: 2026-05-03T14:30:00Z
 metadata: {}            # type-specific extension dict
 ---
 
@@ -61,14 +64,14 @@ metadata: {}            # type-specific extension dict
 Markdown body. The Citizen's initial prompt when assigned.
 ```
 
-**Note on `assignees`**: List form even when only one citizen is assigned. Empty list `[]` means "on the billboard" (unassigned). Multi-assignee semantics (per `BAB-2300` Phase 12) means a comment broadcasts to all listed citizens' hardlines.
+**Note on `assignees`**: List form even when only one citizen is assigned. Empty list `[]` means "on the billboard" (unassigned). Multi-assignee semantics (per `BAB-2300` Phase 12) means a comment is persisted to Ticket history for all listed citizens and may be mirrored as terminal notifications.
 
 History file = JSON-Lines, one event per row:
 
 ```jsonl
 {"ts":"2026-05-03T14:30:00Z","event":"created","by":"user"}
-{"ts":"2026-05-03T14:35:00Z","event":"assigned","by":"user","to":"alex"}
-{"ts":"2026-05-03T14:35:01Z","event":"state_change","from":"open","to":"in_progress"}
+{"ts":"2026-05-03T14:35:00Z","event":"assigned","by":"user","to":["alex"]}
+{"ts":"2026-05-03T14:35:01Z","event":"state_change","by":"system","from":"open","to":"in_progress"}
 {"ts":"2026-05-03T15:12:00Z","event":"comment","by":"alex","body":"Working on it..."}
 ```
 
@@ -76,10 +79,14 @@ History file = JSON-Lines, one event per row:
 
 ```
 open ─────► in_progress ─────► pending_approval ─────► closed
-  │             ▲     ▲                │
-  │             │     └── rejected ────┘
+  │             │                       │
+  │             │                       ├── rejected ───► in_progress
+  │             │                       └── cancelled
   │             │
-  └── cancelled └── (assignee voluntarily releases)
+  │             ├── unassigned ───────► open
+  │             └── cancelled
+  │
+  └── cancelled
 ```
 
 States:
@@ -89,6 +96,7 @@ States:
 - `closed` — terminal: approved
 - `cancelled` — terminal: aborted before completion
 - `rejected` — transition event (NOT a state); when fired, ticket goes back to `in_progress` with feedback in history
+- `unassigned` — transition event (NOT a state); when the last assignee is removed, ticket goes back to `open` and returns to the billboard
 
 ### Type Field (extensible)
 
@@ -102,7 +110,7 @@ Future:
 
 ### Billboard = Filesystem
 
-There is no separate "billboard data structure". The `tickets/` directory IS the billboard. Tickets in `state: open, assignee: null` are "on the billboard" (unassigned, awaiting pickup or proposal). UI subscribes via filesystem watcher (FSEvents on macOS, inotify on Linux).
+There is no separate "billboard data structure". The configured tickets root IS the billboard. Tickets in `state: open, assignees: []` are "on the billboard" (unassigned, awaiting pickup or proposal). UI subscribes via filesystem watcher (FSEvents on macOS, inotify on Linux).
 
 ### Concurrent Write Strategy
 
@@ -110,7 +118,7 @@ Two writers (Babs core + a Citizen via `bb` CLI; or two Citizens commenting simu
 
 **Strategy: per-ticket single-writer GenServer.**
 
-- `Babs.Ticket.Writer` is a Registry-keyed GenServer, one process per ticket ID, hosted in **`:babs_citizens` OTP app** (filesystem-only, no web dep)
+- `Babs.Citizens.Tickets.Writer` is a Registry-keyed GenServer, one process per ticket ID, hosted in **`:babs_citizens` OTP app** (filesystem-only, no web dep)
 - All writes (state change, comment, assignment) go through the writer
 - Writer serializes mutations and commits to disk atomically (write to `.tmp` + rename)
 - History writes are similarly serialized but use append-only fopen mode (concurrent appends to a single file are safe at the OS level for ≤PIPE_BUF bytes; we ensure each event row is small)
@@ -150,17 +158,23 @@ The `bb` CLI is a binary in PATH inside Citizen tmux panes. It communicates with
 
 ## Why Filesystem-First (Not SQLite)
 
-1. **Git as audit log** — every ticket change is `git diff`-able and reviewable
-2. **Operator inspection** — `cd tickets/ && grep -l 'state: pending_approval' *.md` works
+1. **Local file auditability** — every ticket change is file-diffable and
+   reviewable without making git the default data store
+2. **Operator inspection** — `cd <tickets_root> && grep -l 'state: pending_approval' *.md` works
 3. **Zero migration cost** — schema evolves by adding optional frontmatter keys; old tickets remain valid
 4. **Aligns with Alfred convention** — Alfred uses markdown PRJ docs; Babs sister project should follow the same philosophy
 5. **Backup = `tar`** — no database to dump
+
+Ticket files are runtime data. They must not be committed by default. A future
+export/archive command may intentionally copy selected Tickets into project
+history, but the normal write path stays under the gitignored tickets root.
 
 SQLite still exists for `citizens` table (auto-respawn requires queryable structured data) and possibly a `tickets_index` table for fast filtering — but **the ticket file is the source of truth**, the SQLite index is a derived view.
 
 ## Consequences
 
-- Phase 7 implements the file format + writer + index
+- Phase 7 implements the file format + writer + index under the configured
+  tickets root
 - Phase 8 implements the UI (renders frontmatter as table + markdown body + history timeline)
 - Phase 9 implements assignment (Ticket body → Citizen prompt injection)
 - Phase 10 implements the state machine
@@ -173,7 +187,7 @@ SQLite still exists for `citizens` table (auto-respawn requires queryable struct
 
 - All earlier discussion of `Mission` as a runtime concept — replaced by `Ticket(type=mission)`, deferred to V0-L
 - All earlier discussion of `Assignment` as a separate primitive — replaced by `Ticket(type=assignment)`
-- All earlier discussion of `Billboard` as a separate data structure — replaced by `tickets/` directory + file watcher
+- All earlier discussion of `Billboard` as a separate data structure — replaced by configured tickets root + file watcher
 - All earlier discussion of a separate `MessageBus` for cross-citizen comms — replaced by `bb ticket comment`
 
 ## Change History
@@ -181,5 +195,6 @@ SQLite still exists for `citizens` table (auto-respawn requires queryable struct
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-03 | Initial decision; ticket-everything model adopted | Claude Code |
-| 2026-05-03 | Trinity 2nd-round fixes: schema `assignee: alex` → `assignees: [alex]` (list form forward-compatible with multi-assignee in Phase 12); added explicit `bb` CLI Transport Specification (Elixir escript over UDS at `/tmp/babs-<uid>.sock`, JSON, mode-0700 auth, gated to Phase 7 implementation); clarified `Babs.Ticket.Writer` lives in `:babs_citizens` OTP app | Claude Code |
+| 2026-05-03 | Trinity 2nd-round fixes: schema `assignee: alex` → `assignees: [alex]` (list form forward-compatible with multi-assignee in Phase 12); added explicit `bb` CLI Transport Specification (Elixir escript over UDS at `/tmp/babs-<uid>.sock`, JSON, mode-0700 auth, gated to Phase 7 implementation); clarified the Ticket writer lives in `:babs_citizens` OTP app | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Accepted`; move implementation gate into a dedicated metadata field | Codex |
+| 2026-05-06 | M3 planning alignment: add `updated_at`, require `by` on `state_change`, use list-form `assigned.to`, define `unassigned` as an event returning an `in_progress` Ticket to `open` when the last assignee is removed, normalize Billboard wording to `assignees: []`, align writer namespace with `Babs.Citizens.Tickets.Writer`, make Tickets gitignored runtime data under the configured tickets root, clarify that comment history is authoritative while terminal notifications are mirrors, and show cancellation from every non-terminal state | Codex |

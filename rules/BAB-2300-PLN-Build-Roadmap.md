@@ -1,8 +1,8 @@
 # PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-05
-**Last reviewed:** 2026-05-05
+**Last updated:** 2026-05-06
+**Last reviewed:** 2026-05-06
 **Status:** Active
 **Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
 **Sources:** v0.1 design session 2026-05-03; Trinity Review `BAB-1006`
@@ -142,22 +142,25 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 **Doc**: `BAB-2216` CHG
 **Scope**: Browser lifecycle controls on `/citizens` and default terminal pages: stop (`tmux kill-session` + SQLite `stopped` + preserve configured workspace), start (reuse SQLite config/workspace, fresh tmux + erlexec, status `running`), restart (atomic stop + start). Per `BAB-1107` semantics.
 **Acceptance**: Stop clare from the browser, start/restart clare from the browser, terminal reconnects, SQLite status is correct, transcript path and workspace files are preserved, stopped Citizens do not auto-start on Babs restart, and running Citizens still auto-respawn/reattach.
-**Current status**: Implemented locally on branch `codex/phase-6-chg`; PR #14 is in review. `BAB-2216` CHG was approved on 2026-05-06 after Trinity fast-review with GLM 9.05/10 and DeepSeek 9.0/10. Local validation passed on 2026-05-06: ExUnit/coverage (`:babs_citizens` 83.88%, `:babs` 82.17%), JS tests, browser-harness BDD with the Phase 6 lifecycle scenarios, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity implementation review passed on scoped `apps/` review with GLM PASS and DeepSeek PASS; DeepSeek's conditional missing Stop-click test was fixed. GitHub Codex R1 P2 sibling-control race was fixed and revalidated.
+**Current status**: Implemented and merged in PR #14. `BAB-2216` CHG was approved on 2026-05-06 after Trinity fast-review with GLM 9.05/10 and DeepSeek 9.0/10. Local validation passed on 2026-05-06: ExUnit/coverage (`:babs_citizens` 83.88%, `:babs` 82.17%), JS tests, browser-harness BDD with the Phase 6 lifecycle scenarios, Playwright smoke, Gate A, Alfred validation, and whitespace check. Trinity implementation review passed on scoped `apps/` review with GLM PASS and DeepSeek PASS; DeepSeek's conditional missing Stop-click test was fixed. GitHub Codex R1 P2 sibling-control race was fixed and R2 reported no major issues.
 **Estimate**: 2-4 days
 
 ### 🎯 M2 = V0-S complete (~3-5 weeks flywheel time)
 
 ### Phase 6.5 — Manual Ticket Dogfood (Trinity-mandated)
 
-**Scope**: Operator manually creates 1-2 ticket markdown files at `tickets/T-2026-XX-XX-001.md`; manually edits frontmatter to assign to clare; manually injects ticket body as clare's prompt; clare completes work; operator manually flips state to `closed`. **No automation.** Validates that the schema design (per `BAB-1111`) actually works end-to-end before infrastructure is built.
+**Scope**: Operator manually creates 1-2 ticket markdown files at `<tickets_root>/T-2026-XX-XX-001.md`; manually edits frontmatter to assign to clare; manually injects ticket body as clare's prompt; clare completes work; operator manually flips state to `closed`. **No automation.** Validates that the schema design (per `BAB-1111`) actually works end-to-end before infrastructure is built.
 **Why**: Trinity 3/3 reviewers flagged that Phase 7-12 is high-cost ticket infrastructure built without proving the workflow first. This 1-2 day phase validates the workflow.
 **Acceptance**: 2 tickets driven through full lifecycle; observed friction informs Phase 7-12 designs
+**Current status**: Waived as a gate by operator decision on 2026-05-06. Keep the dogfood procedure as a reference, but proceed directly into continuous Phase 7-12 delivery under `BAB-2217`.
 **Estimate**: 1-2 days
 
 ### Phase 7 — Ticket File System Skeleton
 
-**Scope**: `tickets/` directory; schema validation (per `BAB-1111` frontmatter); `mix bb.ticket.new` task; per-ticket single-writer GenServer (concurrent-write safety); `T-...history.jsonl` append-only log.
-**Acceptance**: Create 5 tickets via mix task; `git status` clean (atomic write); concurrent writes from 2 processes do not corrupt files (test in code)
+**Planning doc**: `BAB-2217` PRP covers the complete Phase 7-12 M3 design and execution slices.
+**Execution contract**: `BAB-2218` records approved operator defaults for continuous Phase 7-12 delivery, review-loop caps, runtime data roots, multi-CLI validation citizens, and stop conditions.
+**Scope**: configured tickets root, defaulting to gitignored `<BABS_ROOT>/var/tickets`; schema validation (per `BAB-1111` frontmatter); `bb ticket new` minimum CLI target with any temporary `mix babs.ticket.*` bridge disclosed in the Phase 7 PR; per-ticket single-writer GenServer (concurrent-write safety); `T-...history.jsonl` append-only log.
+**Acceptance**: Create 5 tickets via `bb ticket new` or an explicitly disclosed temporary `mix babs.ticket.*` bridge; `git status` clean except intended source changes; concurrent writes from 2 processes do not corrupt files (test in code)
 **Estimate**: 4-6 days
 
 ### Phase 8 — Ticket Index UI + Render
@@ -168,13 +171,13 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 9 — Ticket → Citizen Assignment
 
-**Scope**: UI button "Assign to clare" → ticket `assignee` field updated → ticket body **injected as clare's initial prompt** (via `bb` CLI write to clare's stdin); state transitions to `in_progress`; history event written.
+**Scope**: UI button "Assign to clare" → ticket `assignees` field updated → ticket body **injected as clare's initial prompt** via `Hardline.Pane.inject/2`; state transitions to `in_progress`; history event written.
 **Acceptance**: Create T-001 = "Add health check endpoint"; assign to clare; clare's terminal receives the body as input and starts working
 **Estimate**: 4-6 days
 
-### Phase 10 — Ticket 6-State Machine
+### Phase 10 — Ticket State Machine
 
-**Scope**: Open / In Progress / Pending Approval / Closed / Cancelled + Rejected transition. Each transition writes to `.history.jsonl`. UI shows state badge. Illegal transitions are rejected with error message.
+**Scope**: Open / In Progress / Pending Approval / Closed / Cancelled plus Rejected and Unassigned transition events. Each transition writes to `.history.jsonl`. UI shows state badge. Illegal transitions are rejected with error message.
 **Acceptance**: All paths walkable: Open → In Progress → Pending Approval → Closed; Reject from Pending Approval returns to In Progress with feedback comment in history; Cancel terminates from any non-closed state
 **Estimate**: 3-5 days
 
@@ -186,8 +189,8 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 12 — Cross-Citizen Ticket Comments
 
-**Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. All Citizens listed as `assignees` (multi-assignee allowed) receive the comment via PubSub injection into their hardline.
-**Acceptance**: T-001 assigned to clare + dylan; clare `bb ticket comment T-001 "Backend done"`; dylan's terminal sees the message within 1s
+**Scope**: `bb ticket comment <id> "..."` shell command (used by Citizens). Comment appended to `.history.jsonl`. Ticket/Billboard history is the authoritative communication surface for all participants, including the author; terminal notifications may mirror history but are not authoritative.
+**Acceptance**: T-001 assigned to clare + dylan; clare `bb ticket comment T-001 "Backend done"`; clare and dylan both see the persisted comment in Ticket/Billboard history within 1s
 **Estimate**: 3-5 days
 
 ### 🎯 M3 = V0-M complete (~4-7 weeks flywheel time)
@@ -206,7 +209,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 
 ### Phase 15 — Mayor Citizen (research-grade)
 
-**Scope**: Citizen with `is_mayor: true`. Listens for tickets with `assignee: null` (the billboard). Outputs proposal: `bb propose <root-ticket> --children "T-A: BA work; T-B: Developer work; ..."`. Proposal becomes draft tickets in a special state; UI shows them awaiting user approval. User can edit/cull/approve. On approve, drafts are written to `tickets/` and routed to citizens by role.
+**Scope**: Citizen with `is_mayor: true`. Listens for tickets with `assignees: []` (the billboard). Outputs proposal: `bb propose <root-ticket> --children "T-A: BA work; T-B: Developer work; ..."`. Proposal becomes draft tickets in a special state; UI shows them awaiting user approval. User can edit/cull/approve. On approve, drafts are written to the configured tickets root and routed to citizens by role.
 **Acceptance**: User creates T-100 = "Build a hello world site" (no assignee). Mayor proposes 4 children. User removes one ("designer"), approves rest. 3 children auto-routed to citizens by role. All 3 progress through the lifecycle.
 **Estimate**: 14-21 days (LLM protocol research)
 
@@ -303,3 +306,6 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-06 | Mark `BAB-2216` approved after Trinity GLM/DeepSeek fast-review PASS | Codex |
 | 2026-05-06 | Record local Phase 6 implementation and validation evidence | Codex |
 | 2026-05-06 | Record Phase 6 Trinity implementation review pass and Stop-click test fix | Codex |
+| 2026-05-06 | Mark Phase 6 merged, add `BAB-2217` M3 planning reference, normalize Ticket lifecycle/assignees/runtime-root wording for Phase 7-15, and record Phase 6.5 gate waiver for continuous Phase 7-12 delivery | Codex |
+| 2026-05-06 | Add `BAB-2218` M3 execution contract reference for continuous Phase 7-12 delivery defaults and stop conditions | Codex |
+| 2026-05-06 | Mark `BAB-2218` execution contract approved and align Phase 7 acceptance with `bb ticket new` / documented bridge wording | Codex |
