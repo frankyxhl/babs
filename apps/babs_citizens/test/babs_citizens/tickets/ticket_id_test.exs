@@ -7,6 +7,7 @@ defmodule Babs.Citizens.Tickets.TicketIdTest do
     assert {:ok, %{date: ~D[2026-05-06], sequence: 1}} = TicketId.parse("T-2026-05-06-001")
     assert :ok = TicketId.validate("T-2026-05-06-999")
     assert {:error, {:invalid_id, "T-2026-5-6-1"}} = TicketId.parse("T-2026-5-6-1")
+    assert {:error, {:invalid_id, "T-2026-05-06-000"}} = TicketId.parse("T-2026-05-06-000")
   end
 
   test "allocates the next id by scanning markdown files for the requested date" do

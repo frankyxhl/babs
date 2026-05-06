@@ -14,6 +14,7 @@ defmodule Babs.Citizens.Tickets.TicketId do
          {month, ""} <- Integer.parse(month),
          {day, ""} <- Integer.parse(day),
          {sequence, ""} <- Integer.parse(sequence),
+         true <- sequence > 0,
          {:ok, date} <- Date.new(year, month, day) do
       {:ok, %{date: date, sequence: sequence}}
     else
