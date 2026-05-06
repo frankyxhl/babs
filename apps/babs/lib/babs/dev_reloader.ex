@@ -124,10 +124,17 @@ defmodule Babs.DevReloader do
 
   defp restart_application(app) do
     with :ok <- Application.stop(app),
-         :ok <- Application.start(app) do
+         {:ok, _apps} <- Application.ensure_all_started(app) do
       :ok
     else
-      {:error, {:not_started, ^app}} -> Application.start(app)
+      {:error, {:not_started, ^app}} -> ensure_application_started(app)
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_application_started(app) do
+    case Application.ensure_all_started(app) do
+      {:ok, _apps} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
