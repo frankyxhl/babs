@@ -52,6 +52,9 @@ defmodule Babs.Citizens.Tickets.StateMachineTest do
     assert {:ok, closed, "state_change"} = StateMachine.transition(pending, "closed", nil)
     assert closed.state == "closed"
 
+    assert {:ok, approved, "approved"} = StateMachine.transition(pending, "closed", "approved")
+    assert approved.state == "closed"
+
     assert {:ok, rejected, "rejected"} =
              StateMachine.transition(pending, "in_progress", "rejected")
 
@@ -66,6 +69,10 @@ defmodule Babs.Citizens.Tickets.StateMachineTest do
     assert {:error, {:invalid_transition, "closed", "open"}} =
              ticket(state: "closed", assignees: ["clare"])
              |> StateMachine.transition("open", nil)
+
+    assert {:error, {:invalid_transition_event, "accepted", "approved"}} =
+             ticket(state: "pending_approval", assignees: ["clare"])
+             |> StateMachine.transition("closed", "accepted")
   end
 
   defp ticket(attrs \\ []) do

@@ -53,7 +53,9 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
     assert comment_output =~ "live delivery is deferred until Phase 12"
   end
 
-  test "mix babs.ticket.assign/transition/unassign bridge mutates a ticket", %{root: root} do
+  test "mix babs.ticket.assign/transition/reject/approve/unassign bridge mutates tickets", %{
+    root: root
+  } do
     parent = self()
 
     Application.put_env(:babs_citizens, :ticket_runtime_opts,
@@ -95,14 +97,13 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
 
     rejected_output =
       capture_io(fn ->
-        Mix.Task.rerun("babs.ticket.transition", [
-          "T-2026-05-06-001",
-          "in_progress",
-          "rejected"
-        ])
+        Mix.Task.rerun("babs.ticket.reject", ["T-2026-05-06-001", "Needs more detail."])
       end)
 
-    assert rejected_output =~ "T-2026-05-06-001 state in_progress"
+    assert rejected_output =~ "T-2026-05-06-001 rejected"
+    assert rejected_output =~ "state in_progress"
+    assert_receive {:injected, feedback_prompt}
+    assert feedback_prompt =~ "Needs more detail."
 
     unassign_output =
       capture_io(fn -> Mix.Task.rerun("babs.ticket.unassign", ["T-2026-05-06-001", "clare"]) end)
@@ -110,6 +111,20 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
     assert unassign_output =~ "T-2026-05-06-001 unassigned from clare"
     assert unassign_output =~ "state open"
     assert File.read!(Path.join(root, "T-2026-05-06-001.md")) =~ "assignees: []"
+
+    capture_io(fn ->
+      Mix.Task.rerun("babs.ticket.assign", ["T-2026-05-06-001", "clare"])
+    end)
+
+    capture_io(fn ->
+      Mix.Task.rerun("babs.ticket.transition", ["T-2026-05-06-001", "pending_approval"])
+    end)
+
+    approve_output =
+      capture_io(fn -> Mix.Task.rerun("babs.ticket.approve", ["T-2026-05-06-001"]) end)
+
+    assert approve_output =~ "T-2026-05-06-001 approved"
+    assert approve_output =~ "state closed"
   end
 
   defp tmp_root do

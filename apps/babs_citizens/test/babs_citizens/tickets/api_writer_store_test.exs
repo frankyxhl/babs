@@ -2,6 +2,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   use ExUnit.Case, async: false
 
   alias Babs.Citizens.Tickets.Api
+  alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
 
   test "creates lists and shows tickets without Phoenix" do
@@ -249,6 +250,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
 
   test "transition_ticket and unassign_ticket persist legal state changes" do
     root = tmp_root()
+    parent = self()
 
     assert {:ok, ticket} =
              Api.create_ticket(%{title: "Transition", body: "Move through states."},
@@ -280,13 +282,37 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
                now: "2026-05-06T00:03:00Z"
              )
 
-    assert {:ok, %{ticket: rejected}} =
+    assert {:error, {:use_reject_ticket, ticket_id}} =
              Api.transition_ticket(ticket.id, "in_progress", "rejected",
                tickets_root: root,
                now: "2026-05-06T00:04:00Z"
              )
 
+    assert ticket_id == ticket.id
+
+    assert {:error, {:use_reject_ticket, ticket_id}} =
+             Api.transition_ticket(ticket.id, "in_progress", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:04:00Z"
+             )
+
+    assert ticket_id == ticket.id
+
+    assert {:ok, %{ticket: rejected, delivery: {:feedback_injected, ["clare"]}}} =
+             Api.reject_ticket(ticket.id, "Needs docs.",
+               tickets_root: root,
+               now: "2026-05-06T00:04:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", prompt ->
+                 send(parent, {:feedback, prompt})
+                 :ok
+               end
+             )
+
     assert rejected.state == "in_progress"
+    assert_receive {:feedback, prompt}
+    assert prompt =~ "Needs docs."
 
     assert {:ok, %{ticket: open}} =
              Api.unassign_ticket(ticket.id, "clare",
@@ -296,6 +322,226 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
 
     assert open.state == "open"
     assert open.assignees == []
+  end
+
+  test "approve_ticket closes pending approval tickets with explicit history" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Approve", body: "Ready to close."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, _result} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert {:ok, _result} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:02:00Z"
+             )
+
+    assert {:error, {:use_approve_ticket, ticket_id}} =
+             Api.transition_ticket(ticket.id, "closed", "approved",
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z"
+             )
+
+    assert ticket_id == ticket.id
+
+    assert {:ok, %{ticket: approved}} =
+             Api.approve_ticket(ticket.id,
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z"
+             )
+
+    assert approved.state == "closed"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    events = Enum.map(history, & &1["event"])
+    assert Enum.take(events, -2) == ["approved", "state_change"]
+  end
+
+  test "reject_ticket requires feedback and assignees before rewriting" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Reject", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, _result} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert {:ok, _result} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:02:00Z"
+             )
+
+    assert {:error, {:invalid_history_event, :empty_feedback}} =
+             Api.reject_ticket(ticket.id, "   ",
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z"
+             )
+
+    assert {:ok, %{ticket: shown, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert shown.state == "pending_approval"
+    refute "rejected" in Enum.map(history, & &1["event"])
+  end
+
+  test "reject_ticket validates history size before rewriting ticket markdown" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Reject size", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, _result} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert {:ok, _result} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:02:00Z"
+             )
+
+    ticket_id = ticket.id
+
+    assert {:error, {:history_event_too_large, ^ticket_id}} =
+             Api.reject_ticket(ticket.id, String.duplicate("x", 20_000),
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z"
+             )
+
+    assert {:ok, %{ticket: shown, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert shown.state == "pending_approval"
+    refute "rejected" in Enum.map(history, & &1["event"])
+  end
+
+  test "reject_ticket keeps rejection state when feedback injection fails" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Feedback failure", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, _result} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert {:ok, _result} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:02:00Z"
+             )
+
+    assert {:error, {:feedback_injection_failed, ticket_id, [{"clare", _reason}]}} =
+             Api.reject_ticket(ticket.id, "Please add tests.",
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> {:error, %{api_token: "fixture-value"}} end
+             )
+
+    assert ticket_id == ticket.id
+
+    assert {:ok, %{ticket: shown, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert shown.state == "in_progress"
+    assert shown.assignees == ["clare"]
+
+    assert Enum.take(Enum.map(history, & &1["event"]), -4) == [
+             "rejected",
+             "state_change",
+             "feedback_injection_attempted",
+             "feedback_injection_failed"
+           ]
+
+    refute List.last(history)["error"] =~ "fixture-value"
+  end
+
+  test "reject_ticket injects feedback to every current assignee" do
+    root = tmp_root()
+    parent = self()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Multi feedback", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    pending = %{ticket | state: "pending_approval", assignees: ["clare", "dylan"]}
+    File.write!(Path.join(root, "#{ticket.id}.md"), TicketMarkdown.render(pending))
+
+    assert {:ok, %{ticket: rejected, delivery: {:feedback_injected, ["clare", "dylan"]}}} =
+             Api.reject_ticket(ticket.id, "Please split the patch.",
+               tickets_root: root,
+               now: "2026-05-06T00:03:00Z",
+               citizen_fetcher: fn slug when slug in ["clare", "dylan"] -> %{slug: slug} end,
+               pane_lookup: fn slug when slug in ["clare", "dylan"] -> {:ok, self()} end,
+               pane_injector: fn slug, prompt ->
+                 send(parent, {:feedback, slug, prompt})
+                 :ok
+               end
+             )
+
+    assert rejected.state == "in_progress"
+    assert rejected.assignees == ["clare", "dylan"]
+
+    assert_receive {:feedback, "clare", clare_prompt}
+    assert_receive {:feedback, "dylan", dylan_prompt}
+    assert clare_prompt =~ "Please split the patch."
+    assert dylan_prompt =~ "Please split the patch."
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    events = Enum.map(history, & &1["event"])
+    assert Enum.count(events, &(&1 == "feedback_injected")) == 2
+
+    attempted =
+      Enum.find(history, fn event -> event["event"] == "feedback_injection_attempted" end)
+
+    assert attempted["injected_to"] == ["clare", "dylan"]
   end
 
   test "oversized comments fail before rewriting ticket markdown" do

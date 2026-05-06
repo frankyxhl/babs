@@ -58,6 +58,7 @@
 | 2219 | CHG | Implement Phase 7 Ticket Storage Core |
 | 2220 | CHG | Implement Phase 8 Ticket UI and Watcher |
 | 2221 | CHG | Implement Phase 9 10 Assignment and State Machine |
+| 2222 | CHG | Implement Phase 11 Approval UI |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

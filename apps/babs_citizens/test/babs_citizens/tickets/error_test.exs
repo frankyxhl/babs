@@ -21,6 +21,18 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
     assert Error.message({:invalid_transition, "pending_approval", "open"}) ==
              "Invalid Ticket transition: pending_approval -> open"
 
+    assert Error.message({:use_reject_ticket, "T-2026-05-06-001"}) =~
+             "rejection requires feedback"
+
+    assert Error.message({:use_approve_ticket, "T-2026-05-06-001"}) =~
+             "approval requires approve_ticket"
+
+    assert Error.message({:invalid_history_event, :empty_feedback}) ==
+             "Rejection feedback is required"
+
+    assert Error.message({:no_assignees, "T-2026-05-06-001"}) ==
+             "Ticket T-2026-05-06-001 has no assignees"
+
     assert Error.message({:invalid_slug, ""}) == "Invalid Citizen slug: \"\""
     assert Error.message({:unknown_citizen, "ghost"}) == "Unknown Citizen: ghost"
 
@@ -32,5 +44,8 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:ticket_injection_failed, "clare", "raw credential value"}) ==
              "Ticket prompt could not be injected into clare"
+
+    assert Error.message({:feedback_injection_failed, "T-2026-05-06-001", []}) ==
+             "Ticket T-2026-05-06-001 feedback could not be injected into every assignee"
   end
 end

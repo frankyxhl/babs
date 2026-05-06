@@ -176,7 +176,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 ### Phase 9 — Ticket → Citizen Assignment
 
 **Implementation CHG**: `BAB-2221` is approved and owns PR C for Phase 9 assignment plus Phase 10 state-machine work.
-**Current status**: Implemented locally on `codex/m3-phase-9-10-assignment-state`; local validation and Trinity implementation review passed, PR is next.
+**Current status**: Merged in PR #18.
 **Scope**: UI button "Assign to clare" → ticket `assignees` field updated → ticket body **injected as clare's initial prompt** via `Hardline.Pane.inject/2`; state transitions to `in_progress`; history event written.
 **Acceptance**: Create T-001 = "Add health check endpoint"; assign to clare; clare's terminal receives the body as input and starts working
 **Estimate**: 4-6 days
@@ -184,14 +184,22 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 ### Phase 10 — Ticket State Machine
 
 **Implementation CHG**: `BAB-2221` owns the Phase 10 implementation together with Phase 9 as PR C.
-**Current status**: Implemented locally on `codex/m3-phase-9-10-assignment-state`; local validation and Trinity implementation review passed, PR is next.
+**Current status**: Merged in PR #18.
 **Scope**: Open / In Progress / Pending Approval / Closed / Cancelled plus Rejected and Unassigned transition events. Each transition writes to `.history.jsonl`. UI shows state badge. Illegal transitions are rejected with error message.
 **Acceptance**: All paths walkable: Open → In Progress → Pending Approval → Closed; Reject from Pending Approval returns to In Progress with feedback comment in history; Cancel terminates from any non-closed state
 **Estimate**: 3-5 days
 
 ### Phase 11 — Approval UI (Inspector = User in V0-M)
 
-**Scope**: Pending Approval tickets show "Approve" / "Reject" buttons. Reject requires feedback (modal). Approve transitions to Closed; Reject transitions back to In Progress with feedback comment injected into assignee's hardline.
+**Implementation CHG**: `BAB-2222` defines the Phase 11 approval/reject UI,
+feedback injection, temporary Mix bridge commands, BDD, validation, and review
+plan.
+**Current status**: Implemented locally on `codex/m3-phase-11-approval-ui`;
+local validation passed after Trinity implementation R3 advisory fixes,
+Trinity R4 passed with GLM and DeepSeek, PR #19 Codex R1 P2 remediation is
+validated locally with Trinity R5 PASS, and PR #19 Codex R2 P2 remediation is
+validated locally with Trinity R6 PASS.
+**Scope**: Pending Approval tickets show "Approve" / "Reject" buttons. Reject requires feedback using an inline feedback form in the first implementation; modal polish is deferred. Approve transitions to Closed; Reject transitions back to In Progress with feedback comment injected into assignee's hardline.
 **Acceptance**: clare submits T-001 to Pending Approval; user rejects with feedback "missing docs"; clare receives feedback in terminal and continues; clare resubmits; user approves; ticket Closed
 **Estimate**: 2-4 days
 

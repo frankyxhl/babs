@@ -42,6 +42,14 @@ defmodule Babs.Citizens.Tickets.Writer do
     GenServer.call(pid, {:transition, id, to_state, event, opts}, 30_000)
   end
 
+  def approve(pid, id, opts \\ []) do
+    GenServer.call(pid, {:approve, id, opts}, 30_000)
+  end
+
+  def reject(pid, id, feedback, opts \\ []) do
+    GenServer.call(pid, {:reject, id, feedback, opts}, 30_000)
+  end
+
   @impl true
   def init(opts) do
     id = Keyword.fetch!(opts, :id)
@@ -134,6 +142,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     result =
       with {:ok, original} <- read_current(path, id),
            {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           :ok <- guard_phase11_transition(ticket, to_state, event),
            {:ok, updated, event_name} <- StateMachine.transition(ticket, to_state, event),
            :ok <- run_before_write(path, opts),
            :ok <- detect_conflict(path, original, id),
@@ -148,6 +157,56 @@ defmodule Babs.Citizens.Tickets.Writer do
                transition_event(event_name, ticket.state, updated.state, id, now, by)
              ) do
         {:ok, %{ticket: updated}}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:approve, id, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           :ok <- require_assignees(ticket),
+           {:ok, updated, "approved"} <- StateMachine.transition(ticket, "closed", "approved"),
+           :ok <- run_before_write(path, opts),
+           :ok <- detect_conflict(path, original, id),
+           now <- now(opts),
+           by <- by(opts),
+           updated <- %{updated | updated_at: now},
+           events <- approval_events(ticket, updated, now, by),
+           :ok <- validate_events(id, events),
+           :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
+           :ok <- append_events(state.root, id, events) do
+        {:ok, %{ticket: updated}}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:reject, id, feedback, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           {:ok, feedback} <- reject_feedback(feedback),
+           :ok <- require_assignees(ticket),
+           {:ok, updated, "rejected"} <-
+             StateMachine.transition(ticket, "in_progress", "rejected"),
+           :ok <- run_before_write(path, opts),
+           :ok <- detect_conflict(path, original, id),
+           now <- now(opts),
+           by <- by(opts),
+           updated <- %{updated | updated_at: now},
+           events <- rejection_events(ticket, updated, feedback, now, by),
+           :ok <- validate_events(id, events),
+           :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
+           :ok <- append_events(state.root, id, events) do
+        inject_feedback(state.root, updated, feedback, now, by, opts)
       end
 
     {:reply, result, state}
@@ -256,6 +315,29 @@ defmodule Babs.Citizens.Tickets.Writer do
     end
   end
 
+  defp approval_events(original, updated, now, by) do
+    [
+      transition_event("approved", original.state, updated.state, original.id, now, by),
+      transition_event("state_change", original.state, updated.state, original.id, now, by)
+    ]
+  end
+
+  defp rejection_events(original, updated, feedback, now, by) do
+    [
+      transition_event("rejected", original.state, updated.state, original.id, now, by)
+      |> Map.put("feedback", feedback),
+      transition_event("state_change", original.state, updated.state, original.id, now, by),
+      %{
+        "ts" => now,
+        "event" => "feedback_injection_attempted",
+        "by" => by,
+        "ticket_id" => original.id,
+        "injected_to" => original.assignees,
+        "kind" => "rejection_feedback"
+      }
+    ]
+  end
+
   defp transition_event(event_name, from, to, id, now, by) do
     %{
       "ts" => now,
@@ -299,6 +381,65 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
+  defp feedback_injected_event(ticket, slug, now, by) do
+    %{
+      "ts" => now,
+      "event" => "feedback_injected",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug],
+      "kind" => "rejection_feedback"
+    }
+  end
+
+  defp feedback_injection_failed_event(ticket, slug, now, by, reason) do
+    %{
+      "ts" => now,
+      "event" => "feedback_injection_failed",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug],
+      "kind" => "rejection_feedback",
+      "error" => error_text(reason)
+    }
+  end
+
+  defp inject_feedback(root, ticket, feedback, now, by, opts) do
+    failures =
+      ticket.assignees
+      |> Enum.map(fn slug ->
+        {slug, deliver_feedback(root, ticket, slug, feedback, now, by, opts)}
+      end)
+      |> Enum.filter(fn {_slug, result} -> match?({:error, _reason}, result) end)
+      |> Enum.map(fn {slug, {:error, reason}} -> {slug, reason} end)
+
+    if failures == [] do
+      {:ok, %{ticket: ticket, delivery: {:feedback_injected, ticket.assignees}}}
+    else
+      {:error, {:feedback_injection_failed, ticket.id, failures}}
+    end
+  end
+
+  defp deliver_feedback(root, ticket, slug, feedback, now, by, opts) do
+    prompt = Injector.feedback_prompt(ticket, slug, feedback)
+
+    with :ok <- Injector.prepare(slug, opts),
+         :ok <- Injector.inject(slug, prompt, opts),
+         :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
+      :ok
+    else
+      {:error, reason} ->
+        _ignored =
+          History.append(
+            root,
+            ticket.id,
+            feedback_injection_failed_event(ticket, slug, now, by, reason)
+          )
+
+        {:error, reason}
+    end
+  end
+
   defp append_events(root, id, events) do
     Enum.reduce_while(events, :ok, fn event, :ok ->
       case History.append(root, id, event) do
@@ -306,6 +447,30 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+  end
+
+  defp validate_events(id, events) do
+    Enum.reduce_while(events, :ok, fn event, :ok ->
+      case History.validate_appendable(id, event) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp guard_phase11_transition(%{state: "pending_approval", id: id}, "in_progress", "rejected"),
+    do: {:error, {:use_reject_ticket, id}}
+
+  defp guard_phase11_transition(%{state: "pending_approval", id: id}, "in_progress", nil),
+    do: {:error, {:use_reject_ticket, id}}
+
+  defp guard_phase11_transition(%{state: "pending_approval", id: id}, "closed", "approved"),
+    do: {:error, {:use_approve_ticket, id}}
+
+  defp guard_phase11_transition(_ticket, _to_state, _event), do: :ok
+
+  defp require_assignees(%{id: id, assignees: assignees}) do
+    if assignees == [], do: {:error, {:no_assignees, id}}, else: :ok
   end
 
   defp read_current(path, id) do
@@ -358,6 +523,16 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, {:invalid_history_event, {:missing_keys, ["by"]}}}
     end
   end
+
+  defp reject_feedback(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> {:error, {:invalid_history_event, :empty_feedback}}
+      trimmed -> {:ok, trimmed}
+    end
+  end
+
+  defp reject_feedback(_value),
+    do: {:error, {:invalid_history_event, {:missing_keys, ["feedback"]}}}
 
   defp fetch_attr(attrs, key) when is_map(attrs),
     do: Map.get(attrs, key) || Map.get(attrs, Atom.to_string(key))

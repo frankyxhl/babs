@@ -86,6 +86,28 @@ defmodule Babs.Citizens.Tickets.Api do
     end
   end
 
+  @spec approve_ticket(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def approve_ticket(id, opts \\ []) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.approve(pid, id, opts)
+    end
+  end
+
+  @spec reject_ticket(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def reject_ticket(id, feedback, opts \\ []) when is_binary(feedback) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.reject(pid, id, feedback, opts)
+    end
+  end
+
   defp new_ticket(id, title, body, path, attrs, opts) do
     now = Keyword.get(opts, :now, DateTime.utc_now(:second) |> DateTime.to_iso8601())
 

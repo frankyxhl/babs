@@ -59,9 +59,15 @@ defmodule Babs.Citizens.Tickets.StateMachine do
   defp event_for("open", "cancelled", event), do: require_event(event, "cancelled")
   defp event_for("in_progress", "pending_approval", nil), do: {:ok, "state_change"}
   defp event_for("in_progress", "pending_approval", "state_change"), do: {:ok, "state_change"}
+
+  defp event_for("in_progress", "pending_approval", event),
+    do: require_event(event, "state_change")
+
   defp event_for("in_progress", "cancelled", event), do: require_event(event, "cancelled")
   defp event_for("pending_approval", "closed", nil), do: {:ok, "state_change"}
   defp event_for("pending_approval", "closed", "state_change"), do: {:ok, "state_change"}
+  defp event_for("pending_approval", "closed", "approved"), do: {:ok, "approved"}
+  defp event_for("pending_approval", "closed", event), do: require_event(event, "approved")
   defp event_for("pending_approval", "in_progress", event), do: require_event(event, "rejected")
   defp event_for("pending_approval", "cancelled", event), do: require_event(event, "cancelled")
   defp event_for(from, to, _event), do: {:error, {:invalid_transition, from, to}}

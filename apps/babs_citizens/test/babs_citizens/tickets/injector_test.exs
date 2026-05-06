@@ -16,6 +16,16 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert String.ends_with?(prompt, "\n")
   end
 
+  test "feedback prompt includes rejection feedback for the assignee" do
+    prompt = Injector.feedback_prompt(ticket(), "clare", "  Missing docs.  ")
+
+    assert prompt =~ "[Babs Ticket T-2026-05-06-001 rejected]"
+    assert prompt =~ "State: in_progress"
+    assert prompt =~ "Assignee: clare"
+    assert prompt =~ "Feedback from user:\nMissing docs."
+    assert String.ends_with?(prompt, "\n")
+  end
+
   test "prepare validates the citizen exists" do
     assert {:error, {:unknown_citizen, "ghost"}} =
              Injector.prepare("ghost", citizen_fetcher: fn _slug -> nil end)

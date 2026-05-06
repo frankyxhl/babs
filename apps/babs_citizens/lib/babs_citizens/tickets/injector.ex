@@ -23,6 +23,21 @@ defmodule Babs.Citizens.Tickets.Injector do
     """
   end
 
+  @spec feedback_prompt(Ticket.t(), String.t(), String.t()) :: String.t()
+  def feedback_prompt(%Ticket{} = ticket, slug, feedback)
+      when is_binary(slug) and is_binary(feedback) do
+    """
+    [Babs Ticket #{ticket.id} rejected]
+    State: in_progress
+    Assignee: #{slug}
+
+    Feedback from user:
+    #{String.trim(feedback)}
+
+    Please address the feedback and continue work in this terminal.
+    """
+  end
+
   @spec prepare(String.t(), keyword()) :: :ok | {:error, term()}
   def prepare(slug, opts \\ []) when is_binary(slug) do
     with {:ok, _record} <- fetch_citizen(slug, opts),
