@@ -13,8 +13,7 @@ defmodule Babs.Citizens.Tickets.TicketId do
          {year, ""} <- Integer.parse(year),
          {month, ""} <- Integer.parse(month),
          {day, ""} <- Integer.parse(day),
-         {sequence, ""} <- Integer.parse(sequence),
-         true <- sequence > 0,
+         {:ok, sequence} <- parse_sequence(sequence),
          {:ok, date} <- Date.new(year, month, day) do
       {:ok, %{date: date, sequence: sequence}}
     else
@@ -23,6 +22,15 @@ defmodule Babs.Citizens.Tickets.TicketId do
   end
 
   def parse(value), do: {:error, {:invalid_id, value}}
+
+  defp parse_sequence(value) do
+    with {sequence, ""} <- Integer.parse(value),
+         true <- sequence > 0 and sequence <= @max_sequence do
+      {:ok, sequence}
+    else
+      _ -> :error
+    end
+  end
 
   @spec validate(String.t()) :: :ok | {:error, {:invalid_id, term()}}
   def validate(id) do

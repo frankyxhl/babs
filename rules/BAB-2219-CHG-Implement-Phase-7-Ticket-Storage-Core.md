@@ -262,14 +262,17 @@ Implemented locally on branch `codex/m3-phase-7-ticket-core` on 2026-05-06:
   advancing `updated_at` without a matching history event.
 - Addressed GitHub Codex R2 by rejecting `T-YYYY-MM-DD-000` in
   `TicketId.parse/1`; Ticket sequences are strictly `001` through `999`.
+- Addressed GitHub Codex R3 by making the sequence bound explicit in
+  `TicketId.parse/1`, rejecting multiline titles before markdown rendering, and
+  surfacing orphan `.history.jsonl` files in `Store.list/1`.
 
 Local validation passed:
 
 - `mise exec -- mix format --check-formatted`
 - `mise exec -- mix compile --warnings-as-errors`
-- `mise exec -- mix test` — 157 `:babs_citizens` tests and 51 `:babs` tests
+- `mise exec -- mix test` — 159 `:babs_citizens` tests and 51 `:babs` tests
   passed.
-- `mise exec -- mix test --cover` — `:babs_citizens` 82.56% and `:babs`
+- `mise exec -- mix test --cover` — `:babs_citizens` 82.65% and `:babs`
   81.49%.
 - `mise exec -- mix babs.gate_a`
 - `af validate --root .` — 115 documents checked, 0 issues.
@@ -339,6 +342,11 @@ change browser JavaScript or browser-visible behavior.
 - GitHub Codex R2 on PR #16 reviewed commit `4de2ec5b5f` and reported one P2
   finding: `T-YYYY-MM-DD-000` was accepted. Fixed by adding a lower-bound check
   in `TicketId.parse/1` and regression coverage.
+- GitHub Codex R3 on PR #16 reviewed commit `c4a98bb3ad` and reported P2
+  findings for zero-sequence clarity, multiline create titles, and orphan
+  history files. Fixed by moving sequence validation into an explicit helper,
+  rejecting multiline titles before rendering, surfacing orphan histories as
+  invalid list entries, and adding regression coverage.
 
 ---
 
@@ -353,3 +361,4 @@ change browser JavaScript or browser-visible behavior.
 | 2026-05-06 | Record local implementation validation and Trinity implementation-review fixes | Codex |
 | 2026-05-06 | Record GitHub Codex R1 oversized-comment fix | Codex |
 | 2026-05-06 | Record GitHub Codex R2 zero-sequence Ticket ID fix | Codex |
+| 2026-05-06 | Record GitHub Codex R3 multiline title and orphan history fixes | Codex |

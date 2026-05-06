@@ -102,12 +102,23 @@ defmodule Babs.Citizens.Tickets.Api do
   defp required_attr(attrs, key) do
     case attr(attrs, key) do
       value when is_binary(value) ->
-        if String.trim(value) == "",
-          do: {:error, {:invalid_frontmatter, {:blank, Atom.to_string(key)}}},
-          else: {:ok, value}
+        validate_required_string(key, value)
 
       _ ->
         {:error, {:invalid_frontmatter, {:missing_keys, [Atom.to_string(key)]}}}
+    end
+  end
+
+  defp validate_required_string(key, value) do
+    cond do
+      String.trim(value) == "" ->
+        {:error, {:invalid_frontmatter, {:blank, Atom.to_string(key)}}}
+
+      key == :title and String.contains?(value, ["\n", "\r"]) ->
+        {:error, {:invalid_frontmatter, {:multiline, "title"}}}
+
+      true ->
+        {:ok, value}
     end
   end
 

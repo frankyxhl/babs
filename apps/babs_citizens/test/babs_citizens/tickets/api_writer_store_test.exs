@@ -163,6 +163,24 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert ticket_id == ticket.id
   end
 
+  test "list surfaces history files without matching markdown as invalid" do
+    root = tmp_root()
+    File.write!(Path.join(root, "T-2026-05-06-001.history.jsonl"), "{}\n")
+
+    assert {:ok,
+            %{
+              tickets: [],
+              invalid: [
+                %{
+                  path: path,
+                  reason: {:invalid_history, {"T-2026-05-06-001", 0, :orphan_history}}
+                }
+              ]
+            }} = Api.list_tickets(tickets_root: root)
+
+    assert Path.basename(path) == "T-2026-05-06-001.history.jsonl"
+  end
+
   test "create validates generated ticket and removes empty id claim on failure" do
     root = tmp_root()
 
@@ -184,6 +202,19 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              )
 
     assert ticket.id == "T-2026-05-06-001"
+  end
+
+  test "create rejects multiline titles before rendering markdown" do
+    root = tmp_root()
+
+    assert {:error, {:invalid_frontmatter, {:multiline, "title"}}} =
+             Api.create_ticket(%{title: "Bad\nTitle", body: "Body."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    refute File.exists?(Path.join(root, "T-2026-05-06-001.md"))
   end
 
   test "writer ignores stale idle timeout refs" do

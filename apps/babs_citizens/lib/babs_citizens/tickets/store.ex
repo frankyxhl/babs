@@ -12,7 +12,7 @@ defmodule Babs.Citizens.Tickets.Store do
   def list(opts \\ []) do
     root = Config.tickets_root(opts)
 
-    entries =
+    markdown_entries =
       if File.dir?(root) do
         root
         |> Path.join("T-*.md")
@@ -21,6 +21,8 @@ defmodule Babs.Citizens.Tickets.Store do
       else
         []
       end
+
+    entries = markdown_entries ++ orphan_history_entries(root, markdown_entries)
 
     tickets =
       entries
@@ -81,6 +83,31 @@ defmodule Babs.Citizens.Tickets.Store do
       {:error, reason} ->
         {:invalid, %{path: path, reason: {:redacted_io_error, {:read_ticket, reason}}}}
     end
+  end
+
+  defp orphan_history_entries(root, markdown_entries) do
+    markdown_paths =
+      markdown_entries
+      |> Enum.map(fn
+        {:ok, ticket} -> ticket.path
+        {:invalid, %{path: path}} -> path
+      end)
+      |> MapSet.new()
+
+    root
+    |> Path.join("T-*.history.jsonl")
+    |> Path.wildcard()
+    |> Enum.reject(fn history_path ->
+      markdown_path =
+        history_path
+        |> String.replace_suffix(".history.jsonl", ".md")
+
+      MapSet.member?(markdown_paths, markdown_path)
+    end)
+    |> Enum.map(fn history_path ->
+      id = Path.basename(history_path, ".history.jsonl")
+      {:invalid, %{path: history_path, reason: {:invalid_history, {id, 0, :orphan_history}}}}
+    end)
   end
 
   defp filter(tickets, opts) do
