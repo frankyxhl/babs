@@ -109,7 +109,7 @@ defmodule BabsWeb.AttachCitizenLive do
             <span>tmux pane</span>
             <select name="attach[target]" data-testid="attach-target-select">
               <option value="">Select tmux pane</option>
-              <option :for={pane <- @attachable_panes} value={pane.target} selected={pane.target == @selected_target}>
+              <option :for={pane <- @attachable_panes} value={pane_value(pane)} selected={pane_value(pane) == @selected_target}>
                 {pane_label(pane)}
               </option>
             </select>
@@ -143,11 +143,11 @@ defmodule BabsWeb.AttachCitizenLive do
             <div :if={@attachable_panes == []} class="empty">No unmanaged tmux panes available.</div>
             <button
               :for={pane <- @attachable_panes}
-              class={["candidate", pane.target == @selected_target && "is-selected"]}
+              class={["candidate", pane_value(pane) == @selected_target && "is-selected"]}
               type="button"
               phx-click="select"
               phx-value-slug={@selected_slug}
-              phx-value-target={pane.target}
+              phx-value-target={pane_value(pane)}
               data-testid={"attach-pane-#{pane.pane_id}"}
             >
               <span>{pane_label(pane)}</span>
@@ -213,6 +213,9 @@ defmodule BabsWeb.AttachCitizenLive do
     |> Application.get_env(__MODULE__, [])
     |> Keyword.get(:attach_action, &Lifecycle.attach_imported_citizen/2)
   end
+
+  defp pane_value(%{pane_id: pane_id}) when is_binary(pane_id) and pane_id != "", do: pane_id
+  defp pane_value(pane), do: pane.target
 
   defp pane_label(pane),
     do: "#{pane.session_name}:#{pane.window_index}.#{pane.pane_index} #{pane.pane_id}"

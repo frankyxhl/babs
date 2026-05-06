@@ -40,6 +40,7 @@ defmodule BabsWeb.AttachCitizenLiveTest do
     assert html =~ ~s(data-testid="attach-citizen-clare")
     refute html =~ ~s(data-testid="attach-citizen-busy")
     assert html =~ ~s(data-testid="attach-pane-%101")
+    assert html =~ ~s(value="%101")
     assert html =~ "operator:0.0 %101"
     assert html =~ "Attachable"
     assert html =~ "Babs-owned"
@@ -62,11 +63,11 @@ defmodule BabsWeb.AttachCitizenLiveTest do
 
     view
     |> form(~s(form[data-testid="attach-form"]), %{
-      "attach" => %{"slug" => "clare", "target" => "operator:0.0"}
+      "attach" => %{"slug" => "clare", "target" => "%101"}
     })
     |> render_submit()
 
-    assert_receive {:attach_action, "clare", "operator:0.0"}
+    assert_receive {:attach_action, "clare", "%101"}
     assert_redirect(view, "/citizens/clare?socket_token=socket-token")
   end
 
@@ -91,11 +92,11 @@ defmodule BabsWeb.AttachCitizenLiveTest do
 
     view
     |> form(~s(form[data-testid="attach-form"]), %{
-      "attach" => %{"slug" => "clare", "target" => "operator:0.0"}
+      "attach" => %{"slug" => "clare", "target" => "%101"}
     })
     |> render_submit()
 
-    assert_receive {:attach_action, "clare", "operator:0.0"}
+    assert_receive {:attach_action, "clare", "%101"}
     html = render_async(view, 1_000)
 
     assert_receive :inventory_requested

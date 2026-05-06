@@ -249,6 +249,12 @@ conversation record while the terminal remains the execution transport.
 - Implementation follow-up R3 `.trinity/reviews/20260507-012721-Phase-12a-13-PR-21-R5-fixes`:
   GLM PASS and DeepSeek PASS with no blockers for the final PR #21 R5 fixes.
   Remaining observations were informational/non-blocking.
+- Implementation follow-up R4 `.trinity/reviews/20260507-020009-Phase-12a-13-final-stable-pane-and-terminal-focus-fixes`:
+  GLM PASS and DeepSeek PASS with no blockers for the final stable pane-id
+  attach submission and browser terminal focus recovery fixes.
+- Implementation follow-up R5 `.trinity/reviews/20260507-020800-Phase-12a-13-final-terminal-focus-followup`:
+  GLM PASS and DeepSeek PASS with no blockers after the terminal focus recovery
+  advisory hardening.
 
 ## Implementation Results
 
@@ -278,6 +284,11 @@ conversation record while the terminal remains the execution transport.
 - Matched the browser terminal startup behavior to hardline by enabling
   macOS Option-as-Meta, keeping terminal-owned shortcuts focused in xterm, and
   refitting when the terminal container changes size.
+- Added terminal focus recovery after `Escape` and other terminal-owned keys so
+  common browser-extension focus theft is repaired when the page can observe the
+  key event. Extensions that consume `Escape` before page JavaScript, such as
+  Vimium, still require an operator-side site exclusion for full terminal
+  parity.
 - Prefer the live tmux pane snapshot on channel join, with transcript replay as
   a fallback, so browser reconnects after `:babs_citizens` reload show the
   current terminal screen rather than a stale transcript replay.
@@ -298,14 +309,14 @@ Final local validation for the combined Phase 12a + Phase 13 working tree:
 - `mise exec -- mix test`: `:babs_citizens` 235 tests, `:babs` 75 tests, all
   pass
 - `mise exec -- mix test --cover --export-coverage phase13` then
-  `mise exec -- mix cmd mix test.coverage`: `:babs_citizens` 81.24% and
-  `:babs` 87.66%
-- `npm run test:js`: 12 tests pass
+  `mise exec -- mix cmd mix test.coverage`: `:babs_citizens` 81.28% and
+  `:babs` 87.55%
+- `npm run test:js`: 15 tests pass
 - `npm run test:bdd`: pass; expected externally managed-server skips remain for
   managed restart/fd-threshold scenarios, and the `BABS_WORKSPACE_ROOT` scenario
   is skipped when that env var is unset
-- `npm run test:e2e`: 12 Playwright tests pass, including browser tmux-prefix,
-  Ctrl-A, and Alt-B shortcut parity
+- `npm run test:e2e`: 13 Playwright tests pass, including browser tmux-prefix,
+  Ctrl-A, Alt-B, and extension-style `Escape` focus recovery shortcut parity
 - `mise exec -- mix babs.gate_a`: pass
 - `af validate --root .`: 131 documents checked, 0 issues
 - `git diff --check`: pass
@@ -341,3 +352,4 @@ Final local validation for the combined Phase 12a + Phase 13 working tree:
 | 2026-05-06 | Fix GitHub Codex R5 P2 by omitting notification-attempt history for storage-only comments | Codex |
 | 2026-05-06 | Refresh final validation after R5 fixes; no R6 requested per operator review cap | Codex |
 | 2026-05-07 | Record Trinity follow-up R3 PASS for final PR #21 R5 fixes | Codex |
+| 2026-05-07 | Add browser terminal focus recovery for extension-stealing `Escape`, refresh validation, and record Trinity R4/R5 PASS | Codex |

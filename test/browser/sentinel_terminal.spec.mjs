@@ -184,6 +184,12 @@ function externalTmuxCaptureContains(sessionName, marker) {
   }
 }
 
+function externalTmuxPaneId(sessionName) {
+  return execFileSync("tmux", ["list-panes", "-t", sessionName, "-F", "#{pane_id}"], {
+    encoding: "utf8",
+  }).trim();
+}
+
 function tmuxWindowCount(sessionName) {
   const output = execFileSync("tmux", ["list-windows", "-t", sessionName, "-F", "#{window_id}"], {
     encoding: "utf8",
@@ -326,6 +332,53 @@ test("browser terminal owns readline-style Ctrl and Alt shortcut sequences", asy
     await expect
       .poll(async () => await page.locator(".xterm").innerText())
       .toContain(altMarker);
+  } finally {
+    cleanupSpawnedCitizen(slug);
+  }
+});
+
+test("browser terminal restores focus after Escape so extension shortcuts do not steal input", async ({
+  page
+}) => {
+  const slug = `bdd-e2e-escape-focus-${Date.now()}`;
+  const marker = `BABS_ESCAPE_FOCUS_${Date.now()}`;
+
+  try {
+    await createShellCitizen(page, slug);
+
+    await page.evaluate(() => {
+      document.addEventListener(
+        "keydown",
+        (event) => {
+          if (event.key === "Escape") {
+            window.setTimeout(() => {
+              document.body.tabIndex = -1;
+              document.body.focus();
+            }, 0);
+          }
+        },
+        true
+      );
+    });
+
+    await page.locator(".xterm-helper-textarea").click({ force: true });
+    await page.evaluate(() => window.__babsTerminalClient?.terminal.focus());
+    await page.keyboard.press("Escape");
+
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document.activeElement?.classList.contains("xterm-helper-textarea") || false
+        )
+      )
+      .toBe(true);
+
+    await page.keyboard.insertText(`printf '${marker}\\n'`);
+    await page.keyboard.press("Enter");
+
+    await expect
+      .poll(async () => await page.locator(".xterm").innerText())
+      .toContain(marker);
   } finally {
     cleanupSpawnedCitizen(slug);
   }
@@ -477,7 +530,7 @@ test("external tmux attach uses detach semantics and leaves imported session ali
   const suffix = Date.now();
   const slug = `bdd-e2e-import-${suffix}`;
   const externalSession = `bdd-e2e-external-${suffix}`;
-  const target = `${externalSession}:0.0`;
+  let paneId;
 
   try {
     await createShellCitizen(page, slug);
@@ -490,6 +543,7 @@ test("external tmux attach uses detach semantics and leaves imported session ali
 
     startExternalTmuxSession(externalSession);
     expect(externalTmuxSessionAlive(externalSession)).toBe(true);
+    paneId = externalTmuxPaneId(externalSession);
     const preexistingMarker = `BABS_E2E_IMPORTED_PREEXISTING_${suffix}`;
     execFileSync("tmux", [
       "send-keys",
@@ -506,7 +560,7 @@ test("external tmux attach uses detach semantics and leaves imported session ali
     await expect(page.getByTestId("attach-submit")).toBeVisible();
     await expect(page.locator('[data-testid="attach-submit"] [data-icon="link"]')).toBeVisible();
 
-    await submitAttachForm(page, slug, target);
+    await submitAttachForm(page, slug, paneId);
 
     await expect(page).toHaveURL(new RegExp(`/citizens/${slug}(\\?.*)?$`));
     await expect(page.locator(".xterm")).toBeVisible();

@@ -46,18 +46,88 @@ export function terminalShouldOwnKey(event) {
   return Boolean(event.ctrlKey || event.altKey || terminalOwnedKeys.has(event.key));
 }
 
-export function installTerminalKeyboardHandler(terminal) {
+function createTerminalRefocusScheduler(terminal, scheduleRefocus) {
+  const pendingRefocus = { current: false };
+
+  return () => scheduleTerminalRefocus(terminal, scheduleRefocus, pendingRefocus);
+}
+
+function scheduleTerminalRefocus(terminal, scheduleRefocus, pendingRefocus) {
+  if (pendingRefocus.current || typeof terminal.focus !== "function") {
+    return;
+  }
+
+  pendingRefocus.current = true;
+  let remaining = 2;
+  const finish = () => {
+    remaining -= 1;
+
+    if (remaining === 0) {
+      pendingRefocus.current = false;
+    }
+  };
+
+  for (const delay of [0, 30]) {
+    scheduleRefocus(() => {
+      try {
+        terminal.focus();
+      } catch {
+        // Browser focus can be transient during reload or extension handoff.
+      } finally {
+        finish();
+      }
+    }, delay);
+  }
+}
+
+function shouldRecoverTerminalFocus(event, root, doc) {
+  const activeElement = doc.activeElement;
+
+  return Boolean(
+    (event.target && root.contains?.(event.target)) ||
+      (activeElement && root.contains?.(activeElement)) ||
+      activeElement === doc.body
+  );
+}
+
+export function installTerminalKeyboardHandler(terminal, options = {}) {
   if (!terminal || typeof terminal.attachCustomKeyEventHandler !== "function") {
     return false;
   }
 
+  const scheduleRefocus =
+    options.scheduleRefocus ||
+    (typeof globalThis.setTimeout === "function" && globalThis.setTimeout.bind(globalThis));
+  const refocusTerminal = scheduleRefocus
+    ? createTerminalRefocusScheduler(terminal, scheduleRefocus)
+    : () => {};
+
   terminal.attachCustomKeyEventHandler((event) => {
     if (terminalShouldOwnKey(event)) {
       event.preventDefault?.();
+
+      if (scheduleRefocus) {
+        refocusTerminal();
+      }
     }
 
     return true;
   });
+
+  if (scheduleRefocus && options.document?.addEventListener && options.root) {
+    options.document.addEventListener(
+      "keydown",
+      (event) => {
+        if (
+          terminalShouldOwnKey(event) &&
+          shouldRecoverTerminalFocus(event, options.root, options.document)
+        ) {
+          refocusTerminal();
+        }
+      },
+      true
+    );
+  }
 
   return true;
 }

@@ -183,6 +183,12 @@ already applies: `:babs_citizens >= 80%` and `:babs >= 75%`.
 - Implementation R3 `.trinity/reviews/20260507-012721-Phase-12a-13-PR-21-R5-fixes`:
   GLM PASS and DeepSeek PASS with no blockers for the final PR #21 R5 fixes.
   Remaining observations were informational/non-blocking.
+- Implementation R4 `.trinity/reviews/20260507-020009-Phase-12a-13-final-stable-pane-and-terminal-focus-fixes`:
+  GLM PASS and DeepSeek PASS with no blockers for the final stable pane-id
+  attach submission and browser terminal focus recovery fixes.
+- Implementation R5 `.trinity/reviews/20260507-020800-Phase-12a-13-final-terminal-focus-followup`:
+  GLM PASS and DeepSeek PASS with no blockers after terminal focus recovery
+  advisory hardening.
 
 ## Implementation Results
 
@@ -205,6 +211,9 @@ already applies: `:babs_citizens >= 80%` and `:babs >= 75%`.
 - After import, lifecycle and reattach operations prefer the stable tmux
   `pane_id` while the positional `session:window.pane` target stays available
   as the operator-facing label.
+- The attach UI now submits stable `%pane_id` values instead of positional
+  `session:window.pane` values, so pane/window renumbering between render and
+  submit does not attach the wrong external pane.
 - Imported pane attach now separates the stable pane target from the session
   attach target: Babs selects the stored `%pane_id` and then attaches to the
   recorded tmux session name/session id.
@@ -227,16 +236,17 @@ Final local validation:
 - `mise exec -- mix test`: `:babs_citizens` 235 tests, `:babs` 75 tests, all
   pass
 - `mise exec -- mix test --cover --export-coverage phase13` then
-  `mise exec -- mix cmd mix test.coverage`: `:babs_citizens` 81.24% and
-  `:babs` 87.66%
-- `npm run test:js`: 12 tests pass
+  `mise exec -- mix cmd mix test.coverage`: `:babs_citizens` 81.28% and
+  `:babs` 87.55%
+- `npm run test:js`: 15 tests pass
 - `npm run test:bdd`: pass; expected externally managed-server skips remain for
   managed restart/fd-threshold scenarios, and the `BABS_WORKSPACE_ROOT` scenario
   is skipped when that env var is unset; the run used a dedicated automation
   Chrome via `BU_CDP_URL` so it did not attach to the operator's daily browser
   profile
-- `npm run test:e2e`: 12 Playwright tests pass, including imported external
-  tmux attach/detach and browser tmux-prefix/Ctrl-A/Alt-B shortcut parity
+- `npm run test:e2e`: 13 Playwright tests pass, including imported external
+  tmux attach/detach and browser tmux-prefix/Ctrl-A/Alt-B/`Escape` focus
+  recovery shortcut parity
 - `mise exec -- mix babs.gate_a`: pass
 - `af validate --root .`: 131 documents checked, 0 issues
 - `git diff --check`: pass
@@ -286,3 +296,4 @@ Final local validation:
 | 2026-05-06 | Fix GitHub Codex R5 P2 by snapshotting imported terminals from the attached pane target | Codex |
 | 2026-05-06 | Refresh final validation after R5 fixes; no R6 requested per operator review cap | Codex |
 | 2026-05-07 | Record Trinity implementation R3 PASS for final PR #21 R5 fixes | Codex |
+| 2026-05-07 | Fix stable pane-id attach submissions, add terminal focus recovery validation, and record Trinity R4/R5 PASS | Codex |

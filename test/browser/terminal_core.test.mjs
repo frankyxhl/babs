@@ -98,6 +98,118 @@ describe("terminal_core keyboard ownership", () => {
     assert.equal(cmdR.prevented(), false);
   });
 
+  it("schedules terminal refocus after terminal-owned shortcuts", () => {
+    let handler = null;
+    const scheduledDelays = [];
+    let focusCount = 0;
+    const terminal = {
+      attachCustomKeyEventHandler(callback) {
+        handler = callback;
+      },
+      focus() {
+        focusCount += 1;
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    const escape = keyEvent({ key: "Escape" });
+    assert.equal(handler(escape), true);
+    assert.equal(escape.prevented(), true);
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+
+    const cmdR = keyEvent({ metaKey: true, key: "r" });
+    assert.equal(handler(cmdR), true);
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+  });
+
+  it("recovers terminal focus from page-level terminal shortcut events", () => {
+    let documentHandler = null;
+    const document = {
+      activeElement: null,
+      body: {},
+      addEventListener(type, callback, capture) {
+        assert.equal(type, "keydown");
+        assert.equal(capture, true);
+        documentHandler = callback;
+      }
+    };
+    const root = {
+      contains(element) {
+        return element === root;
+      }
+    };
+    const scheduledDelays = [];
+    let focusCount = 0;
+    const terminal = {
+      attachCustomKeyEventHandler() {},
+      focus() {
+        focusCount += 1;
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        document,
+        root,
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    document.activeElement = document.body;
+    documentHandler(keyEvent({ key: "Escape", target: document.body }));
+
+    assert.deepEqual(scheduledDelays, [0, 30]);
+    assert.equal(focusCount, 2);
+  });
+
+  it("keeps refocus recovery available if terminal focus throws", () => {
+    let handler = null;
+    const scheduledDelays = [];
+    let attempts = 0;
+    const terminal = {
+      attachCustomKeyEventHandler(callback) {
+        handler = callback;
+      },
+      focus() {
+        attempts += 1;
+
+        if (attempts === 1) {
+          throw new Error("transient focus failure");
+        }
+      }
+    };
+
+    assert.equal(
+      installTerminalKeyboardHandler(terminal, {
+        scheduleRefocus(callback, delay) {
+          scheduledDelays.push(delay);
+          callback();
+        }
+      }),
+      true
+    );
+
+    assert.doesNotThrow(() => handler(keyEvent({ key: "Escape" })));
+    assert.doesNotThrow(() => handler(keyEvent({ key: "Escape" })));
+    assert.deepEqual(scheduledDelays, [0, 30, 0, 30]);
+    assert.equal(attempts, 4);
+  });
+
   it("does not fail when xterm custom key handlers are unavailable", () => {
     assert.equal(installTerminalKeyboardHandler({}), false);
   });

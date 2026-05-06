@@ -64,7 +64,7 @@ export function bootTerminal(options = {}) {
 
   terminal.loadAddon(fit);
   terminal.open(root);
-  installTerminalKeyboardHandler(terminal);
+  installTerminalKeyboardHandler(terminal, { document: doc, root });
   terminal.focus?.();
   fit.fit();
 

@@ -657,6 +657,7 @@ def scenario_imported_external_tmux_attach_detaches_without_killing_external_ses
     slug = unique_slug("bdd-import")
     external_session = unique_slug("bdd-external")
     target = f"{external_session}:0.0"
+    pane_id = ""
 
     try:
         create_shell_citizen_from_ui(context, slug)
@@ -666,13 +667,14 @@ def scenario_imported_external_tmux_attach_detaches_without_killing_external_ses
 
         start_external_tmux_session(external_session)
         assert external_tmux_session_alive(external_session)
+        pane_id = external_tmux_pane_id(external_session)
 
         context.open_path("/citizens/attach")
         assert_element_visible('[data-testid="attach-citizen-page"]', "attach Citizen page")
         assert_element_visible('[data-testid="attach-form"]', "attach form")
         assert "Attach tmux" in js("document.body.innerText")
         assert "Attachable" in js("document.body.innerText")
-        submit_attach_form(slug, target)
+        submit_attach_form(slug, pane_id)
 
         wait_until(
             f"browser to open imported terminal /citizens/{slug}",
@@ -1464,6 +1466,17 @@ def external_tmux_capture_contains(session_name: str, marker: str) -> bool:
     )
 
     return result.returncode == 0 and marker in result.stdout
+
+
+def external_tmux_pane_id(session_name: str) -> str:
+    result = subprocess.run(
+        ["tmux", "list-panes", "-t", session_name, "-F", "#{pane_id}"],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+
+    return result.stdout.strip()
 
 
 def create_shell_citizen_from_ui(context: BabsBddContext, slug: str) -> None:
