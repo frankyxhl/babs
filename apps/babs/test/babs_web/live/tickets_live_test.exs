@@ -6,6 +6,7 @@ defmodule BabsWeb.TicketsLiveTest do
 
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.Watcher
+  alias Babs.Citizens.{CitizenRecord, Repo}
 
   @endpoint BabsWeb.Endpoint
 
@@ -13,15 +14,25 @@ defmodule BabsWeb.TicketsLiveTest do
     ensure_apps!()
     root = tmp_root!()
     previous_root = Application.get_env(:babs_citizens, :tickets_root)
+    previous_runtime_opts = Application.get_env(:babs_citizens, :ticket_runtime_opts)
     Application.put_env(:babs_citizens, :tickets_root, root)
+    Babs.Citizens.RepoCase.ensure_repo!()
+    Repo.delete_all(CitizenRecord)
 
     on_exit(fn ->
       File.rm_rf!(root)
+      Repo.delete_all(CitizenRecord)
 
       if previous_root do
         Application.put_env(:babs_citizens, :tickets_root, previous_root)
       else
         Application.delete_env(:babs_citizens, :tickets_root)
+      end
+
+      if previous_runtime_opts do
+        Application.put_env(:babs_citizens, :ticket_runtime_opts, previous_runtime_opts)
+      else
+        Application.delete_env(:babs_citizens, :ticket_runtime_opts)
       end
     end)
 
@@ -162,6 +173,68 @@ defmodule BabsWeb.TicketsLiveTest do
     html = render(view)
     assert html =~ "After refresh"
     assert html =~ "Updated detail body."
+  end
+
+  test "assign action injects prompt and exposes legal transition controls", %{root: root} do
+    parent = self()
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    Application.put_env(:babs_citizens, :ticket_runtime_opts,
+      citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+      pane_lookup: fn "clare" -> {:ok, self()} end,
+      pane_injector: fn "clare", prompt ->
+        send(parent, {:injected, prompt})
+        :ok
+      end
+    )
+
+    ticket = create_ticket!(root, "Assignable", "Send this to Clare.")
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}?socket_token=token-1")
+    assert html =~ ~s(data-testid="ticket-assign-clare")
+    assert html =~ ~s(data-icon="user-plus")
+
+    view
+    |> element(~s(button[data-testid="ticket-assign-clare"]))
+    |> render_click()
+
+    assert_receive {:injected, prompt}
+    assert prompt =~ "Send this to Clare."
+
+    html = render_async(view, 1_000)
+    assert html =~ "Assigned to clare"
+    assert html =~ "in_progress"
+    assert html =~ ~s(data-testid="ticket-transition-pending_approval")
+    assert html =~ ~s(data-testid="ticket-unassign-clare")
+    assert html =~ ~s(data-icon="route")
+    assert html =~ ~s(data-icon="undo")
+  end
+
+  test "transition and unassign actions show only legal phase controls", %{root: root} do
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    ticket =
+      create_ticket!(root, "Transitionable", "Move through states.",
+        state: "in_progress",
+        assignees: ["clare"]
+      )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    assert html =~ ~s(data-testid="ticket-transition-pending_approval")
+    assert html =~ ~s(data-testid="ticket-unassign-clare")
+
+    view
+    |> element(~s(button[data-testid="ticket-transition-pending_approval"]))
+    |> render_click()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Moved to pending_approval"
+    assert html =~ "pending_approval"
+    refute html =~ ~s(data-testid="ticket-unassign-clare")
+    assert html =~ ~s(data-testid="ticket-transition-cancelled")
+
+    assert {:error, {:invalid_transition, "pending_approval", "open"}} =
+             Api.unassign_ticket(ticket.id, "clare", tickets_root: root)
   end
 
   defp create_ticket!(root, title, body, opts \\ []) do

@@ -288,6 +288,8 @@ and full multi-CLI dogfood are explicitly deferred to Phase 9-12 by
   Ticket detail has PubSub refresh coverage, and watcher path normalization has
   an explanatory comment. CSS extraction and broader error-handling tightening
   remain deferred polish.
+- GitHub Codex PR review for PR #17 found no major issues on current head
+  `b5696348d49025e03c2e3959b68ddf90d21fac37`. PR #17 merged on 2026-05-06.
 
 ---
 
@@ -300,3 +302,4 @@ and full multi-CLI dogfood are explicitly deferred to Phase 9-12 by
 | 2026-05-06 | Mark CHG approved after GLM PASS and fold in advisory clarifications | Codex |
 | 2026-05-06 | Record local Phase 8 implementation and validation results | Codex |
 | 2026-05-06 | Record Trinity implementation review pass and advisory fixes | Codex |
+| 2026-05-06 | Record PR #17 merge after GitHub Codex found no major issues | Codex |

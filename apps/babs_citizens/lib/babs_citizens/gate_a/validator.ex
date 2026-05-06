@@ -93,7 +93,7 @@ defmodule Babs.Citizens.GateA.Validator do
 
   defp restart_citizens_app do
     with :ok <- stop_citizens_app(),
-         :ok <- Application.start(:babs_citizens) do
+         {:ok, _apps} <- Application.ensure_all_started(:babs_citizens) do
       :ok
     else
       {:error, reason} -> {:error, {:restart_citizens_failed, reason}}

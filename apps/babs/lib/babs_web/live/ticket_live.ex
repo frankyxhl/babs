@@ -7,6 +7,7 @@ defmodule BabsWeb.TicketLive do
 
   alias Babs.Citizens.Catalog
   alias Babs.Citizens.Tickets.Api
+  alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.Watcher
   alias BabsWeb.CitizenPath
   alias BabsWeb.TicketPath
@@ -22,7 +23,41 @@ defmodule BabsWeb.TicketLive do
      socket
      |> assign(:id, id)
      |> assign(:socket_token, Map.get(session, "socket_token", ""))
+     |> assign(:ticket_action_inflight, nil)
      |> assign_ticket()}
+  end
+
+  @impl true
+  def handle_event("assign", %{"slug" => slug}, socket) do
+    {:noreply,
+     start_ticket_action(socket, {:assign, slug}, fn ->
+       Api.assign_ticket(socket.assigns.id, slug)
+     end)}
+  end
+
+  def handle_event("transition", %{"to" => to_state} = params, socket) do
+    event = blank_to_nil(Map.get(params, "event"))
+
+    {:noreply,
+     start_ticket_action(socket, {:transition, to_state, event}, fn ->
+       Api.transition_ticket(socket.assigns.id, to_state, event)
+     end)}
+  end
+
+  def handle_event("unassign", %{"slug" => slug}, socket) do
+    {:noreply,
+     start_ticket_action(socket, {:unassign, slug}, fn ->
+       Api.unassign_ticket(socket.assigns.id, slug)
+     end)}
+  end
+
+  @impl true
+  def handle_async({:ticket_action, action}, {:ok, result}, socket) do
+    {:noreply, apply_ticket_action_result(socket, action, result)}
+  end
+
+  def handle_async({:ticket_action, action}, {:exit, reason}, socket) do
+    {:noreply, apply_ticket_action_result(socket, action, {:error, reason})}
   end
 
   @impl true
@@ -60,6 +95,18 @@ defmodule BabsWeb.TicketLive do
           </nav>
         </header>
 
+        <div :if={Phoenix.Flash.get(@flash, :info)} class="ticket-flash" data-testid="ticket-flash-info">
+          {Phoenix.Flash.get(@flash, :info)}
+        </div>
+
+        <div
+          :if={Phoenix.Flash.get(@flash, :error)}
+          class="ticket-flash ticket-flash-error"
+          data-testid="ticket-flash-error"
+        >
+          {Phoenix.Flash.get(@flash, :error)}
+        </div>
+
         <section class="detail-grid">
           <article class="detail-main">
             <div class={"state-badge state-#{@ticket.state}"}>{@ticket.state}</div>
@@ -67,6 +114,72 @@ defmodule BabsWeb.TicketLive do
           </article>
 
           <aside class="detail-side">
+            <section class="summary-panel action-panel" data-testid="ticket-actions">
+              <h2>Actions</h2>
+              <div class="ticket-actions">
+                <button
+                  :for={citizen <- @citizens}
+                  :if={assignable?(@ticket)}
+                  type="button"
+                  class="button"
+                  phx-click="assign"
+                  phx-value-slug={citizen.slug}
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid={"ticket-assign-#{citizen.slug}"}
+                  aria-label={"Assign #{@ticket.id} to #{citizen.display_name}"}
+                  title={"Assign to #{citizen.display_name}"}
+                >
+                  <BabsWeb.Icon.icon name="user-plus" /> {citizen.display_name}
+                </button>
+
+                <button
+                  :if={ready_for_approval?(@ticket)}
+                  type="button"
+                  class="button"
+                  phx-click="transition"
+                  phx-value-to="pending_approval"
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid="ticket-transition-pending_approval"
+                  aria-label="Move to pending approval"
+                  title="Move to pending approval"
+                >
+                  <BabsWeb.Icon.icon name="route" /> Pending Approval
+                </button>
+
+                <button
+                  :for={slug <- @ticket.assignees}
+                  :if={unassignable?(@ticket)}
+                  type="button"
+                  class="button"
+                  phx-click="unassign"
+                  phx-value-slug={slug}
+                  phx-confirm={"Unassign #{slug} from #{@ticket.id}?"}
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid={"ticket-unassign-#{slug}"}
+                  aria-label={"Unassign #{slug}"}
+                  title={"Unassign #{slug}"}
+                >
+                  <BabsWeb.Icon.icon name="undo" /> Unassign {slug}
+                </button>
+
+                <button
+                  :if={cancellable?(@ticket)}
+                  type="button"
+                  class="button button-danger"
+                  phx-click="transition"
+                  phx-value-to="cancelled"
+                  phx-value-event="cancelled"
+                  phx-confirm={"Cancel #{@ticket.id}?"}
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid="ticket-transition-cancelled"
+                  aria-label="Cancel ticket"
+                  title="Cancel ticket"
+                >
+                  <BabsWeb.Icon.icon name="ban" /> Cancel
+                </button>
+              </div>
+            </section>
+
             <section class="summary-panel">
               <h2>Frontmatter</h2>
               <dl>
@@ -139,17 +252,21 @@ defmodule BabsWeb.TicketLive do
   end
 
   defp assign_ticket(socket) do
-    case Api.show_ticket(socket.assigns.id, known_citizens: known_citizens()) do
+    citizens = citizen_options()
+
+    case Api.show_ticket(socket.assigns.id, known_citizens: Enum.map(citizens, & &1.slug)) do
       {:ok, %{ticket: ticket, history: history}} ->
         socket
         |> assign(:ticket, ticket)
         |> assign(:history, history)
+        |> assign(:citizens, citizens)
         |> assign(:error, nil)
 
       {:error, reason} ->
         socket
         |> assign(:ticket, nil)
         |> assign(:history, [])
+        |> assign(:citizens, citizens)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
   end
@@ -184,7 +301,17 @@ defmodule BabsWeb.TicketLive do
     h1 { margin: 6px 0 0; font-size: 27px; line-height: 1.12; font-weight: 700; letter-spacing: 0; }
     h2 { margin: 0 0 10px; font-size: 15px; letter-spacing: 0; }
     .tickets-subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+    .ticket-flash {
+      border: 1px solid rgba(85, 179, 166, 0.5);
+      border-radius: 8px;
+      background: rgba(85, 179, 166, 0.12);
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+    .ticket-flash-error { border-color: rgba(220, 107, 107, 0.55); background: rgba(220, 107, 107, 0.12); }
     .tickets-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    .ticket-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
     .button, .back-link {
       border: 1px solid var(--line);
       border-radius: 6px;
@@ -198,7 +325,10 @@ defmodule BabsWeb.TicketLive do
       padding: 7px 11px;
       text-decoration: none;
       white-space: nowrap;
+      cursor: pointer;
     }
+    .button:disabled { cursor: wait; opacity: 0.62; }
+    .button-danger { color: var(--danger); }
     .back-link { min-height: 30px; padding: 5px 9px; color: var(--muted); font-size: 13px; }
     .button:hover, .back-link:hover { border-color: var(--accent); color: var(--text); }
     .icon { width: 16px; height: 16px; flex: 0 0 auto; }
@@ -261,10 +391,50 @@ defmodule BabsWeb.TicketLive do
   defp param(params, key) when is_map(params), do: Map.get(params, key)
   defp param(_params, _key), do: nil
 
-  defp known_citizens do
+  defp citizen_options do
     Catalog.list_citizens()
-    |> Enum.map(& &1.slug)
+    |> Enum.map(&%{slug: &1.slug, display_name: &1.display_name || &1.slug})
   rescue
     _error -> []
   end
+
+  defp assignable?(ticket), do: ticket.state == "open" and ticket.assignees == []
+  defp ready_for_approval?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
+  defp unassignable?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
+  defp cancellable?(ticket), do: ticket.state in ["open", "in_progress", "pending_approval"]
+
+  defp ticket_action_busy?(nil), do: false
+  defp ticket_action_busy?(_action), do: true
+
+  defp start_ticket_action(socket, action, fun) do
+    if ticket_action_busy?(socket.assigns.ticket_action_inflight) do
+      put_flash(socket, :error, "Ticket action already running")
+    else
+      socket
+      |> assign(:ticket_action_inflight, action)
+      |> start_async({:ticket_action, action}, fun)
+    end
+  end
+
+  defp apply_ticket_action_result(socket, action, {:ok, _result}) do
+    socket
+    |> assign(:ticket_action_inflight, nil)
+    |> assign_ticket()
+    |> put_flash(:info, ticket_action_success(action))
+  end
+
+  defp apply_ticket_action_result(socket, _action, {:error, reason}) do
+    socket
+    |> assign(:ticket_action_inflight, nil)
+    |> assign_ticket()
+    |> put_flash(:error, Error.message(reason))
+  end
+
+  defp ticket_action_success({:assign, slug}), do: "Assigned to #{slug}"
+  defp ticket_action_success({:transition, to_state, _event}), do: "Moved to #{to_state}"
+  defp ticket_action_success({:unassign, slug}), do: "Unassigned #{slug}"
+
+  defp blank_to_nil(nil), do: nil
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 end

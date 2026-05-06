@@ -17,5 +17,20 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:write_conflict, "T-2026-05-06-001"}) =~
              "changed while Babs was writing"
+
+    assert Error.message({:invalid_transition, "pending_approval", "open"}) ==
+             "Invalid Ticket transition: pending_approval -> open"
+
+    assert Error.message({:invalid_slug, ""}) == "Invalid Citizen slug: \"\""
+    assert Error.message({:unknown_citizen, "ghost"}) == "Unknown Citizen: ghost"
+
+    assert Error.message({:citizen_start_failed, "clare", "raw credential value"}) ==
+             "Citizen clare could not be started"
+
+    assert Error.message({:citizen_lookup_failed, "clare", "raw credential value"}) ==
+             "Citizen clare pane lookup failed"
+
+    assert Error.message({:ticket_injection_failed, "clare", "raw credential value"}) ==
+             "Ticket prompt could not be injected into clare"
   end
 end

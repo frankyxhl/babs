@@ -16,6 +16,28 @@ defmodule Babs.Citizens.Tickets.Error do
     do: "Invalid Ticket history event: #{inspect(reason)}"
 
   def message({:history_event_too_large, id}), do: "Ticket #{id} history event is too large"
+  def message({:invalid_state, state}), do: "Invalid Ticket state: #{inspect(state)}"
+
+  def message({:invalid_transition, from, to}),
+    do: "Invalid Ticket transition: #{from} -> #{to}"
+
+  def message({:invalid_transition_event, event, expected}),
+    do: "Invalid Ticket transition event: #{inspect(event)}; expected #{expected}"
+
+  def message({:invalid_slug, slug}), do: "Invalid Citizen slug: #{inspect(slug)}"
+  def message({:unknown_citizen, slug}), do: "Unknown Citizen: #{slug}"
+  def message({:citizen_not_running, slug}), do: "Citizen #{slug} is not running"
+
+  def message({:citizen_start_failed, slug, _reason}),
+    do: "Citizen #{slug} could not be started"
+
+  def message({:citizen_lookup_failed, slug, _reason}),
+    do: "Citizen #{slug} pane lookup failed"
+
+  def message({:ticket_injection_failed, slug, _reason}),
+    do: "Ticket prompt could not be injected into #{slug}"
+
+  def message({:not_assigned, id, slug}), do: "Ticket #{id} is not assigned to #{slug}"
   def message({:write_conflict, id}), do: "Ticket #{id} changed while Babs was writing it"
 
   def message({:redacted_io_error, {operation, _reason}}),

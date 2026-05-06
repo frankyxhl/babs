@@ -6,6 +6,9 @@ defmodule Babs.Citizens.Tickets.Writer do
   use GenServer
 
   alias Babs.Citizens.Tickets.History
+  alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.Error
+  alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
   alias Babs.Citizens.Tickets.TicketMarkdown
 
@@ -25,6 +28,18 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   def comment(pid, id, attrs, opts \\ []) do
     GenServer.call(pid, {:comment, id, attrs, opts}, 30_000)
+  end
+
+  def assign(pid, id, slug, opts \\ []) do
+    GenServer.call(pid, {:assign, id, slug, opts}, 30_000)
+  end
+
+  def unassign(pid, id, slug, opts \\ []) do
+    GenServer.call(pid, {:unassign, id, slug, opts}, 30_000)
+  end
+
+  def transition(pid, id, to_state, event, opts \\ []) do
+    GenServer.call(pid, {:transition, id, to_state, event, opts}, 30_000)
   end
 
   @impl true
@@ -71,6 +86,73 @@ defmodule Babs.Citizens.Tickets.Writer do
     {:reply, result, state}
   end
 
+  def handle_call({:assign, id, slug, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           {:ok, assigned} <- StateMachine.assign(ticket, slug) do
+        case Injector.prepare(slug, opts) do
+          :ok ->
+            persist_assignment(state.root, path, original, assigned, slug, opts)
+
+          {:error, reason} ->
+            persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+        end
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:unassign, id, slug, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           {:ok, updated} <- StateMachine.unassign(ticket, slug),
+           :ok <- run_before_write(path, opts),
+           :ok <- detect_conflict(path, original, id),
+           now <- now(opts),
+           by <- by(opts),
+           updated <- %{updated | updated_at: now},
+           :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
+           :ok <- append_events(state.root, id, unassign_events(ticket, updated, slug, now, by)) do
+        {:ok, %{ticket: updated}}
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:transition, id, to_state, event, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           {:ok, updated, event_name} <- StateMachine.transition(ticket, to_state, event),
+           :ok <- run_before_write(path, opts),
+           :ok <- detect_conflict(path, original, id),
+           now <- now(opts),
+           by <- by(opts),
+           updated <- %{updated | updated_at: now},
+           :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
+           :ok <-
+             History.append(
+               state.root,
+               id,
+               transition_event(event_name, ticket.state, updated.state, id, now, by)
+             ) do
+        {:ok, %{ticket: updated}}
+      end
+
+    {:reply, result, state}
+  end
+
   @impl true
   def handle_info({:idle_timeout, ref}, %{idle_ref: ref} = state) do
     {:stop, :normal, state}
@@ -96,6 +178,134 @@ defmodule Babs.Citizens.Tickets.Writer do
       "by" => by,
       "body" => body
     }
+  end
+
+  defp persist_assignment(root, path, original, assigned, slug, opts) do
+    id = assigned.id
+    now = now(opts)
+    by = by(opts)
+    assigned = %{assigned | updated_at: now}
+
+    with :ok <- run_before_write(path, opts),
+         :ok <- detect_conflict(path, original, id),
+         :ok <- write_markdown(root, id, TicketMarkdown.render(assigned)),
+         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by)),
+         prompt <- Injector.prompt(assigned, slug) do
+      case Injector.inject(slug, prompt, opts) do
+        :ok ->
+          with :ok <- History.append(root, id, injected_event(assigned, slug, now)) do
+            {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
+          end
+
+        {:error, reason} ->
+          _ignored = History.append(root, id, injection_failed_event(assigned, slug, now, reason))
+          {:error, reason}
+      end
+    end
+  end
+
+  defp persist_assignment_failure(root, path, original, ticket, slug, reason, opts) do
+    with :ok <- run_before_write(path, opts),
+         :ok <- detect_conflict(path, original, ticket.id),
+         :ok <-
+           History.append(
+             root,
+             ticket.id,
+             assignment_failed_event(ticket, slug, now(opts), reason)
+           ) do
+      {:error, reason}
+    end
+  end
+
+  defp assignment_events(ticket, slug, now, by) do
+    [
+      %{
+        "ts" => now,
+        "event" => "assigned",
+        "by" => by,
+        "ticket_id" => ticket.id,
+        "to" => [slug]
+      },
+      transition_event("state_change", "open", "in_progress", ticket.id, now, by),
+      %{
+        "ts" => now,
+        "event" => "injection_attempted",
+        "by" => "system",
+        "ticket_id" => ticket.id,
+        "injected_to" => [slug]
+      }
+    ]
+  end
+
+  defp unassign_events(original, updated, slug, now, by) do
+    events = [
+      %{
+        "ts" => now,
+        "event" => "unassigned",
+        "by" => by,
+        "ticket_id" => original.id,
+        "from" => [slug]
+      }
+    ]
+
+    if original.state != updated.state do
+      events ++
+        [transition_event("state_change", original.state, updated.state, original.id, now, by)]
+    else
+      events
+    end
+  end
+
+  defp transition_event(event_name, from, to, id, now, by) do
+    %{
+      "ts" => now,
+      "event" => event_name,
+      "by" => by,
+      "ticket_id" => id,
+      "from" => from,
+      "to" => to
+    }
+  end
+
+  defp injected_event(ticket, slug, now) do
+    %{
+      "ts" => now,
+      "event" => "injected",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug]
+    }
+  end
+
+  defp assignment_failed_event(ticket, slug, now, reason) do
+    %{
+      "ts" => now,
+      "event" => "assignment_failed",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "to" => [slug],
+      "error" => error_text(reason)
+    }
+  end
+
+  defp injection_failed_event(ticket, slug, now, reason) do
+    %{
+      "ts" => now,
+      "event" => "injection_failed",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "injected_to" => [slug],
+      "error" => error_text(reason)
+    }
+  end
+
+  defp append_events(root, id, events) do
+    Enum.reduce_while(events, :ok, fn event, :ok ->
+      case History.append(root, id, event) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp read_current(path, id) do
@@ -154,6 +364,15 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   defp fetch_attr(attrs, key) when is_list(attrs),
     do: Keyword.get(attrs, key) || Keyword.get(attrs, Atom.to_string(key))
+
+  defp by(opts) do
+    case Keyword.get(opts, :by, "user") do
+      value when is_binary(value) and value != "" -> value
+      _value -> "user"
+    end
+  end
+
+  defp error_text(reason), do: Error.message(reason)
 
   defp write_markdown(root, id, content) do
     temp_path = temp_path(root, id)
