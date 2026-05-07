@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing, Phase 15 has its own PRP (`BAB-2243`) for Inspector Council auto-approval, and Phase 16 has its own PRP (`BAB-2244`) for Mayor rule-guided proposals.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing, Phase 15 has its own PRP (`BAB-2243`) for Inspector Council auto-approval, Phase 16 has its own PRP (`BAB-2244`) for Mayor rule-guided proposals, and Phase 17 has its own PRP (`BAB-2245`) for mobile and federated control.
 
 ---
 
@@ -30,7 +30,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 | **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
 | **M2.5** | 6.5 | Manual ticket dogfood validation (waived as gate; retained as reference) |
 | **M3** | 7-12a | **V0-M complete** — filesystem-first ticket-driven multi-agent system with reliable hardline delivery and AI CLI reply capture |
-| **M4** | 13, 13a, 14-17 | **V0-L complete** — imported tmux attach; multi-turn Ticket sessions; Mayor + Inspector autonomy; PWA + read-only federation |
+| **M4** | 13, 13a, 14-17 | **V0-L complete** — imported tmux attach; multi-turn Ticket sessions; Mayor + Inspector autonomy; mobile + federated control |
 
 ---
 
@@ -356,11 +356,23 @@ proposal, and Babs writes the remaining child Tickets under the configured
 tickets root with role routing metadata preserved.
 **Estimate**: 18-26 days (LLM protocol, proposal UI, and rule-reference design)
 
-### Phase 17 — PWA + Mobile + Read-Only Federation
+### Phase 17 — Mobile and Federated Control
 
-**Scope**: PWA manifest + service worker for installable browser app; mobile-responsive breakpoints; read-only federation API (per `BAB-1109`) — Tailscale-connected Babs nodes expose `/api/v1/tickets`, `/api/v1/citizens`, `/api/v1/citizens/<name>/transcript`; remote nodes mount as `remote://<peer>/...` namespace in UI.
-**Acceptance**: Install PWA on iPhone; view desktop's running citizens. Configure laptop Babs to peer with desktop Babs; laptop's UI shows desktop tickets read-only.
-**Estimate**: 14-21 days
+**Planning doc**: `BAB-2245` PRP
+**Current status**: Approved PRP after Trinity R2 fast-review with GLM and
+DeepSeek PASS.
+**Scope**: Build the mobile and federation product layer. Add configurable node
+identity and peer nodes, start with real-time remote reads, make Babs usable as
+an installable mobile/PWA on the Tailscale network, and add explicitly
+configured remote write/control paths guarded by per-node and per-Citizen
+capabilities. Remote state remains local to each node; there is no distributed
+Ticket database or cross-node Citizen-to-Citizen A2A.
+**Acceptance**: A phone can operate a local Babs node through the mobile UI; a
+local Babs node can mount a configured peer and receive live remote Ticket and
+Citizen updates; a configured remote control action succeeds; a read-only peer
+or read-only Citizen override denies the same action with visible UI/API
+feedback.
+**Estimate**: 18-28 days
 
 ### 🎯 M4 = V0-L complete (~12-18 weeks flywheel time)
 
@@ -381,10 +393,10 @@ tickets root with role routing metadata preserved.
 | Phase 13f (provider runtime contract) | 4-8 days | 8-16 days |
 | Phase 14-15 (V0-L early) | 15-22 days | 30-44 days |
 | Phase 16 (Mayor) | 18-26 days | 36-52 days |
-| Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~116-179 days (~17-26 weeks)** | **~230-357 days (~33-51 weeks, 7-12 months)** |
+| Phase 17 (Mobile/Federation) | 18-28 days | 36-56 days |
+| **Total** | **~120-186 days (~17-27 weeks)** | **~238-371 days (~34-53 weeks, 8-13 months)** |
 
-**Be honest**: The realistic column is the operating estimate. Plan for 7-12 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
+**Be honest**: The realistic column is the operating estimate. Plan for 8-13 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
 ---
 
@@ -409,7 +421,7 @@ These are aspirational. Trinity flagged that AI rework cycles + context exhausti
 ## Anti-Goals (explicit non-roadmap)
 
 - **NO Discord / Telegram / Slack adapters in v0.1.** Removed from earlier scope (D6); deferred indefinitely.
-- **NO cross-machine citizen-to-citizen messaging in v0.1.** UI federation is read-only only. See `BAB-1109`.
+- **NO cross-machine citizen-to-citizen A2A messaging in v0.1.** Remote UI federation starts read-only per `BAB-1109`, and Phase 17 may add explicitly configured remote write/control for the single operator over Tailscale per `BAB-2245`. There is no cross-node Citizen-to-Citizen A2A, no distributed Ticket store, and no public-internet exposure.
 - **NO generic non-interactive AI workflows (batch jobs).** Babs is for live, interactive citizens. Phase 13a adds a narrow direct CLI backend for Ticket turns only; background job scheduling remains a different design.
 - **NO multi-tenancy / multi-user auth.** Single-operator default; Tailscale network identity is the only auth in v0.1.
 - **NO Babs-managed model API quotas / cost tracking** in v0.1. Operator manages provider quotas externally.
@@ -479,3 +491,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Add `BAB-2242` Phase 14 PRP and update Phase 14 from single-role to multi-role Citizen routing | Codex |
 | 2026-05-07 | Add `BAB-2243` Phase 15 PRP and update Phase 15 from a single inspector role to Inspector Council auto-approval | Codex |
 | 2026-05-07 | Add `BAB-2244` Phase 16 PRP and update Mayor scope to human-gated rule-guided proposal planning | Codex |
+| 2026-05-07 | Add `BAB-2245` Phase 17 PRP and update federation scope from read-only PWA polish to mobile plus explicitly configured remote control | Codex |
