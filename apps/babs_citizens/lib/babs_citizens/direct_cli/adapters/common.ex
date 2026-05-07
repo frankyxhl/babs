@@ -56,7 +56,10 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
   def clean_text(text, opts) when is_binary(text) do
     text
     |> Redactor.bound_output(Keyword.get(opts, :output_limit, 65_536))
-    |> Redactor.redact_text(secret_names: Keyword.get(opts, :secret_names, []))
+    |> Redactor.redact_text(
+      secret_names: Keyword.get(opts, :secret_names, []),
+      secret_values: Keyword.get(opts, :secret_values, [])
+    )
     |> String.trim()
   end
 

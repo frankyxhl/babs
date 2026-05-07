@@ -82,15 +82,29 @@ defmodule Babs.Citizens.DirectCli.Runner do
     with {:ok, artifacts} <- execute_command(command, opts),
          artifacts <- Map.put_new(artifacts, :provider_session_id, command.provider_session_id),
          {:ok, result} <-
-           adapter.parse_result(artifacts, secret_names: Env.secret_names(turn.config)),
-         {:ok, _updated_session} <- finish_session(started, turn, result),
-         :ok <- append_events(turn, [delivered_event(turn, result)]),
-         {:ok, _comment} <- append_reply(turn, result) do
-      :ok
+           adapter.parse_result(artifacts, secret_opts(turn.config)) do
+      persist_successful_turn(started, turn, result)
     else
       {:error, reason} ->
         _ignored = ProviderSessions.mark_failed(started, reason)
         handle_direct_failure(turn, reason, opts)
+    end
+  end
+
+  defp persist_successful_turn(started, turn, result) do
+    with {:ok, _updated_session} <- finish_session(started, turn, result),
+         :ok <- append_events(turn, [delivered_event(turn, result)]) do
+      case append_reply(turn, result) do
+        {:ok, _comment} ->
+          :ok
+
+        {:error, reason} ->
+          _ignored = append_events(turn, [reply_persistence_failed_event(turn, reason)])
+          {:error, reason}
+      end
+    else
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -261,7 +275,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
       "backend" => turn.backend || "direct_cli",
       "status" => status
     }
-    |> maybe_error(reason)
+    |> maybe_error(reason, turn)
   end
 
   defp attempt_busy_event(turn), do: delivery_attempted_event(turn, "busy", :execution_busy)
@@ -293,6 +307,19 @@ defmodule Babs.Citizens.DirectCli.Runner do
     |> maybe_provider_session_id(Map.get(result, :provider_session_id))
   end
 
+  defp reply_persistence_failed_event(turn, reason) do
+    %{
+      "ts" => now_iso(),
+      "event" => "turn_reply_capture_failed",
+      "by" => "system",
+      "ticket_id" => turn.ticket_id,
+      "turn_id" => turn.turn_id,
+      "attempt_id" => turn.attempt_id,
+      "by_citizen" => turn.slug,
+      "error" => Redactor.redact_text(inspect(reason), secret_opts(turn.config))
+    }
+  end
+
   defp delivery_failed_event(turn, reason) do
     %{
       "ts" => now_iso(),
@@ -303,14 +330,14 @@ defmodule Babs.Citizens.DirectCli.Runner do
       "attempt_id" => turn.attempt_id,
       "to" => turn.slug,
       "backend" => turn.backend || "direct_cli",
-      "error" => Redactor.redact_text(inspect(reason))
+      "error" => Redactor.redact_text(inspect(reason), secret_opts(turn.config))
     }
   end
 
-  defp maybe_error(event, nil), do: event
+  defp maybe_error(event, nil, _turn), do: event
 
-  defp maybe_error(event, reason),
-    do: Map.put(event, "error", Redactor.redact_text(inspect(reason)))
+  defp maybe_error(event, reason, turn),
+    do: Map.put(event, "error", Redactor.redact_text(inspect(reason), secret_opts(turn.config)))
 
   defp maybe_provider_session_id(event, session_id)
        when is_binary(session_id) and session_id != "",
@@ -320,4 +347,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
 
   defp now_iso, do: DateTime.utc_now(:second) |> DateTime.to_iso8601()
   defp now_datetime, do: DateTime.utc_now(:second)
+
+  defp secret_opts(config) do
+    [secret_names: Env.secret_names(config), secret_values: Env.secret_values(config)]
+  end
 end

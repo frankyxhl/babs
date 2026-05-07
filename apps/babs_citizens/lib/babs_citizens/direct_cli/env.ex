@@ -32,8 +32,17 @@ defmodule Babs.Citizens.DirectCli.Env do
   def secret_names(config) do
     (config.env || %{})
     |> Map.keys()
-    |> Enum.filter(&Regex.match?(~r/(secret|token|key|password)/i, &1))
+    |> Enum.filter(&secret_key?/1)
   end
+
+  def secret_values(config) do
+    (config.env || %{})
+    |> Enum.filter(fn {key, value} -> secret_key?(key) and present?(value) end)
+    |> Enum.map(fn {_key, value} -> to_string(value) end)
+  end
+
+  defp secret_key?(key), do: Regex.match?(~r/(secret|token|key|password)/i, to_string(key))
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 
   defp babs_env(config, root) do
     env = %{

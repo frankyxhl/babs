@@ -66,6 +66,43 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
            )
   end
 
+  test "redacts configured secret values from persisted direct replies" do
+    root = tmp_root!()
+    config = %{fake_config("elena") | env: %{"OPENAI_API_KEY" => "sk-test-secret-value"}}
+    ticket = create_ticket!(root)
+
+    executor = fn command ->
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => command.provider_session_id,
+             "content" => "provider echoed sk-test-secret-value"
+           }),
+         stderr: "debug sk-test-secret-value"
+       }}
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               fallback: :none
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{"event" => "comment", "body" => "provider echoed [REDACTED]"},
+               &1
+             )
+           )
+
+    refute inspect(history) =~ "sk-test-secret-value"
+  end
+
   test "resumes an existing provider session on the next direct turn" do
     root = tmp_root!()
     config = fake_config("dylan")
@@ -194,6 +231,54 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
            )
 
     assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
+           )
+  end
+
+  test "does not fall back to hardline when direct reply persistence fails after success" do
+    root = tmp_root!()
+    config = fake_config("clare")
+    ticket = create_ticket!(root, %{state: "closed", assignees: ["clare"]})
+
+    executor = fn command ->
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => command.provider_session_id,
+             "content" => "already completed"
+           })
+       }}
+    end
+
+    assert {:error, {:terminal_ticket, ticket_id, "closed"}} =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               hardline_injector: fn _slug, _prompt, _opts ->
+                 flunk("successful direct execution must not be redelivered to hardline")
+               end
+             )
+
+    assert ticket_id == ticket.id
+
+    session = Repo.one!(ProviderSession)
+    assert session.status == "active"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_reply_capture_failed", "error" => _error}, &1)
+           )
+
+    refute Enum.any?(
              history,
              &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
            )

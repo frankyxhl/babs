@@ -28,6 +28,7 @@ defmodule Babs.Citizens.DirectCli.Redactor do
 
   def redact_text(value, opts \\ []) do
     secret_names = Keyword.get(opts, :secret_names, [])
+    secret_values = Keyword.get(opts, :secret_values, [])
 
     value
     |> to_string()
@@ -36,6 +37,7 @@ defmodule Babs.Citizens.DirectCli.Redactor do
     |> String.replace(@private_ip, "[REDACTED_IP]")
     |> String.replace(@local_path, "[REDACTED_PATH]")
     |> redact_named_secrets(secret_names)
+    |> redact_secret_values(secret_values)
   end
 
   def redact_artifacts(%{} = artifacts, opts \\ []) do
@@ -52,5 +54,14 @@ defmodule Babs.Citizens.DirectCli.Redactor do
         "#{name}=[REDACTED]"
       )
     end)
+  end
+
+  defp redact_secret_values(value, secret_values) do
+    secret_values
+    |> Enum.map(&to_string/1)
+    |> Enum.reject(&(String.trim(&1) == ""))
+    |> Enum.uniq()
+    |> Enum.sort_by(&byte_size/1, :desc)
+    |> Enum.reduce(value, fn secret, acc -> String.replace(acc, secret, "[REDACTED]") end)
   end
 end

@@ -36,6 +36,22 @@ defmodule Babs.Citizens.DirectCli.EnvRedactorTest do
     assert Redactor.bound_output(String.duplicate("x", 12), 4) == "xxxx\n[TRUNCATED]"
   end
 
+  test "redacts configured secret values even when printed without assignment names" do
+    config = config(%{"OPENAI_API_KEY" => "sk-test-secret-value"})
+
+    assert Env.secret_names(config) == ["OPENAI_API_KEY"]
+    assert Env.secret_values(config) == ["sk-test-secret-value"]
+
+    redacted =
+      Redactor.redact_text("provider echoed sk-test-secret-value",
+        secret_names: Env.secret_names(config),
+        secret_values: Env.secret_values(config)
+      )
+
+    refute redacted =~ "sk-test-secret-value"
+    assert redacted == "provider echoed [REDACTED]"
+  end
+
   defp config(env) do
     %CitizenConfig{
       id: "BAB-CIT-TEST",

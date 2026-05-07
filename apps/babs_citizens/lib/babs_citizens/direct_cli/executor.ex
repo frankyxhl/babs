@@ -121,7 +121,7 @@ defmodule Babs.Citizens.DirectCli.Executor do
       provider_session_id: command.provider_session_id
     }
 
-    {:ok, Redactor.redact_artifacts(artifacts, secret_names: secret_names(command))}
+    {:ok, Redactor.redact_artifacts(artifacts, secret_opts(command))}
   end
 
   defp normalize_result({:error, output}, command) when is_list(output) do
@@ -137,16 +137,22 @@ defmodule Babs.Citizens.DirectCli.Executor do
       provider_session_id: command.provider_session_id
     }
 
-    {:error,
-     {:exit_status, status,
-      Redactor.redact_artifacts(artifacts, secret_names: secret_names(command))}}
+    {:error, {:exit_status, status, Redactor.redact_artifacts(artifacts, secret_opts(command))}}
   end
 
   defp normalize_result({:error, reason}, _command), do: {:error, reason}
 
-  defp secret_names(command) do
-    command.env
-    |> Enum.map(fn {key, _value} -> key end)
-    |> Enum.filter(&Regex.match?(~r/(secret|token|key|password)/i, &1))
+  defp secret_opts(command) do
+    secrets =
+      command.env
+      |> Enum.filter(fn {key, value} -> secret_key?(key) and present?(value) end)
+
+    [
+      secret_names: Enum.map(secrets, fn {key, _value} -> key end),
+      secret_values: Enum.map(secrets, fn {_key, value} -> value end)
+    ]
   end
+
+  defp secret_key?(key), do: Regex.match?(~r/(secret|token|key|password)/i, to_string(key))
+  defp present?(value), do: is_binary(value) and String.trim(value) != ""
 end
