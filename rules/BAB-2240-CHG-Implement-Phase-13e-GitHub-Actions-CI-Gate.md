@@ -170,7 +170,7 @@ before merge.
     - `Runner.tmux_pane_pid/1` should normalize missing tmux server/target to
       `{:error, :invalid_pane_pid}` for missing sessions
     - lifecycle integration tests needed explicit Repo migration setup
-  - Follow-up patch added focused test hardening and changed the first CI gate
+   - Follow-up patch added focused test hardening and changed the first CI gate
     to `mix test --max-cases 1` while broader parallel-isolation cleanup stays
     deferred.
 - 2026-05-08 post-R2 local validation:
@@ -188,6 +188,30 @@ before merge.
   PASS.
 - R2 hardening review packet:
   `.trinity/reviews/20260508-043307-Phase-13e-CI-R2-hardening-diff`
+- 2026-05-08 GitHub Actions PR run R3:
+  - `mix test --max-cases 1` ran on the clean Linux runner.
+  - Remaining failures showed that clean CI can have no live tmux server before
+    tests and that the root-missing watcher test should not rely on Linux
+    inotify delivery after dynamic root creation.
+  - Follow-up patch starts a non-Babs `ci-keepalive` tmux session before
+    compile/test and makes the root-missing watcher test inject the watcher
+    event after retry startup succeeds.
+- 2026-05-08 post-R3 local validation:
+  - focused tests for bootstrap, reattach scanner, and ticket watcher:
+    `mise exec -- mix test apps/babs_citizens/test/babs_citizens/bootstrap_test.exs apps/babs_citizens/test/babs_citizens/reattach_scanner_sqlite_test.exs apps/babs_citizens/test/babs_citizens/tickets/watcher_test.exs`
+    - `babs_citizens`: 11 tests, 0 failures
+  - `mise exec -- mix compile --warnings-as-errors`: pass
+  - `mise exec -- mix format --check-formatted`: pass
+  - `af validate --root .`: 148 documents checked, 0 issues found
+  - `git diff --check`: pass
+  - CI-equivalent ExUnit:
+    `mise exec -- mix test --max-cases 1`
+    - `babs_citizens`: 324 tests, 0 failures
+    - `babs`: 82 tests, 0 failures
+- 2026-05-08 Trinity fast-review of R3 hardening final diff: GLM PASS,
+  DeepSeek PASS.
+- R3 hardening final review packet:
+  `.trinity/reviews/20260508-044248-Phase-13e-CI-R3-hardening-final-diff`
 
 ## Deferred Gates
 
@@ -220,3 +244,6 @@ before merge.
 | 2026-05-08 | Add focused CI hardening after PR run R2 exposed clean-runner assumptions | Codex |
 | 2026-05-08 | Record post-R2 local validation | Codex |
 | 2026-05-08 | Record Trinity R2 hardening review | Codex |
+| 2026-05-08 | Patch CI tmux keepalive and deterministic watcher retry test after PR run R3 | Codex |
+| 2026-05-08 | Record post-R3 local validation | Codex |
+| 2026-05-08 | Record Trinity R3 hardening final review | Codex |

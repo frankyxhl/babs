@@ -37,6 +37,9 @@ defmodule Babs.Citizens.Tickets.WatcherTest do
     path = Path.join(root, "T-2026-05-06-002.history.jsonl")
     File.write!(path, "{}\n")
 
+    watcher = :sys.get_state(pid).watcher
+    send(pid, {:file_event, watcher, {path, [:created]}})
+
     paths = receive_ticket_change(root, path)
     assert path in paths
   end

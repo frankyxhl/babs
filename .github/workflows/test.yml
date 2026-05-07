@@ -50,6 +50,9 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
+      - name: Start tmux server
+        run: tmux new-session -d -s ci-keepalive "sleep 3600"
+
       - name: Compile with warnings as errors
         run: mix compile --warnings-as-errors
 
