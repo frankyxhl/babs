@@ -78,7 +78,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
   end
 
   defp execute_started_turn(started, turn, adapter, command, opts) do
-    with {:ok, artifacts} <- executor(opts).(command),
+    with {:ok, artifacts} <- execute_command(command, opts),
          artifacts <- Map.put_new(artifacts, :provider_session_id, command.provider_session_id),
          {:ok, result} <-
            adapter.parse_result(artifacts, secret_names: Env.secret_names(turn.config)),
@@ -91,6 +91,15 @@ defmodule Babs.Citizens.DirectCli.Runner do
         _ignored = ProviderSessions.mark_failed(started, reason)
         handle_direct_failure(turn, reason, opts)
     end
+  end
+
+  defp execute_command(command, opts) do
+    executor(opts).(command)
+  rescue
+    error -> {:error, {:executor_exception, Exception.message(error)}}
+  catch
+    :exit, reason -> {:error, {:executor_exit, reason}}
+    kind, reason -> {:error, {kind, reason}}
   end
 
   defp adapter(turn, opts) do

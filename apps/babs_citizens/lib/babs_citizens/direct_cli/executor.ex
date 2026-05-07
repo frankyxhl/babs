@@ -5,24 +5,48 @@ defmodule Babs.Citizens.DirectCli.Executor do
 
   alias Babs.Citizens.DirectCli.{Command, Redactor}
 
-  def run(%Command{} = command) do
-    with {:ok, args} <- resolve_args(command.args),
-         {:ok, _apps} <- Application.ensure_all_started(:erlexec) do
-      opts =
-        [:sync, :stdout, :stderr, {:env, [:clear | command.env]}]
-        |> maybe_cd(command.cwd)
+  @kill_timeout_seconds 2
+  @stop_wait_ms 5_000
 
-      args
-      |> :exec.run(opts, command.timeout_ms)
-      |> normalize_result(command)
+  def run(%Command{} = command) do
+    try do
+      do_run(command)
+    rescue
+      error in ErlangError ->
+        if error.original == :enoent do
+          {:error, {:executable_not_found, List.first(command.args)}}
+        else
+          reraise(error, __STACKTRACE__)
+        end
+    catch
+      :exit, {:timeout, _call} ->
+        {:error, :timeout}
+
+      :exit, reason ->
+        {:error, {:exec_exit, reason}}
     end
-  rescue
-    error in ErlangError ->
-      if error.original == :enoent do
-        {:error, {:executable_not_found, List.first(command.args)}}
-      else
-        reraise(error, __STACKTRACE__)
-      end
+  end
+
+  defp do_run(command) do
+    with {:ok, args} <- resolve_args(command.args),
+         {:ok, _apps} <- Application.ensure_all_started(:erlexec),
+         opts <- command_opts(command),
+         {:ok, pid, os_pid} <- :exec.run(args, opts, command.timeout_ms) do
+      await_result(pid, os_pid, command, [], [])
+    end
+  end
+
+  defp command_opts(command) do
+    [
+      :stdout,
+      :stderr,
+      :monitor,
+      {:group, 0},
+      :kill_group,
+      {:kill_timeout, @kill_timeout_seconds},
+      {:env, [:clear | command.env]}
+    ]
+    |> maybe_cd(command.cwd)
   end
 
   defp resolve_args([exe | rest]) when is_binary(exe) do
@@ -42,6 +66,46 @@ defmodule Babs.Citizens.DirectCli.Executor do
 
   defp maybe_cd(opts, cwd) when is_binary(cwd) and cwd != "", do: [{:cd, cwd} | opts]
   defp maybe_cd(opts, _cwd), do: opts
+
+  defp await_result(pid, os_pid, command, out_acc, err_acc) do
+    receive do
+      {:stdout, ^os_pid, data} ->
+        await_result(pid, os_pid, command, [data | out_acc], err_acc)
+
+      {:stderr, ^os_pid, data} ->
+        await_result(pid, os_pid, command, out_acc, [data | err_acc])
+
+      {:DOWN, ^os_pid, :process, ^pid, :normal} ->
+        normalize_result({:ok, sync_output(out_acc, err_acc)}, command)
+
+      {:DOWN, ^os_pid, :process, ^pid, :noproc} ->
+        normalize_result({:ok, sync_output(out_acc, err_acc)}, command)
+
+      {:DOWN, ^os_pid, :process, ^pid, {:exit_status, status}} ->
+        normalize_result(
+          {:error, [{:exit_status, status} | sync_output(out_acc, err_acc)]},
+          command
+        )
+    after
+      command.timeout_ms ->
+        stop_timed_out(os_pid)
+        {:error, :timeout}
+    end
+  end
+
+  defp sync_output([], []), do: []
+  defp sync_output(out_acc, []), do: [{:stdout, Enum.reverse(out_acc)}]
+  defp sync_output([], err_acc), do: [{:stderr, Enum.reverse(err_acc)}]
+
+  defp sync_output(out_acc, err_acc),
+    do: [{:stdout, Enum.reverse(out_acc)}, {:stderr, Enum.reverse(err_acc)}]
+
+  defp stop_timed_out(os_pid) do
+    _ignored = :exec.stop_and_wait(os_pid, @stop_wait_ms)
+    :ok
+  catch
+    _kind, _reason -> :ok
+  end
 
   defp normalize_result({:ok, output}, command) when is_list(output) do
     artifacts = %{

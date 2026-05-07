@@ -157,6 +157,48 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
     assert failed_session.started_at == nil
   end
 
+  test "falls back to hardline when direct executor exits" do
+    root = tmp_root!()
+    config = fake_config("dylan")
+    ticket = create_ticket!(root)
+    parent = self()
+
+    executor = fn _command -> exit(:timeout) end
+
+    hardline_injector = fn slug, prompt, _opts ->
+      send(parent, {:fallback_injected, slug, prompt})
+      :ok
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               hardline_injector: hardline_injector,
+               reply_capture: fn _turn -> :ok end
+             )
+
+    assert_receive {:fallback_injected, "dylan", "Please answer."}
+
+    failed_session = Repo.one!(ProviderSession)
+    assert failed_session.status == "failed"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{"event" => "turn_delivery_failed", "backend" => "direct_cli", "error" => _error},
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
+           )
+  end
+
   test "comment_ticket routes direct backend comments through the runner" do
     root = tmp_root!()
     config = fake_config("flora")

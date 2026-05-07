@@ -114,6 +114,44 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
            ]
   end
 
+  test "codex parser handles nested documented jsonl message text" do
+    stdout =
+      [
+        %{"type" => "session.created", "thread_id" => "codex-thread"},
+        %{
+          "type" => "response.output_item.done",
+          "params" => %{
+            "item" => %{
+              "type" => "message",
+              "role" => "assistant",
+              "text" => "codex nested reply"
+            }
+          }
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} = Codex.parse_result(%{stdout: stdout, stderr: ""})
+    assert result.provider_session_id == "codex-thread"
+    assert result.text == "codex nested reply"
+  end
+
+  test "codex parser joins streaming jsonl deltas when no final text is present" do
+    stdout =
+      [
+        %{"type" => "session.created", "thread_id" => "codex-thread"},
+        %{"type" => "response.output_text.delta", "params" => %{"delta" => "codex "}},
+        %{"type" => "response.output_text.delta", "params" => %{"delta" => "stream reply"}}
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} = Codex.parse_result(%{stdout: stdout, stderr: ""})
+    assert result.provider_session_id == "codex-thread"
+    assert result.text == "codex stream reply"
+  end
+
   test "copilot command and jsonl parser handle session id" do
     cfg = config("copilot")
     assert {:ok, command} = Copilot.start_command(cfg, "hello")

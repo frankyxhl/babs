@@ -45,10 +45,12 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
   end
 
   def find_text(values) do
+    values = List.wrap(values)
+
     values
-    |> List.wrap()
     |> Enum.reverse()
     |> Enum.find_value(&text_from_value/1)
+    |> Kernel.||(joined_delta_text(values))
   end
 
   def clean_text(text, opts) when is_binary(text) do
@@ -70,8 +72,17 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
       is_map(value["data"]) ->
         session_id_from_value(value["data"])
 
+      is_map(value["params"]) ->
+        session_id_from_value(value["params"])
+
       is_map(value["message"]) ->
         session_id_from_value(value["message"])
+
+      is_map(value["item"]) ->
+        session_id_from_value(value["item"])
+
+      is_map(value["payload"]) ->
+        session_id_from_value(value["payload"])
 
       true ->
         nil
@@ -90,14 +101,22 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
         direct
 
       is_list(value["content"]) ->
-        value["content"]
-        |> Enum.find_value(&text_from_value/1)
+        text_from_content_list(value["content"])
 
       is_map(value["data"]) ->
         text_from_value(value["data"])
 
+      is_map(value["params"]) ->
+        text_from_value(value["params"])
+
       is_map(value["message"]) ->
         text_from_value(value["message"])
+
+      is_map(value["item"]) ->
+        text_from_value(value["item"])
+
+      is_map(value["payload"]) ->
+        text_from_value(value["payload"])
 
       true ->
         nil
@@ -105,4 +124,52 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
   end
 
   defp text_from_value(_value), do: nil
+
+  defp text_from_content_list(values) do
+    values
+    |> Enum.map(&text_from_value/1)
+    |> join_nonempty()
+  end
+
+  defp joined_delta_text(values) do
+    values
+    |> Enum.flat_map(&delta_texts_from_value/1)
+    |> join_nonempty()
+  end
+
+  defp delta_texts_from_value(%{} = value) do
+    direct =
+      case value["delta"] do
+        delta when is_binary(delta) and delta != "" -> [delta]
+        _other -> []
+      end
+
+    nested =
+      ["params", "data", "message", "item", "payload"]
+      |> Enum.flat_map(fn key ->
+        case value[key] do
+          %{} = nested -> delta_texts_from_value(nested)
+          _other -> []
+        end
+      end)
+
+    content =
+      case value["content"] do
+        values when is_list(values) -> Enum.flat_map(values, &delta_texts_from_value/1)
+        _other -> []
+      end
+
+    direct ++ nested ++ content
+  end
+
+  defp delta_texts_from_value(_value), do: []
+
+  defp join_nonempty(values) do
+    values
+    |> Enum.reject(&(not is_binary(&1) or &1 == ""))
+    |> case do
+      [] -> nil
+      values -> Enum.join(values, "")
+    end
+  end
 end
