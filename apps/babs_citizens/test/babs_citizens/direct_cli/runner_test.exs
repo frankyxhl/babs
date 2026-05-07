@@ -268,6 +268,50 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
              end)
   end
 
+  test "busy direct turn records failed delivery instead of dropping the prompt" do
+    root = tmp_root!()
+    config = fake_config("clare")
+    ticket = create_ticket!(root)
+
+    assert {:error, {:execution_busy, "clare"}} =
+             ExecutionLock.with_lock("clare", fn ->
+               Runner.run_turn(turn(root, ticket.id, config),
+                 adapter: Fake,
+                 executor: fn _command -> flunk("busy direct turn should not execute") end,
+                 hardline_injector: fn _slug, _prompt, _opts ->
+                   flunk("busy direct turn should not bypass the lock through hardline")
+                 end
+               )
+             end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{
+                 "event" => "turn_delivery_attempted",
+                 "backend" => "direct_cli",
+                 "status" => "busy"
+               },
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{"event" => "turn_delivery_failed", "backend" => "direct_cli", "error" => _error},
+               &1
+             )
+           )
+
+    refute Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
+           )
+  end
+
   defp create_ticket!(root, attrs \\ %{}) do
     attrs =
       Map.merge(

@@ -56,8 +56,9 @@ defmodule Babs.Citizens.DirectCli.Runner do
   def run_turn(turn, opts \\ []) do
     ExecutionLock.with_lock(turn.slug, fn -> run_locked(turn, opts) end)
     |> case do
-      {:error, {:execution_busy, _slug}} ->
-        append_events(turn, [attempt_busy_event(turn)])
+      {:error, {:execution_busy, _slug} = reason} ->
+        _ignored = append_events(turn, [attempt_busy_event(turn)])
+        turn |> Map.put(:fallback, :none) |> handle_direct_failure(reason, opts)
 
       result ->
         result

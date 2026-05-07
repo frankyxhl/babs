@@ -221,15 +221,15 @@ Final results:
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
 - Focused direct CLI suite: 21 tests, 0 failures.
-- Focused direct/Ticket/provider session suite: 59 tests, 0 failures.
+- Focused direct/Ticket/provider session suite: 60 tests, 0 failures.
 - Focused hardline-lock/direct suite after Trinity advisories: 49 tests,
   0 failures.
-- `mise exec -- mix test`: 374 tests, 0 failures.
+- `mise exec -- mix test`: 375 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a3`: 374 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a3`: 375 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed thresholds with
-    `:babs_citizens` 80.97% total and `:babs` 87.62% total.
+    `:babs_citizens` 81.07% total and `:babs` 87.62% total.
   - Note: direct umbrella `mix test --cover` completed tests and printed a
     passing `:babs_citizens` summary, but this local OTP/Mix environment
     crashed in the Erlang HTML cover writer; the export plus per-app report is
@@ -264,7 +264,10 @@ Final results:
   `command.cwd` process spawning and fresh direct Claude session-id generation
   were folded with regression tests. Round 2 produced one P1 finding on
   documented Codex JSONL nested text parsing; `params.item.text` and
-  `params.delta` regressions were folded.
+  `params.delta` regressions were folded. Round 3 produced one P1 finding on
+  busy direct turns; direct busy lock contention now records a failed direct
+  delivery and returns `{:error, {:execution_busy, slug}}` instead of silently
+  dropping the prompt.
 - Additional Trinity Gemini implementation review ran on 2026-05-07 in
   `.trinity/reviews/20260507-203855-phase-13a3-direct-cli-provider-sessions`.
   It found P1 process timeout cleanup/fallback issues. Direct CLI execution now
