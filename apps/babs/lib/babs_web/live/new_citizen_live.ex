@@ -6,12 +6,14 @@ defmodule BabsWeb.NewCitizenLive do
   use Phoenix.LiveView
 
   alias Babs.Citizens.Spawner
+  alias BabsWeb.CitizenPath
 
   @empty_form %{
     "slug" => "",
     "display_name" => "",
     "description" => "",
     "cli_preset" => "shell",
+    "ticket_backend" => "hardline",
     "cwd" => ""
   }
 
@@ -23,7 +25,8 @@ defmodule BabsWeb.NewCitizenLive do
      |> assign(:errors, %{})
      |> assign(:status, nil)
      |> assign(:socket_token, socket_token(params, session))
-     |> assign(:presets, Spawner.presets())}
+     |> assign(:presets, Spawner.presets())
+     |> assign(:ticket_backend_options, Spawner.ticket_backend_options())}
   end
 
   @impl true
@@ -36,7 +39,7 @@ defmodule BabsWeb.NewCitizenLive do
 
     case spawner().(params) do
       {:ok, record} ->
-        {:noreply, redirect(socket, to: terminal_path(record.slug, socket.assigns.socket_token))}
+        {:noreply, redirect(socket, to: success_path(record, socket.assigns.socket_token))}
 
       {:error, {:validation_failed, errors}} ->
         {:noreply,
@@ -135,6 +138,18 @@ defmodule BabsWeb.NewCitizenLive do
         min-width: 0;
         color: var(--muted);
         font-size: 13px;
+      }
+
+      .label-with-icon {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .icon {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
       }
 
       input, select, textarea {
@@ -245,6 +260,24 @@ defmodule BabsWeb.NewCitizenLive do
             </label>
 
             <label>
+              <span class="label-with-icon">
+                <BabsWeb.Icon.icon name="route" /> Ticket backend
+              </span>
+              <select name="citizen[ticket_backend]" data-testid="citizen-ticket-backend">
+                <option
+                  :for={option <- @ticket_backend_options}
+                  value={option.value}
+                  selected={@form["ticket_backend"] == option.value}
+                >
+                  {option.label} - {option.description}
+                </option>
+              </select>
+              <span :if={@errors[:ticket_backend]} class="field-error" data-testid="ticket-backend-error">
+                {@errors[:ticket_backend]}
+              </span>
+            </label>
+
+            <label>
               Cwd
               <input name="citizen[cwd]" value={@form["cwd"]} data-testid="citizen-cwd" autocomplete="off" />
               <span :if={@errors[:cwd]} class="field-error" data-testid="cwd-error">{@errors[:cwd]}</span>
@@ -291,6 +324,11 @@ defmodule BabsWeb.NewCitizenLive do
   defp terminal_path(slug, socket_token) do
     "/citizens/#{slug}?#{URI.encode_query(%{"socket_token" => socket_token})}"
   end
+
+  defp success_path(%{ticket_backend: "direct_cli"}, socket_token),
+    do: CitizenPath.index(socket_token)
+
+  defp success_path(record, socket_token), do: terminal_path(record.slug, socket_token)
 
   defp error_message({:duplicate_toml, _path}), do: "Citizen TOML already exists"
   defp error_message({:duplicate_sqlite, _slug}), do: "Citizen already exists"

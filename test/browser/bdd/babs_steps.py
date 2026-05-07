@@ -69,6 +69,8 @@ class BabsBddContext:
         log = SERVER_LOG.open("ab")
         env = os.environ.copy()
         env["BABS_TICKETS_ROOT"] = str(self.tickets_root)
+        env.setdefault("BABS_BDD_FAKE_DIRECT", "1")
+        env.setdefault("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
         self.server_process = subprocess.Popen(
             ["mise", "exec", "--", "mix", "phx.server"],
             cwd=ROOT,
@@ -344,6 +346,13 @@ def scenarios() -> list[Scenario]:
             when="a deterministic direct CLI provider turn completes",
             then="the Ticket chat shows the direct provider reply and direct turn history",
             run=scenario_ticket_chat_shows_direct_cli_fake_reply,
+        ),
+        Scenario(
+            name="direct cli backend UI creation and assignment",
+            given="the New Citizen form and Ticket detail page are available",
+            when="the operator creates a Direct CLI Citizen and assigns a Ticket",
+            then="the direct reply appears in chat without starting a tmux session",
+            run=scenario_direct_cli_backend_ui_creation_and_assignment,
         ),
         Scenario(
             name="malformed ticket is visible",
@@ -1074,6 +1083,64 @@ def scenario_ticket_chat_shows_direct_cli_fake_reply(context: BabsBddContext) ->
         cleanup_ticket(context.tickets_root, ticket_id)
 
 
+def scenario_direct_cli_backend_ui_creation_and_assignment(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-direct")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    reply = os.environ.get("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
+
+    try:
+        context.open_path("/citizens/new")
+        assert_element_visible('[data-testid="new-citizen-form"]', "new citizen form")
+        wait_until(
+            "LiveView socket to connect",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        submit_new_citizen_form(slug, f"BDD {slug}", "copilot-cli", slug, "direct_cli")
+        wait_until(
+            "browser to redirect to /citizens after direct creation",
+            lambda: js("window.location.pathname") == "/citizens",
+            timeout=15,
+        )
+        wait_for_index_status(slug, "stopped")
+        assert "Direct CLI" in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
+        if tmux_session_alive(f"babs-{slug}"):
+            raise AssertionError(f"direct_cli UI creation unexpectedly started tmux session babs-{slug}")
+
+        write_ticket(context.tickets_root, ticket_id, "BDD Direct UI Ticket", f"Direct UI body for {slug}.")
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to connect on direct Ticket detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible(f'[data-testid="ticket-assign-{slug}"]', f"assign button for {slug}")
+        assert "Direct CLI" in js(f"document.querySelector('[data-testid=\"ticket-assign-{slug}\"]')?.innerText || ''")
+        click_selector(f'[data-testid="ticket-assign-{slug}"]')
+
+        wait_until(
+            "direct CLI UI reply to appear in Ticket chat",
+            lambda: reply in js("document.body.innerText"),
+            timeout=20,
+        )
+        wait_until(
+            "direct CLI UI assignment to record direct turn",
+            lambda: history_has_event(
+                context.tickets_root,
+                ticket_id,
+                lambda event: event.get("event") == "turn_execution_started"
+                and event.get("backend") == "direct_cli"
+                and event.get("to") == slug,
+            ),
+            timeout=20,
+        )
+        if tmux_session_alive(f"babs-{slug}"):
+            raise AssertionError(f"direct_cli Ticket assignment unexpectedly started tmux session babs-{slug}")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
 def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
     ticket_id = allocate_ticket_id(context.tickets_root)
 
@@ -1626,8 +1693,22 @@ def create_shell_citizen_from_ui(context: BabsBddContext, slug: str) -> None:
     )
 
 
-def submit_new_citizen_form(slug: str, display_name: str, preset: str, cwd: str) -> None:
-    values = json.dumps({"slug": slug, "display_name": display_name, "preset": preset, "cwd": cwd})
+def submit_new_citizen_form(
+    slug: str,
+    display_name: str,
+    preset: str,
+    cwd: str,
+    ticket_backend: str = "hardline",
+) -> None:
+    values = json.dumps(
+        {
+            "slug": slug,
+            "display_name": display_name,
+            "preset": preset,
+            "cwd": cwd,
+            "ticket_backend": ticket_backend,
+        }
+    )
     js(f"window.__babsBddFormValues = {values}")
     script = """
         const values = window.__babsBddFormValues;
@@ -1641,6 +1722,7 @@ def submit_new_citizen_form(slug: str, display_name: str, preset: str, cwd: str)
         setValue('[data-testid="citizen-slug"]', values.slug);
         setValue('[data-testid="citizen-display-name"]', values.display_name);
         setValue('[data-testid="citizen-cli-preset"]', values.preset);
+        setValue('[data-testid="citizen-ticket-backend"]', values.ticket_backend);
         setValue('[data-testid="citizen-cwd"]', values.cwd);
         const description = document.querySelector('[data-testid="citizen-description"]');
         if (description) description.value = "";
@@ -1669,8 +1751,20 @@ def cleanup_spawned_citizen(slug: str) -> None:
     db_path = citizens_db_path()
     if db_path.exists():
         with sqlite3.connect(db_path) as connection:
+            connection.execute("delete from provider_sessions where citizen_slug = ?", (slug,))
             connection.execute("delete from citizens where slug = ?", (slug,))
             connection.commit()
+
+
+def tmux_session_alive(session_name: str) -> bool:
+    return (
+        subprocess.run(
+            ["tmux", "has-session", "-t", session_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
 
 
 def cleanup_bdd_seed_sessions() -> None:
@@ -2034,6 +2128,13 @@ def ticket_history_events(root: Path, ticket_id: str) -> list[dict]:
         for line in ticket_history_path(root, ticket_id).read_text().splitlines()
         if line.strip()
     ]
+
+
+def history_has_event(root: Path, ticket_id: str, predicate) -> bool:
+    try:
+        return any(predicate(event) for event in ticket_history_events(root, ticket_id))
+    except FileNotFoundError:
+        return False
 
 
 def workspace_root() -> Path:

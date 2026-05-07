@@ -21,6 +21,25 @@ defmodule Babs.Citizens.CatalogTest do
     assert File.dir?(workspace)
   end
 
+  test "imports direct_cli TOML configs as stopped so bootstrap does not start tmux" do
+    root = tmp_root!()
+
+    write_citizen_toml!(root, "dylan", %{
+      cli: "codex",
+      cli_args: [],
+      launch_profile: "trusted_autonomous",
+      ticket_backend: "direct_cli"
+    })
+
+    assert %{records: [record], warnings: [], errors: []} =
+             Catalog.import_configs(root: root, config_dir: "citizens")
+
+    assert record.slug == "dylan"
+    assert record.cli == "codex"
+    assert record.ticket_backend == "direct_cli"
+    assert record.status == "stopped"
+  end
+
   test "upserts by slug and preserves SQLite id, cwd, status, and running spawn fields" do
     root = tmp_root!()
 

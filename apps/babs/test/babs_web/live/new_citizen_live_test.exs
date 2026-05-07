@@ -36,6 +36,10 @@ defmodule BabsWeb.NewCitizenLiveTest do
     assert html =~ ~s(data-testid="citizen-slug")
     assert html =~ ~s(data-testid="citizen-display-name")
     assert html =~ ~s(data-testid="citizen-cli-preset")
+    assert html =~ ~s(data-testid="citizen-ticket-backend")
+    assert html =~ ~s(value="hardline")
+    assert html =~ ~s(value="direct_cli")
+    refute html =~ ~s(value="lazy_tmux")
     assert html =~ ~s(data-testid="citizen-cwd")
     assert html =~ ~s(value="copilot-cli")
     assert html =~ "/js/live_boot.js"
@@ -61,6 +65,7 @@ defmodule BabsWeb.NewCitizenLiveTest do
                  display_name: "UI Created",
                  description: "Created from LiveView",
                  cli_preset: "copilot-cli",
+                 ticket_backend: "hardline",
                  cwd: "ui-created"
                }
              )
@@ -72,7 +77,47 @@ defmodule BabsWeb.NewCitizenLiveTest do
                       "display_name" => "UI Created",
                       "description" => "Created from LiveView",
                       "cli_preset" => "copilot-cli",
+                      "ticket_backend" => "hardline",
                       "cwd" => "ui-created"
+                    }}
+  end
+
+  test "successful direct_cli submit redirects to citizens index" do
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.NewCitizenLive,
+      spawner: fn params ->
+        send(parent, {:submitted, params})
+
+        {:ok,
+         %CitizenRecord{slug: "direct-created", ticket_backend: "direct_cli", status: "stopped"}}
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/new?socket_token=socket-token")
+
+    assert {:error, {:redirect, %{to: "/citizens?socket_token=socket-token"}}} =
+             view
+             |> form("[data-testid='new-citizen-form']",
+               citizen: %{
+                 slug: "direct-created",
+                 display_name: "Direct Created",
+                 description: "Created from LiveView",
+                 cli_preset: "copilot-cli",
+                 ticket_backend: "direct_cli",
+                 cwd: "direct-created"
+               }
+             )
+             |> render_submit()
+
+    assert_receive {:submitted,
+                    %{
+                      "slug" => "direct-created",
+                      "display_name" => "Direct Created",
+                      "description" => "Created from LiveView",
+                      "cli_preset" => "copilot-cli",
+                      "ticket_backend" => "direct_cli",
+                      "cwd" => "direct-created"
                     }}
   end
 

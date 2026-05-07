@@ -48,11 +48,13 @@ defmodule Babs.Citizens.Catalog do
     Repo.get_by(CitizenRecord, slug: slug)
   end
 
-  def insert_new(%CitizenConfig{} = config) do
+  def insert_new(%CitizenConfig{} = config, opts \\ []) do
+    initial_status = Keyword.get(opts, :initial_status, "running")
+
     attrs =
       config
       |> config_attrs()
-      |> Map.put(:status, "running")
+      |> Map.put(:status, initial_status)
       |> Map.put(:metadata, %{})
       |> Map.put(:is_mayor, false)
 
@@ -168,7 +170,7 @@ defmodule Babs.Citizens.Catalog do
       attrs =
         config
         |> config_attrs()
-        |> Map.put(:status, "running")
+        |> Map.put(:status, initial_status(config))
         |> Map.put(:metadata, %{})
         |> Map.put(:is_mayor, false)
 
@@ -195,6 +197,9 @@ defmodule Babs.Citizens.Catalog do
       {:error, changeset} -> {:error, changeset}
     end
   end
+
+  defp initial_status(%CitizenConfig{ticket_backend: "direct_cli"}), do: "stopped"
+  defp initial_status(_config), do: "running"
 
   defp config_attrs(%CitizenConfig{} = config) do
     %{

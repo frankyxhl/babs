@@ -6,6 +6,7 @@ defmodule BabsWeb.TicketLive do
   use Phoenix.LiveView
 
   alias Babs.Citizens.Catalog
+  alias Babs.Citizens.TicketBackend
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Error
@@ -161,10 +162,13 @@ defmodule BabsWeb.TicketLive do
                   phx-value-slug={citizen.slug}
                   disabled={ticket_action_busy?(@ticket_action_inflight)}
                   data-testid={"ticket-assign-#{citizen.slug}"}
-                  aria-label={"Assign #{@ticket.id} to #{citizen.display_name}"}
-                  title={"Assign to #{citizen.display_name}"}
+                  aria-label={"Assign #{@ticket.id} to #{citizen.display_name} using #{citizen.ticket_backend_label}"}
+                  title={"Assign to #{citizen.display_name} using #{citizen.ticket_backend_label}: #{citizen.assign_hint}"}
                 >
-                  <BabsWeb.Icon.icon name="user-plus" /> {citizen.display_name}
+                  <BabsWeb.Icon.icon name="user-plus" />
+                  <span>{citizen.display_name}</span>
+                  <span class="badge">{citizen.ticket_backend_label}</span>
+                  <span class="muted-inline">{citizen.assign_hint}</span>
                 </button>
 
                 <button
@@ -442,7 +446,17 @@ defmodule BabsWeb.TicketLive do
 
   defp citizen_options do
     Catalog.list_citizens()
-    |> Enum.map(&%{slug: &1.slug, display_name: &1.display_name || &1.slug})
+    |> Enum.map(fn citizen ->
+      backend = citizen.ticket_backend || "hardline"
+
+      %{
+        slug: citizen.slug,
+        display_name: citizen.display_name || citizen.slug,
+        ticket_backend: backend,
+        ticket_backend_label: TicketBackend.label(backend),
+        assign_hint: TicketBackend.assign_hint(backend)
+      }
+    end)
   rescue
     _error -> []
   end

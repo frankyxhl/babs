@@ -85,6 +85,18 @@ citizens_config =
 
 config :babs_citizens, citizens_config
 
+if config_env() != :prod and non_empty_env.("BABS_BDD_FAKE_DIRECT") == "1" do
+  config :babs_citizens, :ticket_runtime_opts,
+    adapter: Babs.Citizens.DirectCli.Adapters.Fake,
+    executor: fn command ->
+      reply = System.get_env("BABS_BDD_DIRECT_REPLY") || "BDD direct CLI UI reply."
+      session_id = command.provider_session_id || "bdd-direct-ui-session"
+
+      {:ok,
+       %{stdout: Jason.encode!(%{"session_id" => session_id, "content" => reply}), stderr: ""}}
+    end
+end
+
 config :babs, Babs.DevReloader, root: babs_root
 config :babs, BabsWeb.UserSocket, auth_token: socket_auth_token
 

@@ -4,7 +4,7 @@ defmodule Babs.Citizens.Spawner do
   """
 
   alias Babs.Citizens.Citizen.TomlWriter
-  alias Babs.Citizens.{Catalog, CitizenConfig, CitizenRecord, Lifecycle}
+  alias Babs.Citizens.{Catalog, CitizenConfig, CitizenRecord, Lifecycle, TicketBackend}
 
   @reserved_slugs ~w(new edit index)
   @param_atoms %{
@@ -12,6 +12,7 @@ defmodule Babs.Citizens.Spawner do
     "display_name" => :display_name,
     "description" => :description,
     "cli_preset" => :cli_preset,
+    "ticket_backend" => :ticket_backend,
     "cwd" => :cwd
   }
   @presets %{
@@ -22,8 +23,11 @@ defmodule Babs.Citizens.Spawner do
     "pi" => {"pi", [], "trusted_autonomous"},
     "copilot-cli" => {"copilot", [], "trusted_autonomous"}
   }
+  @direct_cli_presets ~w(claude codex copilot-cli)
 
   def presets, do: Map.keys(@presets)
+
+  def ticket_backend_options, do: TicketBackend.browser_create_options()
 
   def create_and_start(params, opts \\ []) when is_map(params) do
     with {:ok, attrs} <- validate(params) do
@@ -39,7 +43,7 @@ defmodule Babs.Citizens.Spawner do
          {:ok, _path} <- write_toml(config, paths.toml_cwd, opts),
          :ok <- mkdir_workspace(paths, opts),
          {:ok, record} <- insert_record(config, opts),
-         {:ok, _pid} <- start_lifecycle(config, opts) do
+         :ok <- maybe_start_lifecycle(config, opts) do
       {:ok, record}
     else
       {:error, reason} -> {:error, reason}
@@ -51,6 +55,7 @@ defmodule Babs.Citizens.Spawner do
     display_name = param(params, "display_name") |> trim_to_nil()
     description = param(params, "description") |> trim_to_nil()
     preset = param(params, "cli_preset") |> trim_to_nil()
+    ticket_backend = param(params, "ticket_backend") |> trim_to_nil() || "hardline"
     cwd = param(params, "cwd") |> trim_to_nil()
 
     errors =
@@ -58,6 +63,7 @@ defmodule Babs.Citizens.Spawner do
       |> validate_slug(slug)
       |> validate_display_name(display_name)
       |> validate_preset(preset)
+      |> validate_ticket_backend(ticket_backend, preset)
       |> validate_cwd(cwd)
 
     if map_size(errors) == 0 do
@@ -67,6 +73,7 @@ defmodule Babs.Citizens.Spawner do
          display_name: display_name,
          description: description,
          cli_preset: preset,
+         ticket_backend: ticket_backend,
          cwd: cwd || slug
        }}
     else
@@ -120,6 +127,22 @@ defmodule Babs.Citizens.Spawner do
     if Map.has_key?(@presets, preset),
       do: errors,
       else: Map.put(errors, :cli_preset, "is not supported")
+  end
+
+  defp validate_ticket_backend(errors, nil, _preset),
+    do: Map.put(errors, :ticket_backend, "is required")
+
+  defp validate_ticket_backend(errors, "direct_cli", preset)
+       when preset not in @direct_cli_presets do
+    Map.put(errors, :ticket_backend, "requires a direct-capable CLI preset")
+  end
+
+  defp validate_ticket_backend(errors, ticket_backend, _preset) do
+    if TicketBackend.browser_creatable?(ticket_backend) do
+      errors
+    else
+      Map.put(errors, :ticket_backend, "is not supported for browser creation")
+    end
   end
 
   defp validate_cwd(errors, nil), do: errors
@@ -223,7 +246,7 @@ defmodule Babs.Citizens.Spawner do
        cli: cli,
        cli_args: cli_args,
        launch_profile: launch_profile,
-       ticket_backend: "hardline",
+       ticket_backend: attrs.ticket_backend,
        cwd: resolved_cwd,
        env: %{},
        role: nil,
@@ -354,12 +377,28 @@ defmodule Babs.Citizens.Spawner do
   end
 
   defp insert_record(config, opts) do
-    insert = Keyword.get(opts, :insert, &Catalog.insert_new/1)
+    insert = Keyword.get(opts, :insert, &Catalog.insert_new/2)
 
-    case insert.(config) do
+    case call_insert(insert, config, initial_status(config)) do
       {:ok, record} -> {:ok, record}
       {:error, reason} -> {:error, {:sqlite_insert_failed, reason}}
     end
+  end
+
+  defp call_insert(insert, config, initial_status) do
+    case :erlang.fun_info(insert, :arity) do
+      {:arity, 1} -> insert.(config)
+      {:arity, 2} -> insert.(config, initial_status: initial_status)
+    end
+  end
+
+  defp initial_status(%CitizenConfig{ticket_backend: "direct_cli"}), do: "stopped"
+  defp initial_status(_config), do: "running"
+
+  defp maybe_start_lifecycle(%CitizenConfig{ticket_backend: "direct_cli"}, _opts), do: :ok
+
+  defp maybe_start_lifecycle(config, opts) do
+    with {:ok, _pid} <- start_lifecycle(config, opts), do: :ok
   end
 
   defp start_lifecycle(config, opts) do

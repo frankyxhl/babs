@@ -252,6 +252,11 @@
     font-weight: 650;
   }
 
+  .muted-inline {
+    color: var(--ks-muted);
+    font-size: 12px;
+  }
+
   .dot {
     width: 8px;
     height: 8px;
