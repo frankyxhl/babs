@@ -81,6 +81,9 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
       is_map(value["message"]) ->
         session_id_from_value(value["message"])
 
+      is_map(value["msg"]) ->
+        session_id_from_value(value["msg"])
+
       is_map(value["item"]) ->
         session_id_from_value(value["item"])
 
@@ -115,6 +118,9 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
       is_map(value["message"]) ->
         text_from_value(value["message"])
 
+      is_map(value["msg"]) ->
+        text_from_value(value["msg"])
+
       is_map(value["item"]) ->
         text_from_value(value["item"])
 
@@ -148,7 +154,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Common do
       end
 
     nested =
-      ["params", "data", "message", "item", "payload"]
+      ["params", "data", "message", "msg", "item", "payload"]
       |> Enum.flat_map(fn key ->
         case value[key] do
           %{} = nested -> delta_texts_from_value(nested)

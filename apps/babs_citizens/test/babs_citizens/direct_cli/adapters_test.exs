@@ -172,6 +172,20 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert result.text == "codex nested reply"
   end
 
+  test "codex parser handles msg content jsonl replies" do
+    stdout =
+      [
+        %{"msg" => %{"type" => "session", "thread_id" => "codex-thread"}},
+        %{"msg" => %{"type" => "text", "content" => "codex msg reply"}}
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} = Codex.parse_result(%{stdout: stdout, stderr: ""})
+    assert result.provider_session_id == "codex-thread"
+    assert result.text == "codex msg reply"
+  end
+
   test "codex parser joins streaming jsonl deltas when no final text is present" do
     stdout =
       [
