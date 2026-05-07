@@ -349,9 +349,9 @@ after migration.
 | Phase 14-15 (V0-L early) | 10-15 days | 20-30 days |
 | Phase 16 (Mayor) | 14-21 days | 28-42 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~103-159 days (~15-23 weeks)** | **~204-317 days (~29-45 weeks, 7-11 months)** |
+| **Total** | **~107-167 days (~16-24 weeks)** | **~212-333 days (~30-48 weeks, 7-12 months)** |
 
-**Be honest**: The realistic column is the operating estimate. Plan for 7-11 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
+**Be honest**: The realistic column is the operating estimate. Plan for 7-12 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
 ---
 
