@@ -4,6 +4,41 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.Ticket
 
+  test "builds a compact follow-up prompt for resumed provider sessions" do
+    ticket = %Ticket{
+      id: "T-2026-05-08-001",
+      type: "assignment",
+      state: "in_progress",
+      assigner: "user",
+      assignees: ["dylan"],
+      assignee_role: nil,
+      inspector: "user",
+      priority: "normal",
+      parent_ticket: nil,
+      created_at: "2026-05-08T10:00:00Z",
+      updated_at: "2026-05-08T10:01:00Z",
+      metadata: %{},
+      title: "Do not resend this title",
+      body: "Do not resend this body from /Users/operator/private.",
+      path: nil,
+      warnings: []
+    }
+
+    prompt =
+      PromptAssembler.compact_follow_up_prompt(ticket,
+        latest_message: "Only send this message with token: secret-value."
+      )
+
+    assert prompt =~ "Ticket: T-2026-05-08-001"
+    assert prompt =~ "Latest operator message:\nOnly send this message"
+    assert prompt =~ "BABS_REPLY T-2026-05-08-001:"
+
+    refute prompt =~ "Do not resend this title"
+    refute prompt =~ "Do not resend this body"
+    refute prompt =~ "/Users/operator"
+    refute prompt =~ "secret-value"
+  end
+
   test "builds a sanitized follow-up prompt from ticket metadata and recent chat" do
     ticket = %Ticket{
       id: "T-2026-05-07-001",

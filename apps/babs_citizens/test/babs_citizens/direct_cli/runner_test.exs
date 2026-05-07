@@ -141,6 +141,246 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
                     }}
   end
 
+  test "comment_ticket uses compact prompt for resumed direct provider sessions" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    parent = self()
+
+    insert_citizen!(%{
+      slug: "flora",
+      display_name: "Flora",
+      cli: "babs-fake-ai",
+      cli_args: [],
+      cwd: config.cwd,
+      ticket_backend: "direct_cli"
+    })
+
+    ticket =
+      create_ticket!(root, %{
+        title: "Full title should not repeat",
+        body: "Full ticket body should not repeat",
+        state: "in_progress",
+        assignees: ["flora"]
+      })
+
+    assert {:ok, _session} =
+             ProviderSessions.upsert_active(%{
+               citizen_slug: "flora",
+               ticket_id: ticket.id,
+               provider: "fake",
+               backend: "direct_cli",
+               provider_session_id: "stored-session",
+               workspace_ref: "citizen:flora"
+             })
+
+    assert {:ok, _stored} =
+             Api.comment_ticket(ticket.id, %{body: "Earlier operator message.", by: "user"},
+               tickets_root: root,
+               notify_assignees: false
+             )
+
+    executor = fn command ->
+      send(parent, {:direct_command, command})
+
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => "stored-session",
+             "content" => "compact reply"
+           })
+       }}
+    end
+
+    assert {:ok, %{delivery: {:comment_notified, ["flora"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Only this new message.", by: "user"},
+               tickets_root: root,
+               citizen_config_fetcher: fn "flora" -> config end,
+               adapter: Fake,
+               executor: executor,
+               reply_capture: fn _turn -> :ok end
+             )
+
+    assert_receive {:direct_command,
+                    %{
+                      resume?: true,
+                      provider_session_id: "stored-session",
+                      args: ["babs-fake-ai", "--resume", "stored-session", "--reply", prompt]
+                    }},
+                   1_000
+
+    assert prompt =~ "Ticket: #{ticket.id}"
+    assert prompt =~ "Latest operator message:\nOnly this new message."
+    assert prompt =~ "BABS_REPLY #{ticket.id}:"
+    refute prompt =~ "Full title should not repeat"
+    refute prompt =~ "Full ticket body should not repeat"
+    refute prompt =~ "Earlier operator message."
+    refute prompt =~ "Recent visible chat messages"
+  end
+
+  test "comment_ticket keeps full prompt when direct provider session cannot resume" do
+    parent = self()
+
+    assert_full_prompt = fn slug, seed_session ->
+      root = tmp_root!()
+      config = fake_config(slug)
+
+      insert_citizen!(%{
+        slug: slug,
+        display_name: String.capitalize(slug),
+        cli: "babs-fake-ai",
+        cli_args: [],
+        cwd: config.cwd,
+        ticket_backend: "direct_cli"
+      })
+
+      ticket =
+        create_ticket!(root, %{
+          title: "Fallback title #{slug}",
+          body: "Fallback body #{slug}",
+          state: "in_progress",
+          assignees: [slug]
+        })
+
+      seed_session.(slug, ticket.id)
+
+      executor = fn command ->
+        send(parent, {:direct_command, slug, command})
+
+        {:ok,
+         %{
+           stdout:
+             Jason.encode!(%{
+               "session_id" => "fake-session-#{slug}",
+               "content" => "full prompt reply"
+             })
+         }}
+      end
+
+      assert {:ok, %{delivery: {:comment_notified, [^slug]}}} =
+               Api.comment_ticket(ticket.id, %{body: "Please use full context.", by: "user"},
+                 tickets_root: root,
+                 citizen_config_fetcher: fn ^slug -> config end,
+                 adapter: Fake,
+                 executor: executor,
+                 reply_capture: fn _turn -> :ok end
+               )
+
+      assert_receive {:direct_command, ^slug,
+                      %{
+                        resume?: false,
+                        args: [
+                          "babs-fake-ai",
+                          "--session",
+                          "fake-session-" <> _,
+                          "--reply",
+                          prompt
+                        ]
+                      }},
+                     1_000
+
+      assert prompt =~ "Title: Fallback title #{slug}"
+      assert prompt =~ "Fallback body #{slug}"
+      assert prompt =~ "Please use full context."
+      assert prompt =~ "Recent visible chat messages:"
+    end
+
+    assert_full_prompt.("flora", fn slug, ticket_id ->
+      assert {:ok, _session} =
+               ProviderSessions.upsert_active(%{
+                 citizen_slug: slug,
+                 ticket_id: ticket_id,
+                 provider: "fake",
+                 backend: "direct_cli",
+                 workspace_ref: "citizen:#{slug}"
+               })
+    end)
+
+    assert_full_prompt.("iris", fn slug, ticket_id ->
+      assert {:ok, session} =
+               ProviderSessions.upsert_active(%{
+                 citizen_slug: slug,
+                 ticket_id: ticket_id,
+                 provider: "fake",
+                 backend: "direct_cli",
+                 provider_session_id: "stale-session",
+                 workspace_ref: "citizen:#{slug}"
+               })
+
+      assert {:ok, _session} = ProviderSessions.mark_non_resumable(session, :resume_disabled)
+    end)
+  end
+
+  test "comment_ticket uses full prompt for hardline fallback after compact direct failure" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    parent = self()
+
+    insert_citizen!(%{
+      slug: "flora",
+      display_name: "Flora",
+      cli: "babs-fake-ai",
+      cli_args: [],
+      cwd: config.cwd,
+      ticket_backend: "direct_cli"
+    })
+
+    ticket =
+      create_ticket!(root, %{
+        title: "Fallback hardline title",
+        body: "Fallback hardline body",
+        state: "in_progress",
+        assignees: ["flora"]
+      })
+
+    assert {:ok, _session} =
+             ProviderSessions.upsert_active(%{
+               citizen_slug: "flora",
+               ticket_id: ticket.id,
+               provider: "fake",
+               backend: "direct_cli",
+               provider_session_id: "stored-session",
+               workspace_ref: "citizen:flora"
+             })
+
+    executor = fn command ->
+      send(parent, {:direct_command, command})
+      {:error, :resume_failed}
+    end
+
+    hardline_injector = fn slug, prompt, _opts ->
+      send(parent, {:hardline_fallback, slug, prompt})
+      :ok
+    end
+
+    assert {:ok, %{delivery: {:comment_notified, ["flora"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Fallback should get context.", by: "user"},
+               tickets_root: root,
+               citizen_config_fetcher: fn "flora" -> config end,
+               adapter: Fake,
+               executor: executor,
+               hardline_injector: hardline_injector,
+               reply_capture: fn _turn -> :ok end
+             )
+
+    assert_receive {:direct_command,
+                    %{
+                      resume?: true,
+                      args: ["babs-fake-ai", "--resume", "stored-session", "--reply", compact]
+                    }},
+                   1_000
+
+    assert compact =~ "Latest operator message:\nFallback should get context."
+    refute compact =~ "Fallback hardline title"
+    refute compact =~ "Fallback hardline body"
+
+    assert_receive {:hardline_fallback, "flora", fallback_prompt}, 1_000
+    assert fallback_prompt =~ "Title: Fallback hardline title"
+    assert fallback_prompt =~ "Fallback hardline body"
+    assert fallback_prompt =~ "Fallback should get context."
+    assert fallback_prompt =~ "Recent visible chat messages:"
+  end
+
   test "falls back to hardline when direct execution fails" do
     root = tmp_root!()
     config = fake_config("clare")
@@ -323,7 +563,11 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
                reply_capture: fn _turn -> :ok end
              )
 
-    assert_receive {:direct_command, %{provider: "fake", resume?: false}}, 1_000
+    assert_receive {:direct_command, %{provider: "fake", resume?: false} = command}, 1_000
+    prompt = List.last(command.args)
+    assert prompt =~ "Title: Direct CLI Ticket"
+    assert prompt =~ "Use a direct CLI provider."
+    assert prompt =~ "Recent visible chat messages:"
 
     wait_until(fn ->
       {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
