@@ -20,6 +20,7 @@ defmodule Babs.Citizens.RunnerTest do
       display_name: "Sentinel",
       cli: "/bin/zsh",
       cli_args: ["-f"],
+      launch_profile: "safe_interactive",
       cwd: "/tmp/babs-sentinel",
       env: %{"BABS_ROOT" => "/wrong-root", "PATH" => "/custom/bin", "TERM" => "xterm-256color"}
     }
@@ -71,8 +72,78 @@ defmodule Babs.Citizens.RunnerTest do
     assert Runner.ai_cli?(%{cli: "claude", cli_args: []})
     assert Runner.ai_cli?(%{cli: "codex", cli_args: []})
     assert Runner.ai_cli?(%{cli: "gh", cli_args: ["copilot"]})
+    assert Runner.ai_cli?(%{cli: "copilot", cli_args: []})
     refute Runner.ai_cli?(%{cli: "gh", cli_args: ["repo", "view"]})
     refute Runner.ai_cli?(%{cli: "/bin/zsh", cli_args: ["-f"]})
+  end
+
+  test "trusted autonomous profile appends non-blocking AI CLI args" do
+    assert trailing_command(%{
+             config()
+             | cli: "claude",
+               cli_args: [],
+               launch_profile: "trusted_autonomous"
+           }) ==
+             ["claude", "--permission-mode", "dontAsk"]
+
+    assert trailing_command(%{
+             config()
+             | cli: "codex",
+               cli_args: [],
+               launch_profile: "trusted_autonomous"
+           }) ==
+             ["codex", "--ask-for-approval", "never", "--sandbox", "danger-full-access"]
+
+    assert trailing_command(%{
+             config()
+             | cli: "copilot",
+               cli_args: [],
+               launch_profile: "trusted_autonomous"
+           }) ==
+             ["copilot", "--allow-all", "--no-ask-user"]
+  end
+
+  test "safe interactive profile preserves explicitly configured args" do
+    assert trailing_command(%{config() | cli: "copilot", cli_args: ["--model", "gpt-5.2"]}) ==
+             ["copilot", "--model", "gpt-5.2"]
+  end
+
+  test "prepare_launch trusts Babs-owned Copilot workspaces before launch" do
+    home = tmp_dir("runner-copilot-home")
+    cwd = tmp_dir("runner-copilot-workspace")
+
+    config = %{
+      config()
+      | cli: "copilot",
+        cli_args: [],
+        launch_profile: "trusted_autonomous",
+        cwd: cwd,
+        env: %{"COPILOT_HOME" => home}
+    }
+
+    assert :ok = Runner.prepare_launch(config)
+
+    settings =
+      home
+      |> Path.join("config.json")
+      |> decode_jsonc_file()
+
+    assert settings["trustedFolders"] == [Path.expand(cwd)]
+  end
+
+  test "prepare_launch does not trust folders for safe interactive Copilot sessions" do
+    home = tmp_dir("runner-safe-copilot-home")
+
+    config = %{
+      config()
+      | cli: "copilot",
+        cli_args: [],
+        launch_profile: "safe_interactive",
+        env: %{"COPILOT_HOME" => home}
+    }
+
+    assert :ok = Runner.prepare_launch(config)
+    refute File.exists?(Path.join(home, "config.json"))
   end
 
   test "refuses to kill unmanaged sessions" do
@@ -110,9 +181,15 @@ defmodule Babs.Citizens.RunnerTest do
       display_name: "Sentinel",
       cli: "/bin/zsh",
       cli_args: ["-f"],
+      launch_profile: "safe_interactive",
       cwd: "/tmp/babs-sentinel",
       env: %{"TERM" => "xterm-256color"}
     }
+  end
+
+  defp trailing_command(config) do
+    args = Runner.new_session_args(config)
+    Enum.drop(args, length(args) - 1 - length(Runner.effective_cli_args(config)))
   end
 
   defp with_tmux_binary(binary, fun) do
@@ -132,4 +209,17 @@ defmodule Babs.Citizens.RunnerTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:babs_citizens, key)
   defp restore_env(key, value), do: Application.put_env(:babs_citizens, key, value)
+
+  defp tmp_dir(prefix) do
+    Path.join(System.tmp_dir!(), "#{prefix}-#{System.unique_integer([:positive])}")
+  end
+
+  defp decode_jsonc_file(path) do
+    path
+    |> File.read!()
+    |> String.split("\n", trim: false)
+    |> Enum.reject(fn line -> line |> String.trim_leading() |> String.starts_with?("//") end)
+    |> Enum.join("\n")
+    |> Jason.decode!()
+  end
 end

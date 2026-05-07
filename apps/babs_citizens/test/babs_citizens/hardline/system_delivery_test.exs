@@ -98,6 +98,42 @@ defmodule Babs.Citizens.Hardline.SystemDeliveryTest do
     assert_receive :enter
   end
 
+  test "AI system delivery accepts Copilot compact paste as receipt" do
+    parent = self()
+    attach = %{session: "babs-elena"}
+    prompt = "[Babs Ticket T-2026-05-07-006 assigned]\n" <> String.duplicate("Body\n", 20)
+    capture_calls = :atomics.new(1, [])
+
+    ops = %{
+      paste_text: fn ^attach, _data -> :ok end,
+      capture_pane: fn ^attach ->
+        case :atomics.add_get(capture_calls, 1, 1) do
+          1 -> {:ok, "❯ [Paste #1 - 21 lines]"}
+          _ -> {:ok, "submitted"}
+        end
+      end,
+      send_enter: fn ^attach ->
+        send(parent, :enter)
+        :ok
+      end,
+      sleep: fn _ms -> :ok end
+    }
+
+    submitted = prompt <> "\r"
+
+    assert {:ok, ^submitted} =
+             SystemDelivery.deliver(
+               %{ai_config() | slug: "elena", display_name: "Elena", cli: "copilot"},
+               attach,
+               prompt,
+               ops: ops,
+               receipt_attempts: 2,
+               enter_retries: 2
+             )
+
+    assert_receive :enter
+  end
+
   test "AI system delivery fails when receipt marker is never observed" do
     attach = %{session: "babs-clare"}
     prompt = "[Babs Ticket T-2026-05-06-003 assigned]\nBody"

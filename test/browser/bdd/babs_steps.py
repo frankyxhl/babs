@@ -99,6 +99,9 @@ class BabsBddContext:
                 os.killpg(self.server_process.pid, signal.SIGKILL)
                 self.server_process.wait(timeout=5)
 
+        if self.server_process is not None and RUNTIME_ROOT != ROOT:
+            cleanup_bdd_seed_sessions()
+
     def restart_server(self) -> None:
         if self.server_process is None:
             raise SkipScenario("BDD did not start the Babs server, so it cannot restart it")
@@ -327,6 +330,13 @@ def scenarios() -> list[Scenario]:
             when="a Citizen reply is appended to the Ticket history JSONL",
             then="the chat view refreshes with the Citizen message",
             run=scenario_ticket_chat_shows_captured_citizen_reply,
+        ),
+        Scenario(
+            name="ticket new form captures Elena Copilot JSONL reply",
+            given="a Ticket is created from /tickets/new",
+            when="a Copilot events.jsonl assistant reply is captured for Elena",
+            then="the Ticket chat shows Elena's captured message",
+            run=scenario_ticket_new_form_captures_elena_copilot_jsonl_reply,
         ),
         Scenario(
             name="malformed ticket is visible",
@@ -794,7 +804,7 @@ def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
 
 
 def scenario_seed_citizens_connect_when_available(context: BabsBddContext) -> None:
-    command_by_slug = {"clare": "claude", "dylan": "codex", "elena": "gh"}
+    command_by_slug = {"clare": "claude", "dylan": "codex", "elena": "copilot"}
     checked = 0
 
     for slug, command in command_by_slug.items():
@@ -965,6 +975,59 @@ def scenario_ticket_chat_shows_captured_citizen_reply(context: BabsBddContext) -
         )
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_new_form_captures_elena_copilot_jsonl_reply(context: BabsBddContext) -> None:
+    title = f"BDD Elena Copilot Ticket {int(time.time() * 1000)}"
+    body = "Created from browser-harness to validate Elena Copilot JSONL capture."
+    reply = f"hello from Elena Copilot JSONL {int(time.time() * 1000)}"
+    ticket_id = None
+    copilot_home = tmp_bdd_dir("copilot-home")
+
+    try:
+        context.open_path("/tickets")
+        assert_element_visible('[data-testid="tickets-new"]', "new Ticket button")
+        click_selector('[data-testid="tickets-new"]')
+        wait_until(
+            "browser to open new Ticket form for Elena capture",
+            lambda: js("window.location.pathname") == "/tickets/new",
+            timeout=10,
+        )
+        wait_until(
+            "LiveView socket to connect on Elena capture Ticket form",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+
+        submit_new_ticket_form(title, "normal", body)
+        wait_until(
+            "browser to redirect to created Elena capture Ticket detail",
+            lambda: str(js("window.location.pathname") or "").startswith("/tickets/T-"),
+            timeout=20,
+        )
+        ticket_id = str(js("window.location.pathname")).split("/")[-1]
+        assert_element_visible("[data-testid='ticket-detail']", "Elena capture Ticket detail")
+        assert_element_visible('[data-testid="ticket-comments-empty"]', "empty Ticket comments state")
+
+        started_at = utc_now_iso()
+        events_path = write_copilot_events(copilot_home, ticket_id, started_at, reply)
+        run_elena_reply_capture_once(context.tickets_root, ticket_id, started_at, events_path, copilot_home)
+
+        wait_until(
+            "Elena Copilot JSONL reply to appear in Ticket chat",
+            lambda: ticket_comment_message_contains(reply) and "elena" in js("document.body.innerText"),
+            timeout=15,
+        )
+
+        events = ticket_history_events(context.tickets_root, ticket_id)
+        assert any(
+            event.get("event") == "comment" and event.get("by") == "elena" and event.get("body") == reply
+            for event in events
+        )
+    finally:
+        if ticket_id is not None:
+            cleanup_ticket(context.tickets_root, ticket_id)
+        shutil.rmtree(copilot_home, ignore_errors=True)
 
 
 def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
@@ -1550,6 +1613,15 @@ def cleanup_spawned_citizen(slug: str) -> None:
             connection.commit()
 
 
+def cleanup_bdd_seed_sessions() -> None:
+    for slug in ["sentinel", "clare", "dylan", "elena"]:
+        subprocess.run(
+            ["tmux", "kill-session", "-t", f"babs-{slug}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+
 def tmux_session_count(slug: str) -> int:
     result = subprocess.run(
         ["tmux", "list-sessions", "-F", "#{session_name}"],
@@ -1701,6 +1773,101 @@ def append_ticket_history_event(root: Path, ticket_id: str, event: dict) -> None
         history_file.write(json.dumps(event, separators=(",", ":")) + "\n")
 
 
+def write_copilot_events(copilot_home: Path, ticket_id: str, started_at: str, reply: str) -> Path:
+    events_path = copilot_home / "session-state" / f"bdd-{ticket_id}" / "events.jsonl"
+    events_path.parent.mkdir(parents=True, exist_ok=True)
+    records = [
+        {
+            "timestamp": started_at,
+            "type": "user.message",
+            "data": {
+                "content": f"Babs Ticket {ticket_id}: please reply\nBABS_REPLY {ticket_id}: your response"
+            },
+        },
+        {
+            "timestamp": utc_now_iso(),
+            "type": "assistant.message",
+            "data": {"content": f"BABS_REPLY {ticket_id}: {reply}"},
+        },
+    ]
+    events_path.write_text("\n".join(json.dumps(record, separators=(",", ":")) for record in records) + "\n")
+    return events_path
+
+
+def run_elena_reply_capture_once(
+    tickets_root_path: Path,
+    ticket_id: str,
+    started_at: str,
+    events_path: Path,
+    copilot_home: Path,
+) -> None:
+    script = """
+    root = System.fetch_env!("BABS_BDD_TICKETS_ROOT")
+    ticket_id = System.fetch_env!("BABS_BDD_TICKET_ID")
+    started_at = System.fetch_env!("BABS_BDD_STARTED_AT")
+    events_path = System.fetch_env!("BABS_BDD_COPILOT_EVENTS_PATH")
+    copilot_home = System.fetch_env!("BABS_BDD_COPILOT_HOME")
+
+    unless Process.whereis(Babs.Citizens.Tickets.WriterRegistry) do
+      {:ok, _pid} = Registry.start_link(keys: :unique, name: Babs.Citizens.Tickets.WriterRegistry)
+    end
+
+    unless Process.whereis(Babs.Citizens.Tickets.WriterSupervisor) do
+      {:ok, _pid} = Babs.Citizens.Tickets.WriterSupervisor.start_link([])
+    end
+
+    config = %Babs.Citizens.CitizenConfig{
+      id: "BAB-CIT-BDD-ELENA",
+      slug: "elena",
+      display_name: "Elena",
+      cli: "copilot",
+      cli_args: [],
+      launch_profile: "trusted_autonomous",
+      cwd: File.cwd!(),
+      env: %{"COPILOT_HOME" => copilot_home}
+    }
+
+    result =
+      Babs.Citizens.Tickets.ReplyCapture.capture_once(
+        %{root: root, ticket_id: ticket_id, slug: "elena", started_at: started_at},
+        citizen_config: config,
+        paths: [events_path]
+      )
+
+    case result do
+      {:captured, _body} -> :ok
+      {:duplicate, _body} -> :ok
+      other ->
+        IO.inspect(other, label: "reply_capture")
+        System.halt(1)
+    end
+    """
+    env = os.environ.copy()
+    env.update(
+        {
+            "BABS_BDD_TICKETS_ROOT": str(tickets_root_path),
+            "BABS_BDD_TICKET_ID": ticket_id,
+            "BABS_BDD_STARTED_AT": started_at,
+            "BABS_BDD_COPILOT_EVENTS_PATH": str(events_path),
+            "BABS_BDD_COPILOT_HOME": str(copilot_home),
+        }
+    )
+    result = subprocess.run(
+        ["mise", "exec", "--", "mix", "run", "--no-start", "-e", script],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            "Elena Copilot reply capture failed:\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+
 def cleanup_ticket(root: Path, ticket_id: str) -> None:
     ticket_markdown_path(root, ticket_id).unlink(missing_ok=True)
     ticket_history_path(root, ticket_id).unlink(missing_ok=True)
@@ -1752,6 +1919,17 @@ def unique_marker(prefix: str) -> str:
 
 def unique_slug(prefix: str) -> str:
     return f"{prefix}-{int(time.time() * 1000)}"
+
+
+def tmp_bdd_dir(prefix: str) -> Path:
+    root = Path(os.environ.get("TMPDIR") or "/tmp")
+    path = root / f"babs-bdd-{prefix}-{int(time.time() * 1000)}"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def wait_until(label: str, predicate, timeout: float = 10.0) -> None:

@@ -19,6 +19,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     display_name = "Tester"
     cli = "/bin/zsh"
     cli_args = ["-f"]
+    launch_profile = "trusted_autonomous"
     cwd = "tester"
     description = "Test citizen"
 
@@ -30,6 +31,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     assert config.id == "BAB-CIT-9999"
     assert config.slug == "tester"
     assert config.cli_args == ["-f"]
+    assert config.launch_profile == "trusted_autonomous"
     assert config.env == %{"BABS_TEST_TOKEN" => "secret-token"}
     assert config.cwd == Path.join(root, "workspaces/tester")
   after
@@ -57,6 +59,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     assert {:ok, config} = Config.load_slug("reader", root: root)
     assert config.path == Path.join(root, "citizens/citizen-reader.toml")
     assert config.cwd == Path.join(root, "workspaces/reader")
+    assert config.launch_profile == "safe_interactive"
   end
 
   test "custom workspace_root resolves relative cwd outside the application root" do
@@ -339,6 +342,26 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
 
     assert {:error, {:invalid_cli_args, ["-f", 1]}} =
              Config.load_file(mixed_args, root: root)
+  end
+
+  test "rejects unsupported launch profiles before runner construction" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-bad-launch-profile.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-BAD-LAUNCH-PROFILE"
+    slug = "bad-launch-profile"
+    display_name = "Bad Launch Profile"
+    cli = "codex"
+    cli_args = []
+    launch_profile = "trust-me"
+    cwd = "bad-launch-profile"
+    """)
+
+    assert {:error, {:invalid_launch_profile, "trust-me"}} =
+             Config.load_file(path, root: root)
   end
 
   test "reports workspace directory creation failures" do

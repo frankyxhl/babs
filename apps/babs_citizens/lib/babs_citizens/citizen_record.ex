@@ -11,6 +11,7 @@ defmodule Babs.Citizens.CitizenRecord do
 
   @primary_key {:id, :string, autogenerate: false}
   @statuses ~w(running stopped failed)
+  @launch_profiles ~w(safe_interactive trusted_autonomous)
   @slug_regex ~r/^[a-z][a-z0-9-]{0,47}$/
   @fields [
     :id,
@@ -20,6 +21,7 @@ defmodule Babs.Citizens.CitizenRecord do
     :cwd,
     :cli,
     :cli_args,
+    :launch_profile,
     :env,
     :status,
     :metadata,
@@ -36,6 +38,7 @@ defmodule Babs.Citizens.CitizenRecord do
     field(:cwd, :string)
     field(:cli, :string)
     field(:cli_args, SqliteJson, default: [])
+    field(:launch_profile, :string, default: "safe_interactive")
     field(:env, SqliteJson, default: %{})
     field(:status, :string, default: "running")
     field(:metadata, SqliteJson, default: %{})
@@ -54,6 +57,7 @@ defmodule Babs.Citizens.CitizenRecord do
     |> validate_required(@required)
     |> validate_format(:slug, @slug_regex)
     |> validate_inclusion(:status, @statuses)
+    |> validate_inclusion(:launch_profile, @launch_profiles)
     |> validate_cli_args()
     |> validate_map(:env)
     |> validate_map(:metadata)

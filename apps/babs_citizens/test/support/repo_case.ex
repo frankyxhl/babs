@@ -35,6 +35,7 @@ defmodule Babs.Citizens.RepoCase do
           cwd: tmp_cwd!(),
           cli: "/bin/zsh",
           cli_args: ["-f"],
+          launch_profile: "safe_interactive",
           env: %{},
           status: "running",
           metadata: %{},
@@ -78,6 +79,7 @@ defmodule Babs.Citizens.RepoCase do
           description: nil,
           cli: "/bin/zsh",
           cli_args: ["-f"],
+          launch_profile: "safe_interactive",
           cwd: slug,
           env: %{},
           role: nil
@@ -103,6 +105,7 @@ defmodule Babs.Citizens.RepoCase do
       maybe_line(:description, attrs.description),
       ~s(cli = "#{attrs.cli}"),
       "cli_args = #{inspect(attrs.cli_args)}",
+      ~s(launch_profile = "#{attrs.launch_profile}"),
       ~s(cwd = "#{attrs.cwd}"),
       env_table(attrs.env),
       role_table(attrs.role)

@@ -53,7 +53,7 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
 
       case adapter.find_reply(config, turn.ticket_id, turn.started_at, opts) do
         {:ok, %{text: body}} ->
-          append_captured_comment(turn, body, opts)
+          append_captured_comment(turn, clean_captured_body(turn.ticket_id, body), opts)
 
         :pending ->
           :pending
@@ -212,5 +212,12 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
     body
     |> String.trim()
     |> String.replace(~r/\s+/, " ")
+  end
+
+  defp clean_captured_body(ticket_id, body) do
+    body
+    |> String.trim()
+    |> String.replace(~r/^BABS_REPLY\s+#{Regex.escape(ticket_id)}:\s*/i, "")
+    |> String.trim()
   end
 end

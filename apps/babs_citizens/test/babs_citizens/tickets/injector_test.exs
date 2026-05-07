@@ -15,7 +15,8 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "Path: /tmp/T-2026-05-06-001.md"
     assert prompt =~ "Ticket body for the citizen."
-    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
+    assert prompt =~ "BABS_REPLY T-2026-05-06-001: your response"
+    refute prompt =~ "replying through `bb ticket comment`"
     assert String.ends_with?(prompt, "\n")
   end
 
@@ -27,7 +28,7 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert prompt =~ "State: in_progress"
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "Feedback from user:\nMissing docs."
-    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
+    assert prompt =~ "BABS_REPLY T-2026-05-06-001: your response"
     assert String.ends_with?(prompt, "\n")
   end
 
@@ -40,7 +41,7 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert prompt =~ "Assignee: clare"
     assert prompt =~ "From: dylan"
     assert prompt =~ "Please review the branch."
-    assert prompt =~ ~s(bb ticket comment T-2026-05-06-001 "your response")
+    assert prompt =~ "BABS_REPLY T-2026-05-06-001: your response"
     assert String.ends_with?(prompt, "\n")
   end
 

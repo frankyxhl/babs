@@ -62,6 +62,36 @@ defmodule Babs.Citizens.Tickets.ReplyCaptureTest do
            )
   end
 
+  test "captures marked transcript reply without storing the marker", %{
+    root: root,
+    ticket: ticket,
+    config: config
+  } do
+    transcript =
+      transcript([
+        %{"timestamp" => "2026-05-06T00:00:00Z", "role" => "user", "content" => ticket.id},
+        %{
+          "timestamp" => "2026-05-06T00:00:01Z",
+          "role" => "assistant",
+          "content" => "BABS_REPLY #{ticket.id}: hello from transcript"
+        }
+      ])
+
+    assert {:captured, "hello from transcript"} =
+             ReplyCapture.capture_once(turn(root, ticket.id),
+               citizen_config: config,
+               paths: [transcript]
+             )
+
+    assert {:ok, history} = History.read(root, ticket.id)
+
+    assert Enum.any?(
+             history,
+             &(&1["event"] == "comment" and &1["by"] == "clare" and
+                 &1["body"] == "hello from transcript")
+           )
+  end
+
   test "does not duplicate an already captured reply", %{
     root: root,
     ticket: ticket,
@@ -105,25 +135,64 @@ defmodule Babs.Citizens.Tickets.ReplyCaptureTest do
     refute Enum.any?(history, &(&1["event"] == "comment"))
   end
 
-  test "unsupported AI transcript providers record a non-comment advisory", %{
+  test "missing Copilot transcript files stay pending without an advisory", %{
     root: root,
     ticket: ticket,
     config: config
   } do
     config = %{config | cli: "gh", cli_args: ["copilot"]}
 
-    assert {:unavailable, :unsupported_copilot_transcripts} =
-             ReplyCapture.capture_once(turn(root, ticket.id), citizen_config: config)
+    assert :pending =
+             ReplyCapture.capture_once(turn(root, ticket.id), citizen_config: config, paths: [])
+
+    assert {:ok, history} = History.read(root, ticket.id)
+
+    refute Enum.any?(history, &(&1["event"] == "ai_reply_capture_unavailable"))
+    refute Enum.any?(history, &(&1["event"] == "comment"))
+  end
+
+  test "captures direct Copilot transcript reply as Elena comment", %{
+    root: root,
+    ticket: ticket,
+    config: config
+  } do
+    transcript =
+      transcript([
+        %{
+          "timestamp" => "2026-05-06T00:00:00Z",
+          "type" => "user.message",
+          "data" => %{
+            "content" => "Babs Ticket #{ticket.id}\nBABS_REPLY #{ticket.id}: your response"
+          }
+        },
+        %{
+          "timestamp" => "2026-05-06T00:00:01Z",
+          "type" => "assistant.message",
+          "data" => %{"content" => "BABS_REPLY #{ticket.id}: hello from Elena"}
+        }
+      ])
+
+    config = %{
+      config
+      | slug: "elena",
+        display_name: "Elena",
+        cli: "copilot",
+        cli_args: []
+    }
+
+    assert {:captured, "hello from Elena"} =
+             ReplyCapture.capture_once(%{turn(root, ticket.id) | slug: "elena"},
+               citizen_config: config,
+               paths: [transcript]
+             )
 
     assert {:ok, history} = History.read(root, ticket.id)
 
     assert Enum.any?(
              history,
-             &(&1["event"] == "ai_reply_capture_unavailable" and
-                 &1["reason"] == ":unsupported_copilot_transcripts")
+             &(&1["event"] == "comment" and &1["by"] == "elena" and
+                 &1["body"] == "hello from Elena")
            )
-
-    refute Enum.any?(history, &(&1["event"] == "comment"))
   end
 
   test "ignores unexpected GenServer messages" do

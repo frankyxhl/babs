@@ -10,7 +10,7 @@ defmodule Babs.Citizens.StatusSnapshot do
 
   alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Lifecycle}
 
-  @known_cli_labels ~w(claude codex droid pi)
+  @known_cli_labels ~w(claude codex copilot droid pi)
 
   def list(opts \\ []) do
     lookup = Keyword.get(opts, :lookup, &Lifecycle.lookup/1)

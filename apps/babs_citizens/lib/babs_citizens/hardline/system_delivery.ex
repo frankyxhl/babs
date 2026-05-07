@@ -8,7 +8,7 @@ defmodule Babs.Citizens.Hardline.SystemDelivery do
   @receipt_attempts 20
   @receipt_interval_ms 100
   @enter_retries 2
-  @editable_markers ["[Pasted text", "pasted text", "ctrl+g", "Ctrl+G"]
+  @editable_markers ["[Paste #", "[Pasted text", "pasted text", "ctrl+g", "Ctrl+G"]
 
   @type op_result :: :ok | {:error, term()}
   @type deliver_result :: {:ok, binary()} | {:error, term(), binary()}
@@ -71,7 +71,9 @@ defmodule Babs.Citizens.Hardline.SystemDelivery do
     poll_until(attempts, interval, ops, fn ->
       case ops.capture_pane.(attach) do
         {:ok, pane} ->
-          if String.contains?(pane, marker), do: :ok, else: {:error, :not_received}
+          if String.contains?(pane, marker) or editable_pasted_block?(pane),
+            do: :ok,
+            else: {:error, :not_received}
 
         {:error, reason} ->
           {:error, reason}

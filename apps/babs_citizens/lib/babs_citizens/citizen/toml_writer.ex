@@ -110,6 +110,7 @@ defmodule Babs.Citizens.Citizen.TomlWriter do
       maybe_line("description", config.description),
       line("cli", config.cli),
       "cli_args = #{array(config.cli_args || [])}",
+      line("launch_profile", config.launch_profile || "safe_interactive"),
       line("cwd", toml_cwd),
       env_table(config.env || %{}),
       role_value(config.role)

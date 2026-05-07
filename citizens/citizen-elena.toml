@@ -1,8 +1,9 @@
 id = "BAB-CIT-0003"
 slug = "elena"
 display_name = "Elena"
-cli = "gh"
-cli_args = ["copilot"]
+cli = "copilot"
+cli_args = []
+launch_profile = "trusted_autonomous"
 cwd = "elena"
 description = "GitHub Copilot CLI test citizen"
 role = "copilot-tester"

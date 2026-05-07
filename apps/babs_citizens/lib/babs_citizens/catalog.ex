@@ -76,12 +76,14 @@ defmodule Babs.Citizens.Catalog do
         %{
           cli: incoming.cli,
           cli_args: incoming.cli_args,
+          launch_profile: incoming.launch_profile,
           env: incoming.env
         }
       else
         %{
           cli: existing.cli,
           cli_args: existing.cli_args,
+          launch_profile: existing.launch_profile || "safe_interactive",
           env: existing.env
         }
       end
@@ -151,6 +153,7 @@ defmodule Babs.Citizens.Catalog do
       description: record.description,
       cli: record.cli,
       cli_args: record.cli_args || [],
+      launch_profile: record.launch_profile || "safe_interactive",
       cwd: record.cwd,
       env: record.env || %{},
       role: record.role,
@@ -200,6 +203,7 @@ defmodule Babs.Citizens.Catalog do
       cwd: config.cwd,
       cli: config.cli,
       cli_args: config.cli_args || [],
+      launch_profile: config.launch_profile || "safe_interactive",
       env: config.env || %{},
       role: config.role
     }

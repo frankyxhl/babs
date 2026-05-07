@@ -21,7 +21,8 @@ defmodule Babs.Citizens.Tickets.Injector do
 
     #{String.trim(ticket.body)}
 
-    Acknowledge this assignment by replying through `bb ticket comment`.
+    Acknowledge this assignment with:
+    BABS_REPLY #{ticket.id}: your response
     """
   end
 
@@ -38,7 +39,8 @@ defmodule Babs.Citizens.Tickets.Injector do
     Feedback from user:
     #{String.trim(feedback)}
 
-    Address the feedback and reply through `bb ticket comment`.
+    Address the feedback with:
+    BABS_REPLY #{ticket.id}: your response
     """
   end
 
@@ -55,7 +57,8 @@ defmodule Babs.Citizens.Tickets.Injector do
 
     #{String.trim(body)}
 
-    This comment is persisted in Ticket history. Continue coordination through `bb ticket comment`.
+    This comment is persisted in Ticket history. Continue coordination with:
+    BABS_REPLY #{ticket.id}: your response
     """
   end
 
@@ -154,11 +157,13 @@ defmodule Babs.Citizens.Tickets.Injector do
     """
     You are #{slug}, a Babs Citizen.
     This message was delivered through the Babs Ticket/Billboard system.
-    Read the ticket context, do the requested work in this terminal, and write durable replies back to the ticket history with:
+    Read the ticket context and do the requested work in this terminal.
 
-    bb ticket comment #{ticket.id} "your response"
+    For durable replies, respond normally in this AI CLI transcript with:
 
-    Do not only answer in the terminal. The durable response must be a ticket comment.
+    BABS_REPLY #{ticket.id}: your response
+
+    Babs captures that transcript reply and appends it to Ticket history. Use `bb ticket comment #{ticket.id} "your response"` only as a fallback if transcript capture is unavailable and the command is already available.
     """
     |> String.trim()
   end

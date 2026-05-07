@@ -3,5 +3,6 @@ slug = "dylan"
 display_name = "Dylan"
 cli = "codex"
 cli_args = []
+launch_profile = "trusted_autonomous"
 cwd = "dylan"
 description = "Codex seed citizen"
