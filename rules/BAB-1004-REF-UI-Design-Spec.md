@@ -1,8 +1,8 @@
 # REF-1004: UI Design Spec
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-06
-**Last reviewed:** 2026-05-06
+**Last updated:** 2026-05-07
+**Last reviewed:** 2026-05-07
 **Status:** Active
 
 ---
@@ -15,28 +15,82 @@ This is a **text design spec** — no Figma, no images. The intent is precision-
 
 ---
 
+## v0.1 UI Amendment - Light-First + Kitchen Sink (2026-05-07)
+
+This section supersedes the original dark-only direction below.
+
+Operator feedback from Babs dogfood: the current dark operations-console style
+is functional but not comfortable enough for daily use. Babs should move to a
+**light-first default theme** with a restrained, data-dense operations feel.
+Dark theme remains allowed as an optional mode later, and the terminal canvas can
+remain dark/black for AI CLI compatibility.
+
+Phase 13a should add a **kitchen-sink page** before the Ticket chat UI is
+polished. The page is a BabsWeb route for reviewing UI components and states in
+one place, not a product feature for end users.
+
+Recommended route: `/dev/kitchen-sink` in dev/test, with production exposure
+disabled unless explicitly configured.
+
+Kitchen-sink coverage:
+
+- buttons with icons in default, hover, focus, disabled, destructive, and busy
+  states;
+- status dots, lifecycle badges, imported-session badges, and delivery badges;
+- Ticket chat rows for user, Citizen, system/status, failed delivery, queued
+  delivery, captured reply, and legacy comment without `turn_id`;
+- form controls, validation errors, tabs, tables, empty states, and modals;
+- light theme color tokens and terminal-in-light-shell layout;
+- desktop and narrow-width responsive smoke snapshots.
+
+The purpose is to stop style drift: future UI work should add or update
+kitchen-sink examples before changing production views. Browser-harness or
+snapshot-style BDD should include the kitchen-sink route enough to catch broken
+layout, missing icons, and unreadable light-theme contrast.
+
+Accepted implementation route for Phase 13a UI correction:
+
+- install a real Phoenix Tailwind CSS pipeline before production Ticket-detail
+  polish continues;
+- map Babs color, spacing, radius, typography, and status tokens into Tailwind
+  theme values plus CSS variables so a future theme selector can switch themes
+  without rewriting every component;
+- treat the current inline kitchen-sink CSS as a spike only. CHG 13a.1 should
+  move shared styling into the normal asset pipeline and leave LiveViews mostly
+  as semantic HEEx markup plus reusable component classes;
+- use Tailwind UI Application UI as the primary product-layout reference for app
+  shells, sidebars, tables, forms, feeds, and modals;
+- borrow shadcn/ui's neutral light-theme token discipline, but do not copy React
+  components into LiveView;
+- use Petal Components as the closest Phoenix/HEEx implementation reference for
+  buttons, badges, forms, modals, menus, and tables;
+- use Tremor only as visual reference for dense dashboard/stat/activity areas;
+- do not adopt daisyUI default themes for the main product. It may be evaluated
+  later for theme semantics, but Babs should not inherit its default visual
+  personality.
+
 ## Visual Identity
 
-**Mood**: An operations console for a small fleet. Calm, dark, dense. Not a flashy product UI; the user is an operator watching agents work, not a casual visitor. Visual reference points: tmux + VS Code Dark+ + a touch of operations dashboard (Grafana / Linear). Bat-Family thematic restraint — purple as accent, never centerpiece.
+**Mood**: An operations console for a small fleet. Calm, light-first, dense. Not a flashy product UI; the user is an operator watching agents work, not a casual visitor. Visual reference points: Linear / GitHub / macOS utility apps + a touch of operations dashboard. The default product theme should be neutral and utilitarian; color is reserved for actions, active state, and status.
 
-**Color palette** (dark theme — default and only theme for v1):
+**Color palette** (light theme — v0.1 default):
 
 | Role | Description | Concrete (hex) |
 |---|---|---|
-| Background base | Near-black, slightly cool | `#0d0d10` |
-| Surface (panels, cards) | Elevated by ~6% | `#16161b` |
-| Surface elevated (hover, active) | Elevated by ~10% | `#1d1d24` |
-| Border subtle | Barely-visible separation | `#2a2a30` |
-| Border emphasis | Active/focused outlines | `#3d3d45` |
-| Text primary | Warm off-white | `#e8e8e8` |
-| Text secondary | Muted gray | `#9c9caa` |
-| Text tertiary | More muted | `#6c6c78` |
-| Accent primary (Babs purple) | Barbara Gordon's signature; for active states, brand chrome | `#a78bfa` |
-| Accent secondary (cyan) | For interactive elements not in the active state | `#67e8f9` |
-| Status: idle / healthy | Calm green | `#4ade80` |
-| Status: typing / working | Warm amber | `#fbbf24` |
-| Status: waiting / paused | Soft blue | `#60a5fa` |
-| Status: error / dead | Restrained red | `#f87171` |
+| Background base | Light application background | `#f6f8fa` |
+| Surface (panels, cards) | Clean white | `#ffffff` |
+| Surface elevated (hover, active) | Subtle neutral highlight | `#f3f4f6` |
+| Border subtle | GitHub-like gray separation | `#d0d7de` |
+| Border emphasis | Active/focused outlines | `#8c959f` |
+| Text primary | Near-black neutral | `#1f2328` |
+| Text secondary | Muted neutral | `#57606a` |
+| Text tertiary | Light muted neutral | `#6e7781` |
+| Accent primary (operations blue) | Primary actions, active state, links | `#0969da` |
+| Accent secondary (teal) | Secondary data accents when another color is needed | `#0f766e` |
+| Status: idle / healthy | Calm green | `#1a7f37` |
+| Status: typing / working | Warm amber | `#9a6700` |
+| Status: waiting / paused | Operations blue | `#0969da` |
+| Status: error / dead | Restrained red | `#cf222e` |
 | Terminal background | Pure black for xterm canvas | `#000000` |
 
 **Typography**:
@@ -78,7 +132,7 @@ This is a **text design spec** — no Figma, no images. The intent is precision-
 ```
 
 **Header (40px tall, full width):**
-- Left: Babs logomark (small purple `▌` glyph) + name in Inter 600
+- Left: Babs logomark (small neutral/blue `▌` glyph) + name in Inter 600
 - Center-left: live status pills (counts of citizens by state)
 - Center-right: command palette trigger (`⌘K`)
 - Right: settings menu
@@ -176,7 +230,7 @@ Per-citizen deep view. Three panels arranged left-to-right.
 
 **Panel 2 — Transcript (flexible width, takes most space)**:
 - Live-tailed from JSONL; renders user/assistant/tool_use/tool_result blocks
-- Roles colored: user = primary text, assistant = primary purple `#a78bfa`, tool = secondary cyan, system = tertiary
+- Roles colored: user = primary text, assistant = operations blue `#0969da`, tool = secondary teal, system = tertiary
 - Monospace; 13px; soft line wrapping
 - Auto-scroll to bottom unless user scrolled up (then a "Jump to live" pill appears)
 
@@ -272,7 +326,7 @@ Visually: Excalidraw's own canvas, with the Babs sidebar still visible. Header s
   hover→primary text
 - Icon-only buttons are allowed only for dense repeated controls and must have
   an accessible label/tooltip
-- Primary: filled with `Babs purple` accent, white text, used for confirmation actions
+- Primary: filled with operations blue accent, white text, used for confirmation actions
 - Destructive: filled with status:error color, used for restart/kill
 
 ### Toast / Notification
@@ -311,6 +365,12 @@ These five states are exhaustive. Anything novel must be reduced to one of these
 
 Concrete prompts the operator can feed to DALL-E / Midjourney / Stable Diffusion for each view. Use these as starting points; iterate on specifics.
 
+The prompts below are legacy dark-theme prompts from the original v0.1 design
+pass. They are retained for history and future optional dark-mode exploration,
+but they are no longer the default visual target. Phase 13a light-theme work
+must use the light-first amendment and Tailwind-backed kitchen sink above as the
+source of truth until replacement light-theme prompts are written.
+
 ### Dashboard prompt
 
 ```
@@ -324,7 +384,7 @@ status icon, citizen name in monospace JetBrains Mono, message count,
 connector badges (Discord, Telegram), and last-activity timestamp. Below
 the grid is a "Recent Activity" log with timestamped rows. Color palette:
 near-black background #0d0d10, surface panels #16161b, subtle borders,
-white text, muted gray secondary text, soft purple accent #a78bfa for
+white text, muted gray secondary text, soft blue accent #58a6ff for
 active states. Inter font for UI, JetBrains Mono for citizen names.
 High information density. No emojis. Operations console feel, not flashy.
 ```
@@ -337,7 +397,7 @@ header shows citizen name "relay" in large monospace, status pill "idle"
 with green dot, connector badges for Discord channels and Telegram. Three
 panels below side-by-side: left "Channels" (240px) listing inbox sources;
 center "Transcript" (flexible) showing colored chat messages — user in
-warm white, assistant in soft purple #a78bfa, tool_use in cyan; right
+warm white, assistant in soft blue #58a6ff, tool_use in cyan; right
 "Terminal" (~400px) with a black-background xterm canvas showing a tmux
 prompt and command output. Overall palette dark, near-black background
 #0d0d10, panel surfaces slightly elevated #16161b, restrained accents.
@@ -350,14 +410,14 @@ operations-console feel. No flashy graphics.
 ```
 A dark-mode operations console showing cluster metrics. Top section
 "Cluster" with sparkline charts: A2A Throughput, PTY Bytes, Memory,
-Process Count — all in a 2x2 grid, lines in soft purple and cyan on
+Process Count — all in a 2x2 grid, lines in soft blue and teal on
 near-black background. Middle section "Citizen Controls" — a dense table
 where each row is a citizen with status dot, name in monospace, state
 label, and action buttons "Restart, Compact, Send, Logs, Pane".
 Bottom section "A2A Recent" — log lines with timestamps, citizen names,
 arrow direction, message preview, latency, and a success checkmark. Dark
 palette #0d0d10 base, #16161b surfaces, white text on near-black, muted
-secondary, purple #a78bfa accent on active items. Inter font UI, JetBrains
+secondary, blue #58a6ff accent on active items. Inter font UI, JetBrains
 Mono for citizen names. Dense. Linear-app or Grafana aesthetic.
 ```
 
@@ -384,7 +444,8 @@ purely terminal, with a thin chrome.
 - **React components** (mounted via `phx-hook`): A2A graph viz on Ops view, Excalidraw embed on Diagram view, sparkline charts on Ops cluster panel
 - **xterm.js**: bundled in `assets/`; mounted in Citizen Detail panel 3 and Full Terminal view; Channel topic `terminal:#{citizen_id}`
 - **Tailwind config**: project's color palette mapped to Tailwind tokens (`bg-base`, `bg-surface`, `text-primary`, etc.) for consistency
-- **No light theme in v1** — design only against dark; a light theme is a separate project if ever needed
+- **No dark-only UI assumption** — light theme is the default. Dark theme is a
+  later optional preference, except terminal canvases which can stay dark.
 
 ---
 
@@ -406,3 +467,6 @@ When any of these become real needs, file a PRP — they each warrant their own 
 |------|--------|----|
 | 2026-05-03 | Initial version — visual identity, layouts for 5 views, component library, image-gen prompts | Claude Code |
 | 2026-05-06 | Require semantic icons on action buttons, with accessible labels for icon-only dense controls | Codex |
+| 2026-05-07 | Add light-first UI amendment, define dev kitchen-sink route, and replace dark-only default with light theme tokens | Codex |
+| 2026-05-07 | Accept Tailwind-first UI correction route with Tailwind UI, shadcn token, Petal Components, and Tremor references | Codex |
+| 2026-05-07 | Mark old image-generation prompts as legacy dark-theme references until replacement light prompts are written | Codex |

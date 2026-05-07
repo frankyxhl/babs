@@ -35,6 +35,20 @@ defmodule BabsWeb.TerminalController do
     )
   end
 
+  def kitchen_sink(conn, params) do
+    conn = fetch_query_params(conn)
+
+    if kitchen_sink_enabled?() do
+      live_render(conn, BabsWeb.KitchenSinkLive,
+        session: %{"socket_token" => socket_token(conn, params)}
+      )
+    else
+      conn
+      |> put_resp_content_type("text/plain")
+      |> send_resp(404, "not found")
+    end
+  end
+
   def new_ticket(conn, params) do
     conn = fetch_query_params(conn)
 
@@ -115,4 +129,8 @@ defmodule BabsWeb.TerminalController do
 
   defp full?(%{"full" => value}) when value in ["1", "true"], do: true
   defp full?(_params), do: false
+
+  defp kitchen_sink_enabled? do
+    Application.get_env(:babs, :kitchen_sink_enabled, false)
+  end
 end

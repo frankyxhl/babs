@@ -30,6 +30,44 @@ defmodule BabsWeb.TerminalControllerTest do
     assert head(build_conn(), "/citizens").status == 200
   end
 
+  test "kitchen sink route can be disabled by config" do
+    previous = Application.get_env(:babs, :kitchen_sink_enabled)
+    Application.put_env(:babs, :kitchen_sink_enabled, false)
+
+    try do
+      conn = get(build_conn(), "/dev/kitchen-sink")
+
+      assert conn.status == 404
+      assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/plain; charset=utf-8"]
+      assert conn.resp_body == "not found"
+    after
+      if is_nil(previous) do
+        Application.delete_env(:babs, :kitchen_sink_enabled)
+      else
+        Application.put_env(:babs, :kitchen_sink_enabled, previous)
+      end
+    end
+  end
+
+  test "kitchen sink route loads the generated app stylesheet" do
+    previous = Application.get_env(:babs, :kitchen_sink_enabled)
+    Application.put_env(:babs, :kitchen_sink_enabled, true)
+
+    try do
+      conn = get(build_conn(), "/dev/kitchen-sink")
+
+      assert conn.status == 200
+      assert conn.resp_body =~ ~s(data-testid="kitchen-sink")
+      assert conn.resp_body =~ ~s(href="/css/app.css")
+    after
+      if is_nil(previous) do
+        Application.delete_env(:babs, :kitchen_sink_enabled)
+      else
+        Application.put_env(:babs, :kitchen_sink_enabled, previous)
+      end
+    end
+  end
+
   test "missing citizen returns a plain text 404" do
     conn = get(build_conn(), "/citizens/not-a-citizen")
 

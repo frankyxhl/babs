@@ -927,7 +927,7 @@ def scenario_ticket_new_form_creates_chat_ready_detail(context: BabsBddContext) 
         assert_element_visible("[data-testid='ticket-detail']", "created Ticket detail")
         assert title in js("document.body.innerText")
         assert body in js("document.body.innerText")
-        assert_element_visible('[data-testid="ticket-comments-chat"]', "Ticket comments chat")
+        assert_element_visible('[data-testid="ticket-detail-chat"]', "Ticket chat")
         assert_element_visible('[data-testid="ticket-comments-empty"]', "empty Ticket comments state")
         assert_element_visible('[data-testid="ticket-comment-form"]', "Ticket chat composer")
         assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"send\"]'))")
@@ -1174,7 +1174,7 @@ def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -
             timeout=20,
         )
         assert_element_visible('[data-testid="ticket-comment-form"]', "ticket comment form")
-        assert_element_visible('[data-testid="ticket-comments-chat"]', "ticket comments chat")
+        assert_element_visible('[data-testid="ticket-detail-chat"]', "ticket comments chat")
         assert_element_visible('[data-testid="ticket-comments-empty"]', "empty ticket comments state")
         assert js("Boolean(document.querySelector('[data-testid=\"ticket-comment\"] [data-icon=\"send\"]'))")
 
@@ -1185,6 +1185,14 @@ def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -
             and ticket_comment_message_contains(comment),
             timeout=20,
         )
+        second_comment = f"{comment} second turn"
+        submit_ticket_comment(second_comment)
+        wait_until(
+            "ticket detail to show second stored comment in same chat",
+            lambda: ticket_comment_message_contains(second_comment)
+            and js("document.querySelectorAll('[data-testid=\"ticket-chat-message\"]').length") >= 2,
+            timeout=20,
+        )
         wait_until(
             "ticket comment to be recorded as terminal input",
             lambda: transcript_input_contains(slug, comment),
@@ -1193,6 +1201,8 @@ def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -
 
         events = [event["event"] for event in ticket_history_events(context.tickets_root, ticket_id)]
         assert "comment" in events
+        assert events.count("turn_created") >= 2
+        assert events.count("turn_delivery_attempted") >= 2
         assert "comment_notification_attempted" in events
         assert "comment_notified" in events
     finally:
@@ -1229,6 +1239,7 @@ def click_selector(selector: str) -> None:
 def submit_rejection_feedback(feedback: str) -> None:
     js(f"window.__babsBddRejectFeedback = {json.dumps(feedback)}")
     script = """
+        (() => {
         const feedback = window.__babsBddRejectFeedback;
         const textarea = document.querySelector('[data-testid="ticket-reject-feedback"]');
         if (!textarea) throw new Error("missing reject feedback textarea");
@@ -1238,6 +1249,7 @@ def submit_rejection_feedback(feedback: str) -> None:
         const form = document.querySelector('[data-testid="ticket-reject-form"]');
         if (!form) throw new Error("missing reject feedback form");
         form.requestSubmit();
+        })();
         """
     try:
         js(script)
@@ -1248,6 +1260,7 @@ def submit_rejection_feedback(feedback: str) -> None:
 def submit_ticket_comment(comment: str) -> None:
     js(f"window.__babsBddTicketComment = {json.dumps(comment)}")
     script = """
+        (() => {
         const comment = window.__babsBddTicketComment;
         const textarea = document.querySelector('[data-testid="ticket-comment-body"]');
         if (!textarea) throw new Error("missing ticket comment textarea");
@@ -1257,6 +1270,7 @@ def submit_ticket_comment(comment: str) -> None:
         const form = document.querySelector('[data-testid="ticket-comment-form"]');
         if (!form) throw new Error("missing ticket comment form");
         form.requestSubmit();
+        })();
         """
     try:
         js(script)
@@ -1268,6 +1282,7 @@ def submit_new_ticket_form(title: str, priority: str, body: str) -> None:
     values = json.dumps({"title": title, "priority": priority, "body": body})
     js(f"window.__babsBddTicketValues = {values}")
     script = """
+        (() => {
         const values = window.__babsBddTicketValues;
         const setValue = (selector, value) => {
           const element = document.querySelector(selector);
@@ -1282,6 +1297,7 @@ def submit_new_ticket_form(title: str, priority: str, body: str) -> None:
         const form = document.querySelector('[data-testid="new-ticket-form"]');
         if (!form) throw new Error("missing new Ticket form");
         form.requestSubmit();
+        })();
         """
     try:
         js(script)
@@ -1318,7 +1334,7 @@ def ticket_comment_message_contains(comment: str) -> bool:
     return bool(
         js(
             f"""
-            Array.from(document.querySelectorAll('[data-testid="ticket-comment-message"]'))
+            Array.from(document.querySelectorAll('[data-testid="ticket-chat-message"]'))
               .some((element) => element.innerText.includes({comment_json}))
             """
         )

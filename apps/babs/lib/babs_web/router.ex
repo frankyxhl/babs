@@ -17,6 +17,7 @@ defmodule BabsWeb.Router do
     pipe_through(:browser)
 
     get("/", TerminalController, :index)
+    get("/dev/kitchen-sink", TerminalController, :kitchen_sink)
     get("/citizens", TerminalController, :citizens)
     head("/citizens", TerminalController, :citizens_head)
     get("/citizens/new", TerminalController, :new)

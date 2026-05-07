@@ -185,7 +185,6 @@ defmodule BabsWeb.TicketsLiveTest do
     {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
 
     assert html =~ ~s(data-testid="ticket-detail")
-    assert html =~ "--bg: #0d0d10"
     refute html =~ "Phoenix.HTML.raw(styles())"
     assert html =~ "Inspect detail"
     assert html =~ "in_progress"
@@ -199,12 +198,77 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "comment"
     assert html =~ "Detail comment."
     assert html =~ "Legacy comment without ticket_id."
-    assert html =~ ~s(data-testid="ticket-comments-chat")
-    assert html =~ ~s(data-testid="ticket-comment-message")
-    assert html =~ ~s(class="comment-author")
+    assert html =~ ~s(data-testid="ticket-detail-chat")
+    assert html =~ ~s(data-testid="ticket-chat-message")
+    assert html =~ ~s(class="meta")
     assert html =~ "clare"
     assert html =~ ~s(data-icon="arrow-left")
     assert html =~ ~s(data-icon="users")
+  end
+
+  test "ticket detail renders multi-turn chat messages with delivery status", %{root: root} do
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "dylan", display_name: "Dylan"})
+
+    ticket =
+      create_ticket!(root, "Multi-turn detail", "Initial assignment body.",
+        state: "in_progress",
+        assignees: ["clare", "dylan"]
+      )
+
+    assert {:ok, %{delivery: {:comment_notification_failed, ["clare"], [{"dylan", _reason}]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Please take a second pass.", by: "user"},
+               tickets_root: root,
+               now: "2026-05-07T10:01:00Z",
+               citizen_fetcher: fn slug when slug in ["clare", "dylan"] -> %{slug: slug} end,
+               pane_lookup: fn slug when slug in ["clare", "dylan"] -> {:ok, self()} end,
+               pane_injector: fn
+                 "clare", _prompt -> :ok
+                 "dylan", _prompt -> {:error, :pane_closed}
+               end
+             )
+
+    {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    user_message = Enum.find(history, &(&1["event"] == "comment" and &1["by"] == "user"))
+    clare_attempt = Enum.find(history, &(&1["event"] == "turn_delivered" and &1["to"] == "clare"))
+
+    assert {:ok, %{delivery: :comment_stored}} =
+             Api.comment_ticket(
+               ticket.id,
+               %{
+                 body: "Clare reply for the second pass.",
+                 by: "clare",
+                 turn_id: user_message["turn_id"],
+                 attempt_id: clare_attempt["attempt_id"]
+               },
+               tickets_root: root,
+               now: "2026-05-07T10:02:00Z",
+               notify_assignees: false
+             )
+
+    assert :ok =
+             History.append(root, ticket.id, %{
+               "ts" => "2026-05-07T10:03:00Z",
+               "event" => "comment",
+               "by" => "dylan",
+               "body" => "Legacy reply without turn id."
+             })
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}?socket_token=token-1")
+
+    assert html =~ ~s(data-testid="ticket-detail-chat")
+    assert html =~ ~s(data-testid="ticket-chat-message")
+    assert html =~ ~s(data-testid="ticket-turn-status")
+    assert html =~ "Please take a second pass."
+    assert html =~ "Clare reply for the second pass."
+    assert html =~ "Legacy reply without turn id."
+    assert html =~ "delivered"
+    assert html =~ "captured"
+    assert html =~ "failed"
+    assert html =~ ~s(data-testid="ticket-retry-delivery")
+    assert html =~ ~s(data-testid="ticket-open-terminal")
+    assert html =~ ~s(href="/tickets?socket_token=token-1")
+    refute html =~ "<style>"
   end
 
   test "ticket detail renders a chat empty state when there are no comments", %{root: root} do
@@ -220,7 +284,8 @@ defmodule BabsWeb.TicketsLiveTest do
     {:ok, _view, html} = live(build_conn(), "/tickets/T-2026-05-06-404")
 
     assert html =~ ~s(data-testid="ticket-detail-error")
-    assert html =~ "--bg: #0d0d10"
+    assert html =~ ~s(href="/css/app.css")
+    refute html =~ "--bg: #0d0d10"
     refute html =~ "Phoenix.HTML.raw(styles())"
     assert html =~ "Ticket not found"
   end

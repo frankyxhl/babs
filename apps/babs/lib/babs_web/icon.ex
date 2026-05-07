@@ -71,6 +71,12 @@ defmodule BabsWeb.Icon do
 
   defp paths("check"), do: ["M20 6 9 17l-5-5"]
 
+  defp paths("clock"),
+    do: [
+      "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20",
+      "M12 6v6l4 2"
+    ]
+
   defp paths("refresh"),
     do: [
       "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",

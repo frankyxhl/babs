@@ -6,13 +6,17 @@ defmodule Babs.Citizens.Tickets.Writer do
   use GenServer
 
   alias Babs.Citizens.Citizen.Config, as: CitizenConfig
+  alias Babs.Citizens.Tickets.Conversation
+  alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
   alias Babs.Citizens.Tickets.ReplyCapture
-  alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
   alias Babs.Citizens.Tickets.TicketMarkdown
+  alias Babs.Citizens.Tickets.TurnIds
+
+  require Logger
 
   @idle_timeout 60_000
 
@@ -88,12 +92,13 @@ defmodule Babs.Citizens.Tickets.Writer do
            now <- now(opts),
            updated = %{ticket | updated_at: now},
            notify? <- Keyword.get(opts, :notify_assignees, true),
-           events <- comment_events(ticket, body, now, by, notify?),
+           turn <- comment_turn(ticket, attrs, now, by, notify?),
+           events <- comment_events(ticket, body, now, by, notify?, turn),
            :ok <- validate_events(id, events),
            :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
            :ok <- append_events(state.root, id, events) do
         if notify? do
-          inject_comment(state.root, updated, body, now, by, opts)
+          inject_comment(state.root, updated, body, now, by, turn, opts)
         else
           {:ok, %{ticket: updated, delivery: :comment_stored}}
         end
@@ -238,7 +243,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
-  defp comment_event(ticket, now, by, body) do
+  defp comment_event(ticket, now, by, body, turn) do
     %{
       "ts" => now,
       "event" => "comment",
@@ -246,16 +251,18 @@ defmodule Babs.Citizens.Tickets.Writer do
       "ticket_id" => ticket.id,
       "body" => body
     }
+    |> put_optional("message_id", turn.message_id)
+    |> put_optional("turn_id", turn.turn_id)
+    |> put_optional("attempt_id", turn.captured_attempt_id)
   end
 
-  defp comment_events(ticket, body, now, by, notify?) do
-    events = [comment_event(ticket, now, by, body)]
+  defp comment_events(ticket, body, now, by, notify?, turn) do
+    events =
+      [comment_event(ticket, now, by, body, turn)] ++ turn_created_events(ticket, now, by, turn)
 
-    if not notify? or ticket.assignees == [] do
-      events
-    else
-      events ++ [comment_notification_attempted_event(ticket, now, by)]
-    end
+    events
+    |> maybe_add_notification_attempts(ticket, now, by, notify?, turn)
+    |> maybe_add_captured_reply_event(ticket, now, by, notify?, turn)
   end
 
   defp persist_assignment(root, path, original, assigned, slug, opts) do
@@ -424,6 +431,107 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
+  defp turn_created_events(_ticket, _now, _by, %{new_turn?: false}), do: []
+
+  defp turn_created_events(ticket, now, by, %{new_turn?: true} = turn) do
+    [
+      %{
+        "ts" => now,
+        "event" => "turn_created",
+        "by" => by,
+        "ticket_id" => ticket.id,
+        "turn_id" => turn.turn_id,
+        "prompt_message_id" => turn.message_id,
+        "to" => ticket.assignees
+      }
+      |> put_optional("parent_turn_id", turn.parent_turn_id)
+    ]
+  end
+
+  defp maybe_add_notification_attempts(events, ticket, now, by, true, turn) do
+    legacy_events =
+      if ticket.assignees == [],
+        do: [],
+        else: [comment_notification_attempted_event(ticket, now, by)]
+
+    turn_events =
+      if is_binary(turn.turn_id) and map_size(turn.attempt_ids) > 0 do
+        Enum.map(ticket.assignees, fn slug ->
+          turn_delivery_attempted_event(ticket, now, turn, slug)
+        end)
+      else
+        []
+      end
+
+    events ++ legacy_events ++ turn_events
+  end
+
+  defp maybe_add_notification_attempts(events, _ticket, _now, _by, _notify?, _turn), do: events
+
+  defp maybe_add_captured_reply_event(events, ticket, now, by, false, %{
+         turn_id: turn_id,
+         message_id: message_id,
+         captured_attempt_id: attempt_id
+       })
+       when is_binary(turn_id) and is_binary(attempt_id) do
+    events ++
+      [
+        %{
+          "ts" => now,
+          "event" => "turn_reply_captured",
+          "by" => "system",
+          "ticket_id" => ticket.id,
+          "turn_id" => turn_id,
+          "attempt_id" => attempt_id,
+          "by_citizen" => by,
+          "message_id" => message_id
+        }
+      ]
+  end
+
+  defp maybe_add_captured_reply_event(events, _ticket, _now, _by, _notify?, _turn), do: events
+
+  defp turn_delivery_attempted_event(ticket, now, turn, slug) do
+    %{
+      "ts" => now,
+      "event" => "turn_delivery_attempted",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "turn_id" => turn.turn_id,
+      "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
+      "to" => slug,
+      "backend" => "hardline",
+      "status" => "queued"
+    }
+  end
+
+  defp turn_delivered_event(ticket, slug, now, turn) do
+    %{
+      "ts" => now,
+      "event" => "turn_delivered",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "turn_id" => turn.turn_id,
+      "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
+      "to" => slug,
+      "backend" => "hardline"
+    }
+  end
+
+  defp turn_delivery_failed_event(ticket, slug, now, turn, reason) do
+    %{
+      "ts" => now,
+      "event" => "turn_delivery_failed",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "turn_id" => turn.turn_id,
+      "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
+      "to" => slug,
+      "backend" => "hardline",
+      "error" => error_text(reason)
+    }
+  end
+
   defp comment_notification_attempted_event(ticket, now, by) do
     %{
       "ts" => now,
@@ -458,10 +566,15 @@ defmodule Babs.Citizens.Tickets.Writer do
     }
   end
 
-  defp inject_comment(root, ticket, body, now, by, opts) do
+  defp inject_comment(root, ticket, body, now, by, turn, opts) do
+    conversation =
+      root
+      |> read_history_for_prompt(ticket.id)
+      |> Conversation.from_history()
+
     results =
       Enum.map(ticket.assignees, fn slug ->
-        {slug, deliver_comment(root, ticket, slug, body, now, by, opts)}
+        {slug, deliver_comment(root, ticket, slug, body, now, by, turn, opts, conversation)}
       end)
 
     ok_slugs =
@@ -481,21 +594,28 @@ defmodule Babs.Citizens.Tickets.Writer do
     end
   end
 
-  defp deliver_comment(root, ticket, slug, body, now, by, opts) do
-    prompt = Injector.comment_prompt(ticket, slug, by, body)
+  defp deliver_comment(root, ticket, slug, body, now, by, turn, opts, conversation) do
+    prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
 
     with :ok <- Injector.prepare(slug, opts),
          :ok <- Injector.inject(slug, prompt, opts),
-         :ok <- History.append(root, ticket.id, comment_notified_event(ticket, slug, now, by)) do
-      track_reply_capture(root, ticket, slug, now, opts)
+         :ok <-
+           append_events(
+             root,
+             ticket.id,
+             [comment_notified_event(ticket, slug, now, by)] ++
+               turn_delivered_events(ticket, slug, now, turn)
+           ) do
+      track_reply_capture(root, ticket, slug, now, opts, turn)
       :ok
     else
       {:error, reason} ->
         _ignored =
-          History.append(
+          append_events(
             root,
             ticket.id,
-            comment_notification_failed_event(ticket, slug, now, by, reason)
+            [comment_notification_failed_event(ticket, slug, now, by, reason)] ++
+              turn_delivery_failed_events(ticket, slug, now, turn, reason)
           )
 
         {:error, reason}
@@ -548,21 +668,109 @@ defmodule Babs.Citizens.Tickets.Writer do
     end)
   end
 
-  defp track_reply_capture(root, ticket, slug, now, opts) do
+  defp read_history_for_prompt(root, ticket_id) do
+    case History.read(root, ticket_id) do
+      {:ok, events} ->
+        events
+
+      {:error, reason} ->
+        Logger.warning(
+          "Babs Ticket #{ticket_id} history read failed before prompt assembly: #{inspect(reason)}"
+        )
+
+        []
+    end
+  end
+
+  defp track_reply_capture(root, ticket, slug, now, opts, turn \\ %{}) do
     capture = Keyword.get(opts, :reply_capture, &ReplyCapture.track/1)
 
     if is_function(capture, 1) do
       _ignored =
-        capture.(%{
-          root: root,
-          ticket_id: ticket.id,
-          slug: slug,
-          started_at: now
-        })
+        capture.(
+          %{
+            root: root,
+            ticket_id: ticket.id,
+            slug: slug,
+            started_at: now,
+            turn_id: Map.get(turn, :turn_id),
+            attempt_id: turn |> Map.get(:attempt_ids, %{}) |> Map.get(slug)
+          }
+          |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+          |> Map.new()
+        )
     end
 
     :ok
   end
+
+  defp turn_delivered_events(_ticket, _slug, _now, %{turn_id: nil}), do: []
+
+  defp turn_delivered_events(ticket, slug, now, turn) do
+    if Map.has_key?(turn.attempt_ids, slug) do
+      [turn_delivered_event(ticket, slug, now, turn)]
+    else
+      []
+    end
+  end
+
+  defp turn_delivery_failed_events(_ticket, _slug, _now, %{turn_id: nil}, _reason), do: []
+
+  defp turn_delivery_failed_events(ticket, slug, now, turn, reason) do
+    if Map.has_key?(turn.attempt_ids, slug) do
+      [turn_delivery_failed_event(ticket, slug, now, turn, reason)]
+    else
+      []
+    end
+  end
+
+  defp comment_turn(ticket, attrs, now, by, notify?) do
+    supplied_turn_id = fetch_attr(attrs, :turn_id)
+    supplied_message_id = fetch_attr(attrs, :message_id)
+    supplied_attempt_id = fetch_attr(attrs, :attempt_id)
+    parent_turn_id = fetch_attr(attrs, :parent_turn_id)
+    message_id = supplied_message_id || TurnIds.generate!(:message, now)
+
+    cond do
+      is_binary(supplied_turn_id) ->
+        %{
+          turn_id: supplied_turn_id,
+          message_id: message_id,
+          captured_attempt_id: supplied_attempt_id,
+          parent_turn_id: parent_turn_id,
+          attempt_ids: %{},
+          new_turn?: false
+        }
+
+      by == "user" and notify? ->
+        turn_id = TurnIds.generate!(:turn, now)
+
+        %{
+          turn_id: turn_id,
+          message_id: message_id,
+          captured_attempt_id: nil,
+          parent_turn_id: parent_turn_id,
+          attempt_ids:
+            Map.new(ticket.assignees, fn slug ->
+              {slug, TurnIds.generate!(:attempt, now)}
+            end),
+          new_turn?: true
+        }
+
+      true ->
+        %{
+          turn_id: nil,
+          message_id: message_id,
+          captured_attempt_id: nil,
+          parent_turn_id: nil,
+          attempt_ids: %{},
+          new_turn?: false
+        }
+    end
+  end
+
+  defp put_optional(map, _key, nil), do: map
+  defp put_optional(map, key, value), do: Map.put(map, key, value)
 
   defp validate_events(id, events) do
     Enum.reduce_while(events, :ok, fn event, :ok ->
