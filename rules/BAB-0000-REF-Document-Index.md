@@ -78,6 +78,7 @@
 | 2238 | CHG | Implement Phase 13c Stale Citizen UI Guard |
 | 2239 | CHG | Implement Phase 13d Citizen Index Stale Guard |
 | 2240 | CHG | Implement Phase 13e GitHub Actions CI Gate |
+| 2241 | PRP | Phase 13f Provider Runtime Contract |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

@@ -255,11 +255,14 @@ after Babs restart when the tmux target still exists.
 ### Phase 13a — Multi-Turn Ticket Sessions + Direct CLI Backend
 
 **Planning doc**: `BAB-2232` PRP
-**Current status**: Approved PRP. CHG 13a.1 (`BAB-2233`) completed the Tailwind
-UI foundation and kitchen-sink correction. CHG 13a.2 (`BAB-2234`) completed the
-multi-turn Ticket model, prompt assembler, turn/attempt events, and light-theme
-Ticket detail chat locally after Trinity implementation R3 PASS. Next
-implementation slice is 13a.3 direct CLI provider sessions.
+**Current status**: Implemented and merged through the 13a implementation
+slices. CHG 13a.1 (`BAB-2233`) completed the Tailwind UI foundation and
+kitchen-sink correction. CHG 13a.2 (`BAB-2234`) completed the multi-turn Ticket
+model, prompt assembler, turn/attempt events, and light-theme Ticket detail
+chat. CHG 13a.3 (`BAB-2235`) completed direct CLI provider sessions. CHG 13a.4
+(`BAB-2236`) completed direct backend UI controls. Follow-up CHGs `BAB-2237`
+through `BAB-2240` completed compact resumable direct prompts, stale Citizen UI
+guards, and the first GitHub Actions CI gate.
 **Scope**: Make Ticket detail pages true multi-turn conversation surfaces and
 add a direct CLI execution backend for Ticket turns. Phase 13a.1 also introduces
 a light-theme `/dev/kitchen-sink` page so Ticket chat and shared UI components
@@ -282,6 +285,25 @@ still open a Hardline when needed; direct CLI process lifecycle and per-Citizen
 execution serialization are covered by tests; existing Hardline assignment,
 reply capture, restart, and imported tmux validations still pass.
 **Estimate**: 10-16 days
+
+### Phase 13f — Provider Runtime Contract
+
+**Planning doc**: `BAB-2241` PRP
+**Current status**: Approved PRP after Trinity fast-review with GLM and
+DeepSeek PASS.
+**Scope**: Formalize the provider runtime contract before Phase 14-17 automation
+depends on provider-specific launch, resume, parsing, and capability behavior.
+The OpenClaw wrapping research is used as architecture inspiration only; Babs
+keeps the Elixir/Phoenix/Ecto runtime and extracts a Babs-native contract for
+command building, environment policy, prompt/input mode, session id discovery,
+reply parsing, capability flags, timeout/cancellation behavior, redaction, and
+interactive Hardline attachment.
+**Acceptance**: Each supported provider/backend has an explicit capability map;
+direct CLI results can be represented with one normalized result shape; Hardline
+and imported Hardline expose capabilities without changing ownership semantics;
+at least one direct CLI Ticket turn and one Hardline Ticket turn remain covered
+after migration.
+**Estimate**: 4-8 days
 
 ### Phase 14 — Citizen Roles
 
@@ -323,6 +345,7 @@ reply capture, restart, and imported tmux validations still pass.
 | Phase 12a (relay reliability) | 4-7 days | 8-14 days |
 | Phase 13 (imported tmux attach) | 4-7 days | 8-14 days |
 | Phase 13a (multi-turn direct CLI) | 10-16 days | 20-32 days |
+| Phase 13f (provider runtime contract) | 4-8 days | 8-16 days |
 | Phase 14-15 (V0-L early) | 10-15 days | 20-30 days |
 | Phase 16 (Mayor) | 14-21 days | 28-42 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
