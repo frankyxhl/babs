@@ -18,15 +18,15 @@ defmodule Babs.Citizens.DirectCli.Adapters.Codex do
     Common.command(
       config,
       provider(),
-      [
-        config.cli,
-        "exec",
-        "--json",
-        "--cd",
-        config.cwd,
-        "--dangerously-bypass-approvals-and-sandbox",
-        prompt
-      ],
+      cli_args(config) ++
+        [
+          "exec",
+          "--json",
+          "--cd",
+          config.cwd,
+          "--dangerously-bypass-approvals-and-sandbox",
+          prompt
+        ],
       opts
     )
   end
@@ -36,15 +36,15 @@ defmodule Babs.Citizens.DirectCli.Adapters.Codex do
     Common.command(
       config,
       provider(),
-      [
-        config.cli,
-        "exec",
-        "resume",
-        "--json",
-        "--dangerously-bypass-approvals-and-sandbox",
-        provider_session_id,
-        prompt
-      ],
+      cli_args(config) ++
+        [
+          "exec",
+          "resume",
+          "--json",
+          "--dangerously-bypass-approvals-and-sandbox",
+          provider_session_id,
+          prompt
+        ],
       Keyword.merge(opts, provider_session_id: provider_session_id, resume?: true)
     )
   end
@@ -69,4 +69,6 @@ defmodule Babs.Citizens.DirectCli.Adapters.Codex do
          }}
     end
   end
+
+  defp cli_args(config), do: [config.cli] ++ (config.cli_args || [])
 end

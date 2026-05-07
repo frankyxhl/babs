@@ -187,6 +187,38 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert result.text == "codex stream reply"
   end
 
+  test "codex command preserves citizen cli args before direct flags" do
+    cfg = %{config("codex") | cli_args: ["--model", "gpt-5.2"]}
+
+    assert {:ok, command} = Codex.start_command(cfg, "hello")
+
+    assert command.args == [
+             "codex",
+             "--model",
+             "gpt-5.2",
+             "exec",
+             "--json",
+             "--cd",
+             cfg.cwd,
+             "--dangerously-bypass-approvals-and-sandbox",
+             "hello"
+           ]
+
+    assert {:ok, resumed} = Codex.resume_command(cfg, "codex-thread", "again")
+
+    assert resumed.args == [
+             "codex",
+             "--model",
+             "gpt-5.2",
+             "exec",
+             "resume",
+             "--json",
+             "--dangerously-bypass-approvals-and-sandbox",
+             "codex-thread",
+             "again"
+           ]
+  end
+
   test "copilot command and jsonl parser handle session id" do
     cfg = config("copilot")
     assert {:ok, command} = Copilot.start_command(cfg, "hello")
