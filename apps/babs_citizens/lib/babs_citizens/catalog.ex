@@ -170,7 +170,7 @@ defmodule Babs.Citizens.Catalog do
       attrs =
         config
         |> config_attrs()
-        |> Map.put(:status, "running")
+        |> Map.put(:status, initial_status(config))
         |> Map.put(:metadata, %{})
         |> Map.put(:is_mayor, false)
 
@@ -197,6 +197,9 @@ defmodule Babs.Citizens.Catalog do
       {:error, changeset} -> {:error, changeset}
     end
   end
+
+  defp initial_status(%CitizenConfig{ticket_backend: "direct_cli"}), do: "stopped"
+  defp initial_status(_config), do: "running"
 
   defp config_attrs(%CitizenConfig{} = config) do
     %{

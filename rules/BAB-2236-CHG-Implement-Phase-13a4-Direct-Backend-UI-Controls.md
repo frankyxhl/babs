@@ -1,8 +1,8 @@
 # CHG-2236: Implement Phase 13a.4 Direct Backend UI Controls
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
-**Last reviewed:** 2026-05-07
+**Last updated:** 2026-05-08
+**Last reviewed:** 2026-05-08
 **Status:** Approved
 **Date:** 2026-05-07
 **Requested by:** Operator
@@ -189,18 +189,20 @@ Final results:
     suite: 60 tests, 0 failures.
   - Focused P2 regression suite after GitHub Codex review R1: 46 tests,
     0 failures.
+  - Focused P2 regression suite after GitHub Codex review R2: 29 tests,
+    0 failures.
 - `python3 -m py_compile test/browser/bdd/babs_steps.py
   test/browser/bdd/run.py`: passed.
 - Focused browser-harness BDD with isolated Chrome CDP on local port 9333:
   `direct cli backend UI creation and assignment` passed.
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- `mise exec -- mix test`: 397 tests, 0 failures.
+- `mise exec -- mix test`: 398 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a4`: 397 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a4`: 398 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed with `:babs_citizens`
-    82.27% total and `:babs` 88.50% total.
+    82.31% total and `:babs` 88.50% total.
 - `npm run test:js`: 15 tests, 0 failures.
 - `npm run test:e2e`: 13 tests total, 11 passed, 2 skipped.
 - `af validate --root <repo-root>`: 144 documents checked, 0 issues found.
@@ -228,6 +230,10 @@ Final results:
 - GitHub Codex PR review R1 on commit `396418dfa7`: two P2 findings fixed:
   reject `direct_cli` browser creation for unsupported CLI presets, and avoid
   advertising unimplemented lazy-tmux assignment behavior.
+- GitHub Codex PR review R2 on commit `cabd9781e6`: one P2 finding fixed:
+  preserve direct-only status on TOML re-import by importing `direct_cli`
+  configs as `stopped`, so a rebuilt SQLite catalog cannot accidentally start
+  a Hardline lifecycle.
 
 ## References
 
@@ -254,3 +260,4 @@ Final results:
 | 2026-05-07 | Record implementation validation results and GitHub tracking issue #28 | Codex |
 | 2026-05-08 | Record Trinity implementation review PASS from GLM and DeepSeek | Codex |
 | 2026-05-08 | Record GitHub Codex R1 P2 fixes and refreshed validation counts | Codex |
+| 2026-05-08 | Record GitHub Codex R2 P2 fix and refreshed validation counts | Codex |
