@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, and Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing.
 
 ---
 
@@ -307,9 +307,19 @@ after migration.
 
 ### Phase 14 — Citizen Roles
 
-**Scope**: `citizens.role` SQLite field (was reserved in Phase 3) becomes user-settable. UI shows role; `/citizens/new` form has role field. Tickets can specify `assignee_role` instead of named `assignee`. Babs picks an idle Citizen of that role (round-robin).
-**Acceptance**: Create T-002 with `assignee_role: developer`; Babs auto-routes to first idle developer-role citizen
-**Estimate**: 3-5 days
+**Planning doc**: `BAB-2242` PRP
+**Current status**: Approved PRP after Trinity fast-review with GLM and
+DeepSeek PASS.
+**Scope**: Replace the earlier single-role plan with canonical multi-role
+Citizen routing. Add normalized `roles` while preserving legacy `role`
+compatibility, expose role badges and multi-role controls in the UI, and route
+Tickets with existing `assignee_role` to any eligible Citizen whose role list
+matches.
+**Acceptance**: Create a Citizen with roles including `developer` and
+`inspector`; create a Ticket with `assignee_role: developer`; Babs auto-routes
+to that Citizen even when `developer` is not the first role; legacy single-role
+Citizens still import and route correctly.
+**Estimate**: 5-8 days
 
 ### Phase 15 — Inspector Role (Auto-Approval)
 
@@ -346,10 +356,10 @@ after migration.
 | Phase 13 (imported tmux attach) | 4-7 days | 8-14 days |
 | Phase 13a (multi-turn direct CLI) | 10-16 days | 20-32 days |
 | Phase 13f (provider runtime contract) | 4-8 days | 8-16 days |
-| Phase 14-15 (V0-L early) | 10-15 days | 20-30 days |
+| Phase 14-15 (V0-L early) | 12-18 days | 24-36 days |
 | Phase 16 (Mayor) | 14-21 days | 28-42 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~107-167 days (~16-24 weeks)** | **~212-333 days (~30-48 weeks, 7-12 months)** |
+| **Total** | **~109-170 days (~16-25 weeks)** | **~216-339 days (~31-49 weeks, 7-12 months)** |
 
 **Be honest**: The realistic column is the operating estimate. Plan for 7-12 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
@@ -443,3 +453,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Add Phase 13a after imported tmux attach for multi-turn Ticket sessions, direct CLI provider sessions, lazy tmux, and the decision not to adopt `better-sqlite3` for the Elixir runtime | Codex |
 | 2026-05-07 | Increase Phase 13a estimate after Claude/Codex direct review identified supervised runner, direct reply pipeline, session migration, redaction/env, and lazy-tmux concurrency scope | Codex |
 | 2026-05-07 | Align Phase 13a with light-first UI and kitchen-sink route from `BAB-1004` | Codex |
+| 2026-05-07 | Add `BAB-2242` Phase 14 PRP and update Phase 14 from single-role to multi-role Citizen routing | Codex |
