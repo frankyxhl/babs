@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing, and Phase 15 has its own PRP (`BAB-2243`) for Inspector Council auto-approval.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing, Phase 15 has its own PRP (`BAB-2243`) for Inspector Council auto-approval, and Phase 16 has its own PRP (`BAB-2244`) for Mayor rule-guided proposals.
 
 ---
 
@@ -338,11 +338,23 @@ Ticket to `in_progress` with feedback; a two-Citizen council can approve only
 when both inspectors approve; human override remains available.
 **Estimate**: 10-14 days (LLM protocol and quorum design)
 
-### Phase 16 — Mayor Citizen (research-grade)
+### Phase 16 — Mayor Rule-Guided Proposals (research-grade)
 
-**Scope**: Citizen with `is_mayor: true`. Listens for tickets with `assignees: []` (the billboard). Outputs proposal: `bb propose <root-ticket> --children "T-A: BA work; T-B: Developer work; ..."`. Proposal becomes draft tickets in a special state; UI shows them awaiting user approval. User can edit/cull/approve. On approve, drafts are written to the configured tickets root and routed to citizens by role.
-**Acceptance**: User creates T-100 = "Build a hello world site" (no assignee). Mayor proposes 4 children. User removes one ("designer"), approves rest. 3 children auto-routed to citizens by role. All 3 progress through the lifecycle.
-**Estimate**: 14-21 days (LLM protocol research)
+**Planning doc**: `BAB-2244` PRP
+**Current status**: Approved PRP after Trinity fast-review with GLM and
+DeepSeek PASS.
+**Scope**: Add a Mayor Citizen that creates human-reviewed proposal artifacts
+for mission Tickets on the Billboard. Root Tickets opt into proposal mode
+through metadata, including opaque Alfred/Babs rule references. Babs does not
+parse Alfred SOPs; it passes `rules_refs` to the Mayor, persists a structured
+proposal, renders an editable child-ticket preview and graph/tree, and only
+writes child Tickets after human approval.
+**Acceptance**: User creates a mission Ticket with Mayor proposal metadata;
+Mayor returns a structured proposal with child Tickets, roles, inspection
+policy, risks, and questions; user removes or edits one child, approves the
+proposal, and Babs writes the remaining child Tickets under the configured
+tickets root with role routing metadata preserved.
+**Estimate**: 18-26 days (LLM protocol, proposal UI, and rule-reference design)
 
 ### Phase 17 — PWA + Mobile + Read-Only Federation
 
@@ -368,9 +380,9 @@ when both inspectors approve; human override remains available.
 | Phase 13a (multi-turn direct CLI) | 10-16 days | 20-32 days |
 | Phase 13f (provider runtime contract) | 4-8 days | 8-16 days |
 | Phase 14-15 (V0-L early) | 15-22 days | 30-44 days |
-| Phase 16 (Mayor) | 14-21 days | 28-42 days |
+| Phase 16 (Mayor) | 18-26 days | 36-52 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~112-174 days (~16-25 weeks)** | **~222-347 days (~32-50 weeks, 7-12 months)** |
+| **Total** | **~116-179 days (~17-26 weeks)** | **~230-357 days (~33-51 weeks, 7-12 months)** |
 
 **Be honest**: The realistic column is the operating estimate. Plan for 7-12 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
@@ -466,3 +478,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Align Phase 13a with light-first UI and kitchen-sink route from `BAB-1004` | Codex |
 | 2026-05-07 | Add `BAB-2242` Phase 14 PRP and update Phase 14 from single-role to multi-role Citizen routing | Codex |
 | 2026-05-07 | Add `BAB-2243` Phase 15 PRP and update Phase 15 from a single inspector role to Inspector Council auto-approval | Codex |
+| 2026-05-07 | Add `BAB-2244` Phase 16 PRP and update Mayor scope to human-gated rule-guided proposal planning | Codex |
