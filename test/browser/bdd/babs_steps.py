@@ -60,6 +60,10 @@ class BabsBddContext:
         self.server_process: subprocess.Popen | None = None
         self.test_target_id: str | None = None
         self.tickets_root = tickets_root()
+        self.direct_prompts_path = Path(
+            os.environ.get("BABS_BDD_DIRECT_PROMPTS_PATH")
+            or (tmp_bdd_dir("direct-prompts") / "prompts.jsonl")
+        )
 
     def ensure_server(self) -> None:
         if self._server_ready():
@@ -71,6 +75,7 @@ class BabsBddContext:
         env["BABS_TICKETS_ROOT"] = str(self.tickets_root)
         env.setdefault("BABS_BDD_FAKE_DIRECT", "1")
         env.setdefault("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
+        env["BABS_BDD_DIRECT_PROMPTS_PATH"] = str(self.direct_prompts_path)
         self.server_process = subprocess.Popen(
             ["mise", "exec", "--", "mix", "phx.server"],
             cwd=ROOT,
@@ -353,6 +358,13 @@ def scenarios() -> list[Scenario]:
             when="the operator creates a Direct CLI Citizen and assigns a Ticket",
             then="the direct reply appears in chat without starting a tmux session",
             run=scenario_direct_cli_backend_ui_creation_and_assignment,
+        ),
+        Scenario(
+            name="direct cli compact prompt",
+            given="a Direct CLI Citizen has an active provider session",
+            when="the operator sends multiple Ticket comments",
+            then="resumed direct turns send only the latest comment and reuse the provider session",
+            run=scenario_direct_cli_compact_prompt,
         ),
         Scenario(
             name="malformed ticket is visible",
@@ -1136,6 +1148,83 @@ def scenario_direct_cli_backend_ui_creation_and_assignment(context: BabsBddConte
         )
         if tmux_session_alive(f"babs-{slug}"):
             raise AssertionError(f"direct_cli Ticket assignment unexpectedly started tmux session babs-{slug}")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
+def scenario_direct_cli_compact_prompt(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-compact")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    body = f"BDD compact full body for {slug}."
+    first_comment = f"BDD compact first comment for {slug}."
+    second_comment = f"BDD compact second comment for {slug}."
+
+    try:
+        context.direct_prompts_path.unlink(missing_ok=True)
+
+        context.open_path("/citizens/new")
+        assert_element_visible('[data-testid="new-citizen-form"]', "new citizen form")
+        wait_until(
+            "LiveView socket to connect",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        submit_new_citizen_form(slug, f"BDD {slug}", "copilot-cli", slug, "direct_cli")
+        wait_until(
+            "browser to redirect to /citizens after compact direct creation",
+            lambda: js("window.location.pathname") == "/citizens",
+            timeout=15,
+        )
+        wait_for_index_status(slug, "stopped")
+
+        write_ticket(context.tickets_root, ticket_id, "BDD Compact Direct Ticket", body)
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to connect on compact direct Ticket detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        click_selector(f'[data-testid="ticket-assign-{slug}"]')
+        wait_until(
+            "direct assignment prompt to be captured",
+            lambda: len(direct_prompt_events(context.direct_prompts_path)) >= 1,
+            timeout=20,
+        )
+
+        submit_ticket_comment(first_comment)
+        wait_until(
+            "first compact direct comment prompt to be captured",
+            lambda: len(direct_prompt_events(context.direct_prompts_path)) >= 2,
+            timeout=20,
+        )
+
+        submit_ticket_comment(second_comment)
+        wait_until(
+            "second compact direct comment prompt to be captured",
+            lambda: len(direct_prompt_events(context.direct_prompts_path)) >= 3,
+            timeout=20,
+        )
+
+        prompts = direct_prompt_events(context.direct_prompts_path)
+        assignment_prompt = prompts[0]["prompt"]
+        first_prompt = prompts[1]["prompt"]
+        second_prompt = prompts[2]["prompt"]
+
+        assert body in assignment_prompt
+        assert prompts[1]["resume"] is True
+        assert prompts[2]["resume"] is True
+        assert prompts[1]["provider_session_id"] == prompts[2]["provider_session_id"]
+
+        assert first_comment in first_prompt
+        assert f"BABS_REPLY {ticket_id}:" in first_prompt
+        assert body not in first_prompt
+
+        assert second_comment in second_prompt
+        assert f"BABS_REPLY {ticket_id}:" in second_prompt
+        assert body not in second_prompt
+        assert first_comment not in second_prompt
+        assert "Recent visible chat messages" not in second_prompt
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)
@@ -2128,6 +2217,13 @@ def ticket_history_events(root: Path, ticket_id: str) -> list[dict]:
         for line in ticket_history_path(root, ticket_id).read_text().splitlines()
         if line.strip()
     ]
+
+
+def direct_prompt_events(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
 def history_has_event(root: Path, ticket_id: str, predicate) -> bool:

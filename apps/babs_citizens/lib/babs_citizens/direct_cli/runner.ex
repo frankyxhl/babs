@@ -200,27 +200,33 @@ defmodule Babs.Citizens.DirectCli.Runner do
   end
 
   defp command_for_turn(turn, adapter, session, opts) do
+    resumable? = resumable_session?(session)
+
     command_opts =
       [
         timeout_ms: Keyword.get(opts, :timeout_ms, 120_000),
         output_limit: Keyword.get(opts, :output_limit, 65_536)
       ]
-      |> maybe_command_provider_session_id(session.provider_session_id)
+      |> maybe_command_provider_session_id(session.provider_session_id, resumable?)
 
-    if is_binary(session.provider_session_id) and session.provider_session_id != "" and
-         session.status == "active" do
+    if resumable? do
       adapter.resume_command(turn.config, session.provider_session_id, turn.prompt, command_opts)
     else
       adapter.start_command(turn.config, turn.prompt, command_opts)
     end
   end
 
-  defp maybe_command_provider_session_id(opts, provider_session_id)
+  defp resumable_session?(session) do
+    is_binary(session.provider_session_id) and session.provider_session_id != "" and
+      session.status == "active"
+  end
+
+  defp maybe_command_provider_session_id(opts, provider_session_id, true)
        when is_binary(provider_session_id) and provider_session_id != "" do
     Keyword.put(opts, :provider_session_id, provider_session_id)
   end
 
-  defp maybe_command_provider_session_id(opts, _provider_session_id), do: opts
+  defp maybe_command_provider_session_id(opts, _provider_session_id, _resumable?), do: opts
 
   defp finish_session(session, turn, result) do
     status =
@@ -266,6 +272,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
 
   defp fallback_to_hardline(turn, reason, opts) do
     attempt_id = TurnIds.generate!(:attempt, now_iso())
+    fallback_prompt = hardline_fallback_prompt(turn)
 
     fallback_turn =
       turn
@@ -276,7 +283,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
            append_events(fallback_turn, [
              delivery_attempted_event(fallback_turn, "queued", reason)
            ]),
-         :ok <- hardline_injector(opts).(turn.slug, turn.prompt, opts),
+         :ok <- hardline_injector(opts).(turn.slug, fallback_prompt, opts),
          :ok <-
            append_events(fallback_turn, [
              delivered_event(fallback_turn, %{provider_session_id: nil})
@@ -295,6 +302,13 @@ defmodule Babs.Citizens.DirectCli.Runner do
       {:error, fallback_reason} ->
         append_events(fallback_turn, [delivery_failed_event(fallback_turn, fallback_reason)])
         {:error, fallback_reason}
+    end
+  end
+
+  defp hardline_fallback_prompt(turn) do
+    case Map.get(turn, :fallback_prompt) do
+      value when is_binary(value) and value != "" -> value
+      _other -> turn.prompt
     end
   end
 

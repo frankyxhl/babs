@@ -91,6 +91,30 @@ if config_env() != :prod and non_empty_env.("BABS_BDD_FAKE_DIRECT") == "1" do
     executor: fn command ->
       reply = System.get_env("BABS_BDD_DIRECT_REPLY") || "BDD direct CLI UI reply."
       session_id = command.provider_session_id || "bdd-direct-ui-session"
+      prompt_capture_path = non_empty_env.("BABS_BDD_DIRECT_PROMPTS_PATH")
+
+      if prompt_capture_path do
+        File.mkdir_p!(Path.dirname(prompt_capture_path))
+
+        prompt =
+          command.args
+          |> List.last()
+          |> case do
+            value when is_binary(value) -> value
+            _other -> command.stdin || ""
+          end
+
+        File.write!(
+          prompt_capture_path,
+          Jason.encode!(%{
+            "provider" => command.provider,
+            "provider_session_id" => command.provider_session_id,
+            "resume" => Map.get(command, :resume?, false),
+            "prompt" => prompt
+          }) <> "\n",
+          [:append]
+        )
+      end
 
       {:ok,
        %{stdout: Jason.encode!(%{"session_id" => session_id, "content" => reply}), stderr: ""}}

@@ -8,6 +8,22 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
 
   @default_max_messages 12
 
+  @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
+  def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
+    latest_message = Keyword.get(opts, :latest_message, "")
+
+    """
+    Ticket: #{ticket.id}
+
+    Latest operator message:
+    #{sanitize(latest_message)}
+
+    Reply with:
+    BABS_REPLY #{ticket.id}: your response
+    """
+    |> String.trim()
+  end
+
   @spec follow_up_prompt(Ticket.t(), [map()] | Conversation.t(), keyword()) :: String.t()
   def follow_up_prompt(ticket, history_or_conversation, opts \\ [])
 

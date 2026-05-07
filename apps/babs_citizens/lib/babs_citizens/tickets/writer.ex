@@ -7,12 +7,15 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   alias Babs.Citizens.Citizen.Config, as: CitizenConfig
   alias Babs.Citizens.Catalog
+  alias Babs.Citizens.DirectCli.Adapters
   alias Babs.Citizens.DirectCli.Runner, as: DirectRunner
   alias Babs.Citizens.ExecutionLock
+  alias Babs.Citizens.ProviderSessions
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
@@ -645,39 +648,71 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp deliver_comment(root, ticket, slug, body, now, by, turn, opts, conversation) do
-    prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
-
     case delivery_backend(slug, opts) do
       "direct_cli" ->
-        deliver_direct_comment(root, ticket, slug, prompt, turn, opts)
+        full_prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
+        prompt = direct_comment_prompt(ticket, slug, body, opts, full_prompt)
+        deliver_direct_comment(root, ticket, slug, prompt, full_prompt, turn, opts)
 
       "lazy_tmux" ->
+        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
         deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
 
       _backend ->
+        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
         deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
     end
   end
 
-  defp deliver_direct_comment(root, ticket, slug, prompt, turn, opts) do
-    deliver_direct_turn(root, ticket, slug, prompt, turn, opts)
+  defp direct_comment_prompt(ticket, slug, body, opts, full_prompt) do
+    if compact_direct_comment?(ticket, slug, opts) do
+      PromptAssembler.compact_follow_up_prompt(ticket, latest_message: body)
+    else
+      full_prompt
+    end
   end
 
-  defp deliver_direct_turn(root, ticket, slug, prompt, turn, opts) do
+  defp compact_direct_comment?(ticket, slug, opts) do
+    with {:ok, config} <- direct_config(slug, opts),
+         {:ok, adapter} <- direct_adapter(config, opts),
+         session when not is_nil(session) <-
+           ProviderSessions.get_active(slug, ticket.id, adapter.provider(), "direct_cli") do
+      active_resumable_session?(session)
+    else
+      _other -> false
+    end
+  rescue
+    _error -> false
+  catch
+    :exit, _reason -> false
+  end
+
+  defp direct_adapter(config, opts) do
+    case Keyword.fetch(opts, :adapter) do
+      {:ok, adapter} -> {:ok, adapter}
+      :error -> Adapters.resolve(config, opts)
+    end
+  end
+
+  defp active_resumable_session?(session) do
+    Map.get(session, :status) == "active" and
+      session
+      |> Map.get(:provider_session_id)
+      |> case do
+        value when is_binary(value) -> String.trim(value) != ""
+        _other -> false
+      end
+  end
+
+  defp deliver_direct_comment(root, ticket, slug, prompt, fallback_prompt, turn, opts) do
+    deliver_direct_turn(root, ticket, slug, prompt, turn, opts, fallback_prompt)
+  end
+
+  defp deliver_direct_turn(root, ticket, slug, prompt, turn, opts, fallback_prompt \\ nil) do
     with {:ok, config} <- direct_config(slug, opts),
          :ok <-
            DirectRunner.start_turn(
-             %{
-               root: root,
-               ticket_id: ticket.id,
-               slug: slug,
-               turn_id: turn.turn_id,
-               attempt_id: Map.fetch!(turn.attempt_ids, slug),
-               backend: "direct_cli",
-               prompt: prompt,
-               config: config,
-               fallback: :hardline
-             },
+             direct_turn(root, ticket, slug, prompt, turn, config, fallback_prompt),
              opts
            ) do
       :ok
@@ -696,6 +731,27 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, reason}
     end
   end
+
+  defp direct_turn(root, ticket, slug, prompt, turn, config, fallback_prompt) do
+    %{
+      root: root,
+      ticket_id: ticket.id,
+      slug: slug,
+      turn_id: turn.turn_id,
+      attempt_id: Map.fetch!(turn.attempt_ids, slug),
+      backend: "direct_cli",
+      prompt: prompt,
+      config: config,
+      fallback: :hardline
+    }
+    |> maybe_put_fallback_prompt(fallback_prompt)
+  end
+
+  defp maybe_put_fallback_prompt(turn, prompt) when is_binary(prompt) and prompt != "" do
+    Map.put(turn, :fallback_prompt, prompt)
+  end
+
+  defp maybe_put_fallback_prompt(turn, _prompt), do: turn
 
   defp deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts) do
     backend = delivery_backend(slug, opts)
