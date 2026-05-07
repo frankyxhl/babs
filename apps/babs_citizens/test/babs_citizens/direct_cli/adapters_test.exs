@@ -65,6 +65,41 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert command.provider_session_id == session_id
   end
 
+  test "claude command preserves citizen cli args before direct flags" do
+    cfg = %{config("claude") | cli_args: ["--model", "sonnet"]}
+
+    assert {:ok, command} =
+             Claude.start_command(cfg, "hello",
+               provider_session_id: "00000000-0000-0000-0000-000000000001"
+             )
+
+    assert command.args == [
+             "claude",
+             "--model",
+             "sonnet",
+             "--print",
+             "--output-format",
+             "json",
+             "--session-id",
+             "00000000-0000-0000-0000-000000000001",
+             "hello"
+           ]
+
+    assert {:ok, resumed} = Claude.resume_command(cfg, "session-1", "again")
+
+    assert resumed.args == [
+             "claude",
+             "--model",
+             "sonnet",
+             "--print",
+             "--output-format",
+             "json",
+             "--resume",
+             "session-1",
+             "again"
+           ]
+  end
+
   test "claude parses json result and redacts paths" do
     stdout =
       Jason.encode!(%{"session_id" => "session-1", "result" => "done at /Users/alice/secret"})

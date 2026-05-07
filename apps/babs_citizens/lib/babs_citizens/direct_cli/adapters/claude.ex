@@ -20,7 +20,8 @@ defmodule Babs.Citizens.DirectCli.Adapters.Claude do
     Common.command(
       config,
       provider(),
-      [config.cli, "--print", "--output-format", "json", "--session-id", session_id, prompt],
+      cli_args(config) ++
+        ["--print", "--output-format", "json", "--session-id", session_id, prompt],
       Keyword.merge(opts, provider_session_id: session_id)
     )
   end
@@ -30,7 +31,8 @@ defmodule Babs.Citizens.DirectCli.Adapters.Claude do
     Common.command(
       config,
       provider(),
-      [config.cli, "--print", "--output-format", "json", "--resume", provider_session_id, prompt],
+      cli_args(config) ++
+        ["--print", "--output-format", "json", "--resume", provider_session_id, prompt],
       Keyword.merge(opts, provider_session_id: provider_session_id, resume?: true)
     )
   end
@@ -55,4 +57,6 @@ defmodule Babs.Citizens.DirectCli.Adapters.Claude do
          }}
     end
   end
+
+  defp cli_args(config), do: [config.cli] ++ (config.cli_args || [])
 end

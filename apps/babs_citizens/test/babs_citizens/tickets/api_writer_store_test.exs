@@ -678,6 +678,47 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     refute List.last(history)["error"] =~ "fixture-value"
   end
 
+  test "assign_ticket records busy hardline assignment without injecting when lock is held" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Busy assignment", body: "Persist without pane write."},
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    assert {:error, {:execution_busy, "clare"}} =
+             ExecutionLock.with_lock("clare", fn ->
+               Api.assign_ticket(ticket.id, "clare",
+                 tickets_root: root,
+                 now: "2026-05-07T10:01:00Z",
+                 citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                 pane_lookup: fn "clare" -> {:ok, self()} end,
+                 pane_injector: fn "clare", _prompt ->
+                   flunk("busy hardline assignment should not inject into the pane")
+                 end
+               )
+             end)
+
+    assert {:ok, %{ticket: shown, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert shown.state == "in_progress"
+    assert shown.assignees == ["clare"]
+
+    assert Enum.map(history, & &1["event"]) == [
+             "created",
+             "assigned",
+             "state_change",
+             "injection_attempted",
+             "injection_failed"
+           ]
+
+    assert List.last(history)["error"] =~ "execution_busy"
+    refute Enum.any?(history, &match?(%{"event" => "injected"}, &1))
+  end
+
   test "concurrent assign_ticket attempts serialize through the per-ticket writer" do
     root = tmp_root()
 

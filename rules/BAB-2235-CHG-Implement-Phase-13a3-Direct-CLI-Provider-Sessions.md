@@ -228,14 +228,16 @@ Final results:
   0 failures.
 - Focused direct/Ticket provider-delivery suite after round-6 review fix:
   66 tests, 0 failures.
+- Focused direct adapter/Ticket writer suite after round-7 review fix:
+  45 tests, 0 failures.
 - Focused hardline-lock/direct suite after Trinity advisories: 49 tests,
   0 failures.
-- `mise exec -- mix test`: 381 tests, 0 failures.
+- `mise exec -- mix test`: 383 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a3`: 381 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a3`: 383 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed thresholds with
-    `:babs_citizens` 81.55% total and `:babs` 87.62% total.
+    `:babs_citizens` 81.52% total and `:babs` 87.62% total.
   - Note: direct umbrella `mix test --cover` completed tests and printed a
     passing `:babs_citizens` summary, but this local OTP/Mix environment
     crashed in the Erlang HTML cover writer; the export plus per-app report is
@@ -286,7 +288,12 @@ Final results:
   redaction now tracks configured secret values as well as names across
   executor artifacts, parsed replies, and direct-runner failure events; direct
   success persistence failures now record a local reply-capture failure without
-  fallback redelivery or marking the provider session failed.
+  fallback redelivery or marking the provider session failed. Round 7 produced
+  two P2 findings: Claude direct commands dropped configured `cli_args`, and
+  hardline assignment delivery bypassed the shared per-Citizen execution lock.
+  Claude direct start/resume commands now preserve `config.cli_args` before the
+  direct flags, and hardline assignment injection is guarded by
+  `ExecutionLock`, with busy-lock regression coverage.
 - Additional Trinity Gemini implementation review ran on 2026-05-07 in
   `.trinity/reviews/20260507-203855-phase-13a3-direct-cli-provider-sessions`.
   It found P1 process timeout cleanup/fallback issues. Direct CLI execution now

@@ -323,12 +323,16 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp deliver_assignment(root, assigned, slug, prompt, now, _backend, _turn, opts) do
-    case Injector.inject(slug, prompt, opts) do
-      :ok ->
-        with :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
-          track_reply_capture(root, assigned, slug, now, opts)
-          {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
-        end
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.inject(slug, prompt, opts),
+           :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
+        track_reply_capture(root, assigned, slug, now, opts)
+        {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
+      end
+    end)
+    |> case do
+      {:ok, %{ticket: _assigned, delivery: {:injected, _slug}}} = result ->
+        result
 
       {:error, reason} ->
         _ignored =
