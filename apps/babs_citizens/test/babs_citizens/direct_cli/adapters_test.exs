@@ -46,6 +46,25 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
            ]
   end
 
+  test "claude command generates session id when runner has none stored" do
+    cfg = config("claude")
+
+    assert {:ok, command} = Claude.start_command(cfg, "hello", provider_session_id: nil)
+
+    assert [
+             "claude",
+             "--print",
+             "--output-format",
+             "json",
+             "--session-id",
+             session_id,
+             "hello"
+           ] = command.args
+
+    assert {:ok, _uuid} = Ecto.UUID.cast(session_id)
+    assert command.provider_session_id == session_id
+  end
+
   test "claude parses json result and redacts paths" do
     stdout =
       Jason.encode!(%{"session_id" => "session-1", "result" => "done at /Users/alice/secret"})

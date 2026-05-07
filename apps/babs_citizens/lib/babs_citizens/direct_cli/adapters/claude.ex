@@ -15,7 +15,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Claude do
 
   @impl true
   def start_command(config, prompt, opts \\ []) do
-    session_id = Keyword.get_lazy(opts, :provider_session_id, &Ecto.UUID.generate/0)
+    session_id = Keyword.get(opts, :provider_session_id) || Ecto.UUID.generate()
 
     Common.command(
       config,

@@ -8,7 +8,9 @@ defmodule Babs.Citizens.DirectCli.Executor do
   def run(%Command{} = command) do
     with {:ok, args} <- resolve_args(command.args),
          {:ok, _apps} <- Application.ensure_all_started(:erlexec) do
-      opts = [:sync, :stdout, :stderr, {:env, [:clear | command.env]}]
+      opts =
+        [:sync, :stdout, :stderr, {:env, [:clear | command.env]}]
+        |> maybe_cd(command.cwd)
 
       args
       |> :exec.run(opts, command.timeout_ms)
@@ -37,6 +39,9 @@ defmodule Babs.Citizens.DirectCli.Executor do
   end
 
   defp resolve_args(_args), do: {:error, :invalid_command_args}
+
+  defp maybe_cd(opts, cwd) when is_binary(cwd) and cwd != "", do: [{:cd, cwd} | opts]
+  defp maybe_cd(opts, _cwd), do: opts
 
   defp normalize_result({:ok, output}, command) when is_list(output) do
     artifacts = %{

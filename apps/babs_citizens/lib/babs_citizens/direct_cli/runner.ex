@@ -122,11 +122,12 @@ defmodule Babs.Citizens.DirectCli.Runner do
   end
 
   defp command_for_turn(turn, adapter, session, opts) do
-    command_opts = [
-      provider_session_id: session.provider_session_id,
-      timeout_ms: Keyword.get(opts, :timeout_ms, 120_000),
-      output_limit: Keyword.get(opts, :output_limit, 65_536)
-    ]
+    command_opts =
+      [
+        timeout_ms: Keyword.get(opts, :timeout_ms, 120_000),
+        output_limit: Keyword.get(opts, :output_limit, 65_536)
+      ]
+      |> maybe_command_provider_session_id(session.provider_session_id)
 
     if is_binary(session.provider_session_id) and session.provider_session_id != "" and
          session.status == "active" do
@@ -135,6 +136,13 @@ defmodule Babs.Citizens.DirectCli.Runner do
       adapter.start_command(turn.config, turn.prompt, command_opts)
     end
   end
+
+  defp maybe_command_provider_session_id(opts, provider_session_id)
+       when is_binary(provider_session_id) and provider_session_id != "" do
+    Keyword.put(opts, :provider_session_id, provider_session_id)
+  end
+
+  defp maybe_command_provider_session_id(opts, _provider_session_id), do: opts
 
   defp finish_session(session, turn, result) do
     status =

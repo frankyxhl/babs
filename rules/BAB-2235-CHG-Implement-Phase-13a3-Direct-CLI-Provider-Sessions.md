@@ -220,12 +220,13 @@ Final results:
 
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- Focused direct/Ticket suite: 55 tests, 0 failures.
+- Focused direct CLI suite: 17 tests, 0 failures.
+- Focused direct/Ticket/provider session suite: 55 tests, 0 failures.
 - Focused hardline-lock/direct suite after Trinity advisories: 49 tests,
   0 failures.
-- `mise exec -- mix test`: 368 tests, 0 failures.
+- `mise exec -- mix test`: 370 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a3`: 368 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a3`: 370 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed thresholds with
     `:babs_citizens` 81.29% total and `:babs` 87.62% total.
@@ -259,7 +260,9 @@ Final results:
   GLM PASS at 9.2/10 and DeepSeek PASS at 9.0/10. Advisory findings on SQL
   status filtering, dynamic atom normalization, hardline lock-contention
   coverage, and default direct execution status coverage were folded before PR.
-- GitHub Codex PR review loop: pending PR.
+- GitHub Codex PR review loop: round 1 produced two P1 findings. Fixes for
+  `command.cwd` process spawning and fresh direct Claude session-id generation
+  were folded with regression tests; follow-up current-head review is pending.
 
 ## References
 
