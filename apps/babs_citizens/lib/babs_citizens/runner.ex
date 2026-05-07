@@ -3,6 +3,8 @@ defmodule Babs.Citizens.Runner do
   tmux + erlexec primitives for Babs-owned Citizen sessions.
   """
 
+  alias Babs.Citizens.CopilotSettings
+
   @session_prefix "babs"
 
   def session_name(slug) when is_binary(slug), do: "#{@session_prefix}-#{slug}"
@@ -18,14 +20,35 @@ defmodule Babs.Citizens.Runner do
     env_args = env_args(config.env || %{}) ++ env_args(babs_env(config))
 
     ["new-session", "-d", "-s", session_name(config.slug), "-c", config.cwd] ++
-      env_args ++ [config.cli | config.cli_args]
+      env_args ++ [config.cli | effective_cli_args(config)]
+  end
+
+  def effective_cli_args(config) do
+    cli_args = Map.get(config, :cli_args, []) || []
+
+    case Map.get(config, :launch_profile, "safe_interactive") do
+      "trusted_autonomous" -> trusted_autonomous_args(config, cli_args)
+      _profile -> cli_args
+    end
   end
 
   def start_session(config) do
-    case tmux_cmd(new_session_args(config)) do
-      {:ok, {_output, 0}} -> :ok
-      {:ok, {output, status}} -> {:error, {:tmux_new_session_failed, status, output}}
+    with :ok <- prepare_launch(config),
+         {:ok, result} <- tmux_cmd(new_session_args(config)) do
+      case result do
+        {_output, 0} -> :ok
+        {output, status} -> {:error, {:tmux_new_session_failed, status, output}}
+      end
+    else
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def prepare_launch(config) do
+    if trusted_autonomous?(config) and copilot_cli?(config) do
+      CopilotSettings.trust_folder(config.cwd, home: copilot_home(config))
+    else
+      :ok
     end
   end
 
@@ -128,11 +151,91 @@ defmodule Babs.Citizens.Runner do
       {"claude", _args} -> true
       {"codex", _args} -> true
       {"gh", ["copilot" | _rest]} -> true
+      {"copilot", _args} -> true
       _other -> false
     end
   end
 
   def ai_cli?(_config), do: false
+
+  defp trusted_autonomous?(config) do
+    Map.get(config, :launch_profile, "safe_interactive") == "trusted_autonomous"
+  end
+
+  defp copilot_cli?(%{cli: cli} = config) when is_binary(cli) do
+    cli_name = cli |> Path.basename() |> String.downcase()
+    cli_args = Map.get(config, :cli_args, []) || []
+
+    case {cli_name, cli_args} do
+      {"copilot", _args} -> true
+      {"gh", ["copilot" | _rest]} -> true
+      _other -> false
+    end
+  end
+
+  defp copilot_cli?(_config), do: false
+
+  defp copilot_home(config) do
+    env = Map.get(config, :env, %{}) || %{}
+
+    Map.get(env, "COPILOT_HOME") ||
+      System.get_env("COPILOT_HOME") ||
+      Path.join(System.user_home!(), ".copilot")
+  end
+
+  defp trusted_autonomous_args(%{cli: cli}, cli_args) when is_binary(cli) do
+    cli_name = cli |> Path.basename() |> String.downcase()
+
+    case {cli_name, cli_args} do
+      {"claude", args} ->
+        ensure_default_options(args, [
+          {["--permission-mode", "--dangerously-skip-permissions"],
+           ["--permission-mode", "dontAsk"]}
+        ])
+
+      {"codex", args} ->
+        ensure_default_options(args, [
+          {["--ask-for-approval", "-a"], ["--ask-for-approval", "never"]},
+          {["--sandbox", "-s", "--dangerously-bypass-approvals-and-sandbox"],
+           ["--sandbox", "danger-full-access"]}
+        ])
+
+      {"copilot", args} ->
+        copilot_autonomous_args(args)
+
+      {"gh", ["copilot" | rest]} ->
+        ["copilot", "--"] ++ copilot_autonomous_args(strip_gh_separator(rest))
+
+      _other ->
+        cli_args
+    end
+  end
+
+  defp trusted_autonomous_args(_config, cli_args), do: cli_args
+
+  defp copilot_autonomous_args(args) do
+    ensure_default_options(args, [
+      {["--allow-all", "--yolo"], ["--allow-all"]},
+      {["--no-ask-user"], ["--no-ask-user"]}
+    ])
+  end
+
+  defp strip_gh_separator(["--" | rest]), do: rest
+  defp strip_gh_separator(rest), do: rest
+
+  defp ensure_default_options(args, defaults) do
+    defaults
+    |> Enum.flat_map(fn {flags, default_args} ->
+      if option_present?(args, flags), do: [], else: default_args
+    end)
+    |> Kernel.++(args)
+  end
+
+  defp option_present?(args, flags) do
+    Enum.any?(args, fn arg ->
+      Enum.any?(flags, &(arg == &1 or String.starts_with?(arg, &1 <> "=")))
+    end)
+  end
 
   def resize(%{os_pid: os_pid}, rows, cols)
       when is_integer(rows) and rows > 0 and is_integer(cols) and cols > 0 do

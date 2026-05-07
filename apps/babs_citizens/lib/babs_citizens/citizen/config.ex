@@ -9,6 +9,7 @@ defmodule Babs.Citizens.Citizen.Config do
 
   @slug_regex ~r/^[a-z][a-z0-9-]{0,47}$/
   @required ~w(id slug display_name cli cwd)
+  @launch_profiles ~w(safe_interactive trusted_autonomous)
 
   def load_slug(slug, opts \\ []) when is_binary(slug) do
     root = root(opts)
@@ -29,6 +30,7 @@ defmodule Babs.Citizens.Citizen.Config do
          :ok <- validate_required(raw),
          :ok <- validate_slug(raw["slug"]),
          {:ok, cli_args} <- validate_cli_args(Map.get(raw, "cli_args", [])),
+         {:ok, launch_profile} <- validate_launch_profile(Map.get(raw, "launch_profile")),
          {:ok, env} <- resolve_env(Map.get(raw, "env", %{})),
          {:ok, cwd} <- resolve_cwd(workspace_root, raw["cwd"], create_cwd) do
       {:ok,
@@ -38,6 +40,7 @@ defmodule Babs.Citizens.Citizen.Config do
          display_name: raw["display_name"],
          cli: raw["cli"],
          cli_args: cli_args,
+         launch_profile: launch_profile,
          cwd: cwd,
          description: Map.get(raw, "description"),
          env: env,
@@ -133,6 +136,12 @@ defmodule Babs.Citizens.Citizen.Config do
   end
 
   defp validate_cli_args(args), do: {:error, {:invalid_cli_args, args}}
+
+  defp validate_launch_profile(nil), do: {:ok, "safe_interactive"}
+
+  defp validate_launch_profile(profile) when profile in @launch_profiles, do: {:ok, profile}
+
+  defp validate_launch_profile(profile), do: {:error, {:invalid_launch_profile, profile}}
 
   defp resolve_cwd(workspace_root, cwd, create_cwd) do
     maybe_warn_legacy_cwd(cwd)

@@ -1,7 +1,7 @@
 # SOP-2100: Workflow Routing PRJ
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-05
+**Last updated:** 2026-05-07
 **Last reviewed:** 2026-05-03
 **Status:** Active
 
@@ -128,7 +128,7 @@ Follow `BAB-2201`, `BAB-1002`, and `BAB-2209`: create/update `citizens/citizen-<
 
 `BAB-1500` is deferred legacy guidance for the old `*.bob/` workflow. Do not route Phase 1 citizen creation there.
 
-Current post-Phase-1 experimental seed: `elena` uses `gh copilot` through `citizens/citizen-elena.toml` to validate GitHub Copilot CLI hosting. Treat her as an experimental CLI coverage citizen, not as a Phase 1 acceptance dependency.
+Current post-Phase-1 experimental seed: `elena` uses direct `copilot` through `citizens/citizen-elena.toml` to validate GitHub Copilot CLI hosting. Treat her as an experimental CLI coverage citizen, not as a Phase 1 acceptance dependency.
 
 ### Deliver a roadmap phase
 
@@ -213,3 +213,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-05 | Route open-PR GitHub Codex review mechanics through `BAB-1504` | Codex |
 | 2026-05-05 | Replace active open-PR review routing with promoted `COR-1615` plus `COR-1612`; keep `BAB-1504` as deprecated source material | Codex |
 | 2026-05-05 | Phase 2a: route Citizen seed workspace references through configurable `workspace_root` from `BAB-2209` | Codex |
+| 2026-05-07 | Update Elena routing note to direct `copilot` after launch-profile support | Codex |

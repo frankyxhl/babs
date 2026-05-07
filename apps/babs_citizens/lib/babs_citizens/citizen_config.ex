@@ -12,6 +12,7 @@ defmodule Babs.Citizens.CitizenConfig do
           cwd: String.t(),
           description: String.t() | nil,
           cli_args: [String.t()],
+          launch_profile: String.t(),
           env: %{optional(String.t()) => String.t()},
           role: map() | String.t() | nil,
           path: String.t() | nil
@@ -25,6 +26,7 @@ defmodule Babs.Citizens.CitizenConfig do
     :cwd,
     :description,
     cli_args: [],
+    launch_profile: "safe_interactive",
     env: %{},
     role: nil,
     path: nil

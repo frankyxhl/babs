@@ -44,6 +44,7 @@ defmodule Babs.Citizens.CatalogTest do
       description: "Updated metadata",
       cli: "/usr/bin/env",
       cli_args: ["bash"],
+      launch_profile: "trusted_autonomous",
       cwd: "new-dylan",
       env: %{"OPENAI_API_KEY" => "new"},
       role: %{"name" => "reviewer", "skills" => ["elixir"]}
@@ -60,6 +61,7 @@ defmodule Babs.Citizens.CatalogTest do
     assert updated.status == "running"
     assert updated.cli == "/bin/zsh"
     assert updated.cli_args == ["-f"]
+    assert updated.launch_profile == "safe_interactive"
     assert updated.env == %{"OPENAI_API_KEY" => "old"}
     assert updated.display_name == "Dylan Updated"
     assert updated.description == "Updated metadata"
@@ -78,6 +80,7 @@ defmodule Babs.Citizens.CatalogTest do
     write_citizen_toml!(root, "elena", %{
       cli: "/usr/bin/env",
       cli_args: ["zsh"],
+      launch_profile: "trusted_autonomous",
       env: %{"TOKEN" => "new"}
     })
 
@@ -88,6 +91,7 @@ defmodule Babs.Citizens.CatalogTest do
     assert updated.status == "stopped"
     assert updated.cli == "/usr/bin/env"
     assert updated.cli_args == ["zsh"]
+    assert updated.launch_profile == "trusted_autonomous"
     assert updated.env == %{"TOKEN" => "new"}
 
     assert {:ok, failed} = Catalog.mark_failed(updated.slug, "operator repair test")
@@ -107,6 +111,7 @@ defmodule Babs.Citizens.CatalogTest do
         slug: "to-config",
         description: "SQLite runtime",
         cli_args: ["--continue"],
+        launch_profile: "trusted_autonomous",
         env: %{"TOKEN" => "secret"},
         role: "copilot-tester",
         status: "failed",
@@ -123,6 +128,7 @@ defmodule Babs.Citizens.CatalogTest do
              description: "SQLite runtime",
              cli: "/bin/zsh",
              cli_args: ["--continue"],
+             launch_profile: "trusted_autonomous",
              cwd: cwd,
              env: %{"TOKEN" => "secret"},
              role: "copilot-tester",
@@ -142,6 +148,7 @@ defmodule Babs.Citizens.CatalogTest do
       description: "UI-created",
       cli: "/bin/zsh",
       cli_args: ["-f"],
+      launch_profile: "trusted_autonomous",
       cwd: missing_cwd,
       env: %{},
       role: nil
@@ -151,6 +158,7 @@ defmodule Babs.Citizens.CatalogTest do
     assert record.id == "BAB-CIT-INSERT-NEW"
     assert record.slug == "insert-new"
     assert record.status == "running"
+    assert record.launch_profile == "trusted_autonomous"
     assert record.metadata == %{}
     assert record.is_mayor == false
     refute File.exists?(missing_cwd)

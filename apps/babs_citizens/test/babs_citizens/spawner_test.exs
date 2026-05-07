@@ -179,6 +179,38 @@ defmodule Babs.Citizens.SpawnerTest do
     assert config.cwd == record.cwd
   end
 
+  test "copilot preset uses direct Copilot with trusted autonomous launch profile" do
+    root = tmp_root!()
+    parent = self()
+
+    assert {:ok, record} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "copilot-ok",
+                 "display_name" => "Copilot OK",
+                 "cli_preset" => "copilot-cli",
+                 "cwd" => "copilot-ok"
+               },
+               root: root,
+               lifecycle_start: fn config ->
+                 send(parent, {:lifecycle_started, config})
+                 {:ok, self()}
+               end
+             )
+
+    assert record.cli == "copilot"
+    assert record.cli_args == []
+    assert record.launch_profile == "trusted_autonomous"
+
+    toml = File.read!(Path.join(root, "citizens/citizen-copilot-ok.toml"))
+    assert toml =~ ~s(cli = "copilot")
+    assert toml =~ ~s(cli_args = [])
+    assert toml =~ ~s(launch_profile = "trusted_autonomous")
+
+    assert_receive {:lifecycle_started, config}
+    assert config.launch_profile == "trusted_autonomous"
+  end
+
   test "duplicate TOML or SQLite slug blocks before lifecycle" do
     root = tmp_root!()
     File.mkdir_p!(Path.join(root, "citizens"))

@@ -39,34 +39,44 @@ defmodule Babs.Citizens.AiTranscripts do
 
       content
       |> String.split("\n", trim: true)
-      |> Enum.reduce_while({:pending, false}, fn line, {:pending, seen_ticket?} ->
+      |> Enum.reduce_while({:pending, false, false}, fn line,
+                                                        {candidate, seen_ticket?, require_marker?} ->
         case parse_line(line) do
           {:ok, %{role: role, text: text, ts: ts} = record} ->
             after_since? = after_or_unknown?(ts, since_dt)
             mentions_ticket? = String.contains?(text, ticket_id)
+            marked_reply? = reply_marker?(text, ticket_id)
+            asks_for_marker? = reply_marker_instruction?(text, ticket_id)
 
             cond do
               role in ["user", "system"] and mentions_ticket? and after_since? ->
-                {:cont, {:pending, true}}
+                {:cont, {candidate, true, require_marker? or asks_for_marker?}}
 
-              role == "assistant" and seen_ticket? and after_since? and String.trim(text) != "" ->
+              role == "assistant" and marked_reply? and after_since? and String.trim(text) != "" ->
                 {:halt, {:ok, Map.put(record, :path, path)}}
 
-              role == "assistant" and mentions_ticket? and after_since? and
+              role == "assistant" and not require_marker? and seen_ticket? and after_since? and
                   String.trim(text) != "" ->
-                {:halt, {:ok, Map.put(record, :path, path)}}
+                candidate = keep_first_candidate(candidate, Map.put(record, :path, path))
+                {:cont, {candidate, seen_ticket?, require_marker?}}
+
+              role == "assistant" and not require_marker? and mentions_ticket? and after_since? and
+                  String.trim(text) != "" ->
+                candidate = keep_first_candidate(candidate, Map.put(record, :path, path))
+                {:cont, {candidate, seen_ticket?, require_marker?}}
 
               true ->
-                {:cont, {:pending, seen_ticket?}}
+                {:cont, {candidate, seen_ticket?, require_marker?}}
             end
 
           :ignore ->
-            {:cont, {:pending, seen_ticket?}}
+            {:cont, {candidate, seen_ticket?, require_marker?}}
         end
       end)
       |> case do
         {:ok, record} -> {:ok, record}
-        {:pending, _seen?} -> :pending
+        {{:ok, record}, _seen?, false} -> {:ok, record}
+        {_candidate, _seen?, _require_marker?} -> :pending
       end
     end
   end
@@ -136,7 +146,10 @@ defmodule Babs.Citizens.AiTranscripts do
         Path.wildcard(Path.join([home(), ".codex", "sessions", "**", "*.jsonl"]))
 
       {"gh", ["copilot" | _rest]} ->
-        {:error, :unsupported_copilot_transcripts}
+        copilot_paths(config)
+
+      {"copilot", _args} ->
+        copilot_paths(config)
 
       _other ->
         []
@@ -144,6 +157,19 @@ defmodule Babs.Citizens.AiTranscripts do
   end
 
   defp cli_paths(_config), do: []
+
+  defp copilot_paths(config) do
+    home = copilot_home(config)
+
+    Path.wildcard(Path.join([home, "session-state", "*", "events.jsonl"]))
+  end
+
+  defp copilot_home(config) do
+    env = Map.get(config, :env) || %{}
+
+    env["COPILOT_HOME"] || System.get_env("COPILOT_HOME") ||
+      Path.join(home(), ".copilot")
+  end
 
   defp claude_project(cwd) do
     cwd
@@ -154,9 +180,14 @@ defmodule Babs.Citizens.AiTranscripts do
   defp role(data) do
     candidates = [
       data["role"],
-      data["type"],
+      role_from_event_type(data["type"]),
       get_in(data, ["message", "role"]),
-      get_in(data, ["message", "type"])
+      role_from_event_type(get_in(data, ["message", "type"])),
+      get_in(data, ["payload", "role"]),
+      role_from_event_type(get_in(data, ["payload", "type"])),
+      get_in(data, ["payload", "item", "role"]),
+      get_in(data, ["data", "role"]),
+      role_from_event_type(get_in(data, ["data", "type"]))
     ]
 
     case Enum.find(candidates, &(&1 in ["assistant", "user", "system"])) do
@@ -171,7 +202,18 @@ defmodule Babs.Citizens.AiTranscripts do
       data["text"],
       data["message"],
       get_in(data, ["message", "content"]),
-      get_in(data, ["message", "text"])
+      get_in(data, ["message", "text"]),
+      get_in(data, ["payload", "content"]),
+      get_in(data, ["payload", "text"]),
+      get_in(data, ["payload", "message"]),
+      get_in(data, ["payload", "output"]),
+      get_in(data, ["payload", "item", "content"]),
+      get_in(data, ["payload", "item", "text"]),
+      get_in(data, ["data", "content"]),
+      get_in(data, ["data", "text"]),
+      get_in(data, ["data", "message"]),
+      get_in(data, ["data", "message", "content"]),
+      get_in(data, ["data", "item", "content"])
     ]
     |> Enum.map(&extract_text/1)
     |> Enum.find("", &(&1 != ""))
@@ -193,8 +235,36 @@ defmodule Babs.Citizens.AiTranscripts do
 
   defp timestamp(data) do
     data["timestamp"] || data["ts"] || data["created_at"] ||
-      get_in(data, ["message", "timestamp"])
+      get_in(data, ["message", "timestamp"]) ||
+      get_in(data, ["payload", "timestamp"]) ||
+      get_in(data, ["data", "timestamp"])
   end
+
+  defp role_from_event_type(type) when is_binary(type) do
+    case type do
+      "assistant.message" -> "assistant"
+      "agent_message" -> "assistant"
+      "user.message" -> "user"
+      "user_message" -> "user"
+      "system.message" -> "system"
+      "system_message" -> "system"
+      _other -> type
+    end
+  end
+
+  defp role_from_event_type(_type), do: nil
+
+  defp reply_marker?(text, ticket_id) do
+    String.contains?(text, "BABS_REPLY #{ticket_id}:")
+  end
+
+  defp reply_marker_instruction?(text, ticket_id) do
+    String.contains?(text, "BABS_REPLY #{ticket_id}: your response") or
+      String.contains?(text, "BABS_REPLY #{ticket_id}:")
+  end
+
+  defp keep_first_candidate(:pending, record), do: {:ok, record}
+  defp keep_first_candidate({:ok, _existing} = candidate, _record), do: candidate
 
   defp parse_ts(nil), do: nil
 

@@ -80,9 +80,9 @@ The earlier design tried "Thread" for a unit-of-work; rejected because it collid
 ### Citizen (refined for v0.1)
 
 Same as legacy section, but: a Citizen now has at most ONE active Hardline (= one tmux session) at a time in v0.1 (serial execution); multiple parallel Tickets per Citizen is deferred to v0.2+. Each Citizen has:
-- A TOML config at `citizens/citizen-<slug>.toml` declaring `id`, `slug`, `cli`, `cli_args`, `cwd`, `env`, optional `role` (see `BAB-1112`)
+- A TOML config at `citizens/citizen-<slug>.toml` declaring `id`, `slug`, `cli`, `cli_args`, `launch_profile`, `cwd`, `env`, optional `role` (see `BAB-1112`)
 - A workspace directory at the resolved `cwd`; relative TOML `cwd` values resolve under `workspace_root`, which defaults to `<BABS_ROOT>/workspaces`
-- A SQLite `citizens` row with `slug`, `cwd`, `cli`, `status`, `role` (nullable), `is_mayor`, `metadata` starting in Phase 3
+- A SQLite `citizens` row with `slug`, `cwd`, `cli`, `launch_profile`, `status`, `role` (nullable), `is_mayor`, `metadata` starting in Phase 3
 - A supervised subtree in `:babs_citizens` OTP app
 
 ### Two OTP Apps: `:babs` and `:babs_citizens`
@@ -91,7 +91,9 @@ Same as legacy section, but: a Citizen now has at most ONE active Hardline (= on
 
 ### Multi-CLI
 
-Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `gh copilot`, plus future. Per-citizen `citizens/citizen-<slug>.toml` declares `cli` + `cli_args` + `env`. See `BAB-1112`.
+Babs is AI-CLI-agnostic from day 1. Supported CLIs: `claude`, `codex`, `droid`, `pi`, `copilot` / legacy `gh copilot`, plus future. Per-citizen `citizens/citizen-<slug>.toml` declares `cli` + `cli_args` + `launch_profile` + `env`. See `BAB-1112`.
+
+`launch_profile = "trusted_autonomous"` is only for Babs-owned workspaces where the operator has accepted autonomous CLI operation. For Copilot CLI, Babs also pre-trusts the resolved Babs-owned workspace in Copilot's `trustedFolders` setting; imported external tmux sessions are not granted this treatment.
 
 Seed names are:
 - `clare` = Claude Code (`citizens/citizen-clare.toml`, `cwd = "clare"`)
@@ -99,7 +101,7 @@ Seed names are:
 - `sentinel` = deterministic `/bin/zsh` reload-validation citizen (`citizens/citizen-sentinel.toml`, `cwd = "sentinel"`)
 
 Post-Phase-1 experimental seed:
-- `elena` = GitHub Copilot CLI (`citizens/citizen-elena.toml`, `cwd = "elena"`) for validating `gh copilot` as a hosted Citizen CLI. Elena is not part of the Phase 1 flywheel gate.
+- `elena` = GitHub Copilot CLI (`citizens/citizen-elena.toml`, `cwd = "elena"`) for validating direct `copilot` as a hosted Citizen CLI. Elena is not part of the Phase 1 flywheel gate.
 
 ### Babs ↔ Alfred Boundary
 
@@ -216,3 +218,5 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-05 | Phase 2a: introduce configurable `workspace_root`, migrate seed examples to `cwd = "<slug>"`, and clarify default resolved workspace paths | Codex |
 | 2026-05-06 | Normalize Ticket vocabulary to five states plus transition events, `assignees: []` Billboard representation, and gitignored runtime tickets root | Codex |
 | 2026-05-06 | Add Imported Tmux Session vocabulary and shift Inspector/Mayor phase references after Phase 13 attach insertion | Codex |
+| 2026-05-07 | Add Citizen `launch_profile` vocabulary and switch Elena wording to direct `copilot` | Codex |
+| 2026-05-07 | Clarify Copilot `trustedFolders` handling for trusted-autonomous Babs-owned workspaces | Codex |

@@ -15,12 +15,12 @@ defmodule Babs.Citizens.Spawner do
     "cwd" => :cwd
   }
   @presets %{
-    "shell" => {"/bin/zsh", ["-f"]},
-    "claude" => {"claude", []},
-    "codex" => {"codex", []},
-    "droid" => {"droid", []},
-    "pi" => {"pi", []},
-    "copilot-cli" => {"gh", ["copilot"]}
+    "shell" => {"/bin/zsh", ["-f"], "safe_interactive"},
+    "claude" => {"claude", [], "trusted_autonomous"},
+    "codex" => {"codex", [], "trusted_autonomous"},
+    "droid" => {"droid", [], "trusted_autonomous"},
+    "pi" => {"pi", [], "trusted_autonomous"},
+    "copilot-cli" => {"copilot", [], "trusted_autonomous"}
   }
 
   def presets, do: Map.keys(@presets)
@@ -212,7 +212,7 @@ defmodule Babs.Citizens.Spawner do
   end
 
   defp build_config(attrs, resolved_cwd, toml_path) do
-    {cli, cli_args} = Map.fetch!(@presets, attrs.cli_preset)
+    {cli, cli_args, launch_profile} = Map.fetch!(@presets, attrs.cli_preset)
 
     {:ok,
      %CitizenConfig{
@@ -222,6 +222,7 @@ defmodule Babs.Citizens.Spawner do
        description: attrs.description,
        cli: cli,
        cli_args: cli_args,
+       launch_profile: launch_profile,
        cwd: resolved_cwd,
        env: %{},
        role: nil,

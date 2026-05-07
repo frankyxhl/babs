@@ -1,7 +1,7 @@
 # ADR-1112: Multi-AI-CLI Citizen Configuration
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-05
+**Last updated:** 2026-05-07
 **Last reviewed:** 2026-05-04
 **Status:** Accepted
 
@@ -15,7 +15,7 @@ Babs hosts AI Citizens. Originally the design implicitly assumed a single AI CLI
 - `codex` (OpenAI Codex CLI) — gaining
 - `droid` (Factory.ai Droid) — emerging
 - `pi` ([pi.dev](https://pi.dev/) / [pi-mono coding-agent](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)) — open-source agent framework
-- `gh copilot` (GitHub Copilot CLI) — gaining
+- `copilot` / legacy `gh copilot` (GitHub Copilot CLI) — gaining
 - Future: `aider`, `ollama`-wrapped local models, others
 
 A v0.1 Babs that hardcodes `claude` is artificially narrow. The user explicitly requested multi-CLI from day 1 (Phase 1 SEED).
@@ -35,6 +35,7 @@ slug = "clare"
 display_name = "Clare"
 cli = "claude"                  # required: the binary to invoke
 cli_args = ["--continue"]       # optional: argv passed to the CLI
+launch_profile = "trusted_autonomous" # optional: safe_interactive by default
 cwd = "clare"                   # required: workspace directory name under workspace_root
 description = "Claude Code seed citizen"
 
@@ -58,6 +59,7 @@ slug = "sentinel"
 display_name = "Sentinel"
 cli = "/bin/zsh"
 cli_args = ["-f"]
+launch_profile = "safe_interactive"
 cwd = "sentinel"
 description = "Deterministic shell citizen for reload validation"
 ```
@@ -65,11 +67,18 @@ description = "Deterministic shell citizen for reload validation"
 ### Spawn Flow (Phase 1+)
 
 1. Read `citizens/citizen-<slug>.toml`
-2. Resolve `[env]` interpolations from Babs node environment
+2. Resolve `launch_profile` (`safe_interactive` by default) and `[env]`
+   interpolations from Babs node environment
 3. Resolve `cwd` under configurable `workspace_root` unless it is absolute
 4. `tmux new-session -d -s babs-<slug> -c <resolved-cwd>` (detached)
 5. `erlexec` opens a port that runs the citizen's CLI inside the tmux pane:
-   - Process: `<cli>` with `<cli_args>`
+   - Process: `<cli>` with `<cli_args>` plus trusted-autonomous defaults for
+     known AI CLIs when `launch_profile = "trusted_autonomous"`
+   - Copilot-specific preparation: for Babs-owned trusted-autonomous Copilot
+     Citizens, Babs ensures the resolved workspace is present in Copilot CLI's
+     `trustedFolders` setting in `COPILOT_HOME/config.json` before starting the
+     tmux session. This is scoped to Babs-started Citizens and uses the
+     citizen's `COPILOT_HOME` env when set.
    - Working dir: `<resolved-cwd>`
    - Env: merged (Babs node env + `[env]` overrides)
 6. `Hardline.Pane` GenServer spawned to manage the port; PubSub topic `pane:<slug>` published
@@ -82,7 +91,7 @@ description = "Deterministic shell citizen for reload validation"
 | `codex` | `OPENAI_API_KEY` env | yes (1 of 2 mandatory) | |
 | `droid` | Factory.ai env vars | encouraged | |
 | `pi` | per pi-mono docs | encouraged | |
-| `gh copilot` | `gh auth login` (file-based) | optional | needs PATH to `gh` + login state |
+| `copilot` / legacy `gh copilot` | `gh auth login` (file-based) | optional | direct `copilot` is preferred once installed; trusted-autonomous launches pre-trust Babs-owned workspaces via `trustedFolders`; legacy wrapper remains recognized |
 
 Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected to work" by virtue of being interactive TTY apps.
 
@@ -92,6 +101,8 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 - **Translate prompts between CLIs** — each CLI gets the same Ticket body as initial input; CLIs that need different prompt formats are responsibility of the operator (or, in V0-L, Mayor)
 - **Interpose on auth** — credentials are env vars; Babs is a passthrough
 - **Quota / cost tracking** — out of scope for v0.1 (flagged for v0.2 by Trinity review `BAB-1006`)
+- **Trust arbitrary external sessions** — trusted launch profiles are for
+  Babs-owned workspaces; imported operator tmux sessions stay attach/detach only
 
 ### Failure Modes
 
@@ -126,3 +137,5 @@ Phase 0 spike must validate `claude` and `codex` minimum; the rest are "expected
 | 2026-05-03 | Initial decision; multi-CLI agnostic from Phase 1 | Claude Code |
 | 2026-05-04 | Phase 1 cleanup: move config to `citizens/citizen-<slug>.toml`, add required `id`/`slug`/`cwd`, switch examples to Clare and deterministic Sentinel, and defer SQLite failure state to Phase 3 | Codex |
 | 2026-05-05 | Phase 2a: migrate examples to `cwd = "<slug>"` and clarify that spawn uses resolved cwd under configurable `workspace_root` | Codex |
+| 2026-05-07 | Add `launch_profile` and prefer direct `copilot` while preserving legacy `gh copilot` compatibility | Codex |
+| 2026-05-07 | Document Copilot `trustedFolders` preparation for Babs-owned trusted-autonomous workspaces | Codex |
