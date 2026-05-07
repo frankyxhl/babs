@@ -52,6 +52,15 @@ defmodule Babs.Citizens.DirectCli.EnvRedactorTest do
     assert redacted == "provider echoed [REDACTED]"
   end
 
+  test "bounds output on a valid UTF-8 boundary" do
+    text = "ab🙂cd"
+
+    bounded = Redactor.bound_output(text, 5)
+
+    assert bounded == "ab\n[TRUNCATED]"
+    assert String.valid?(bounded)
+  end
+
   defp config(env) do
     %CitizenConfig{
       id: "BAB-CIT-TEST",

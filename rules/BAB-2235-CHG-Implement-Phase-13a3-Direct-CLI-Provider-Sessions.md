@@ -234,14 +234,16 @@ Final results:
   49 tests, 0 failures.
 - Focused direct adapter suite after round-9 review fix: 11 tests, 0 failures.
 - Focused direct adapter suite after round-10 review fix: 12 tests, 0 failures.
+- Focused redactor/Ticket writer suite after round-11 review fix:
+  40 tests, 0 failures.
 - Focused hardline-lock/direct suite after Trinity advisories: 49 tests,
   0 failures.
-- `mise exec -- mix test`: 388 tests, 0 failures.
+- `mise exec -- mix test`: 390 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a3`: 388 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a3`: 390 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed thresholds with
-    `:babs_citizens` 81.74% total and `:babs` 87.62% total.
+    `:babs_citizens` 81.68% total and `:babs` 87.62% total.
 - `python3 -m py_compile test/browser/bdd/babs_steps.py
   test/browser/bdd/run.py`: passed.
 - `npm run test:js`: 15 tests, 0 failures.
@@ -306,7 +308,12 @@ Final results:
   before the direct `exec` flags, with regression coverage. Round 10 produced
   one P1 finding: Codex JSONL replies in the `msg.content` shape were not
   traversed. The common JSONL walker now descends into `msg` for text, session,
-  and delta extraction, with Codex `msg` reply regression coverage.
+  and delta extraction, with Codex `msg` reply regression coverage. Round 11
+  produced two P2 findings: output bounding could split multi-byte UTF-8 and
+  Hardline rejection feedback bypassed the execution lock. Redaction output
+  bounding now truncates on a valid UTF-8 codepoint boundary, and Hardline
+  feedback injection is guarded by `ExecutionLock`, with regression coverage
+  for both.
 - Additional Trinity Gemini implementation review ran on 2026-05-07 in
   `.trinity/reviews/20260507-203855-phase-13a3-direct-cli-provider-sessions`.
   It found P1 process timeout cleanup/fallback issues. Direct CLI execution now

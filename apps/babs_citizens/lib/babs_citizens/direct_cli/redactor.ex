@@ -12,7 +12,7 @@ defmodule Babs.Citizens.DirectCli.Redactor do
   def bound_output(value, limit \\ @default_limit)
 
   def bound_output(value, limit) when is_binary(value) and byte_size(value) > limit do
-    binary_part(value, 0, limit) <> "\n[TRUNCATED]"
+    utf8_prefix(value, limit) <> "\n[TRUNCATED]"
   end
 
   def bound_output(value, _limit) when is_binary(value), do: value
@@ -64,4 +64,26 @@ defmodule Babs.Citizens.DirectCli.Redactor do
     |> Enum.sort_by(&byte_size/1, :desc)
     |> Enum.reduce(value, fn secret, acc -> String.replace(acc, secret, "[REDACTED]") end)
   end
+
+  defp utf8_prefix(_value, limit) when limit <= 0, do: ""
+  defp utf8_prefix(value, limit), do: utf8_prefix(value, limit, [])
+
+  defp utf8_prefix(_value, limit, acc) when limit <= 0,
+    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp utf8_prefix(<<>>, _limit, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp utf8_prefix(<<codepoint::utf8, rest::binary>>, limit, acc) do
+    char = <<codepoint::utf8>>
+    size = byte_size(char)
+
+    if size <= limit do
+      utf8_prefix(rest, limit - size, [char | acc])
+    else
+      acc |> Enum.reverse() |> IO.iodata_to_binary()
+    end
+  end
+
+  defp utf8_prefix(_invalid_tail, _limit, acc),
+    do: acc |> Enum.reverse() |> IO.iodata_to_binary()
 end

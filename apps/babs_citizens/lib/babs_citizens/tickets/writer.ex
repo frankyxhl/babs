@@ -791,12 +791,18 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp deliver_hardline_feedback(root, ticket, slug, prompt, now, by, opts) do
-    with :ok <- Injector.prepare(slug, opts),
-         :ok <- Injector.inject(slug, prompt, opts),
-         :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
-      track_reply_capture(root, ticket, slug, now, opts)
-      :ok
-    else
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.prepare(slug, opts),
+           :ok <- Injector.inject(slug, prompt, opts),
+           :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
+        track_reply_capture(root, ticket, slug, now, opts)
+        :ok
+      end
+    end)
+    |> case do
+      :ok ->
+        :ok
+
       {:error, reason} ->
         _ignored =
           History.append(

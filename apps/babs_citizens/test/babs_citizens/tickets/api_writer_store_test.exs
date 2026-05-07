@@ -1020,6 +1020,64 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     refute List.last(history)["error"] =~ "fixture-value"
   end
 
+  test "reject_ticket records busy hardline feedback without injecting when lock is held" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Busy feedback", body: "Needs review."},
+               tickets_root: root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, _result} =
+             Api.assign_ticket(ticket.id, "clare",
+               tickets_root: root,
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert {:ok, _result} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: root,
+               now: "2026-05-06T00:02:00Z"
+             )
+
+    assert {:error,
+            {:feedback_injection_failed, ticket_id, [{"clare", {:execution_busy, "clare"}}]}} =
+             ExecutionLock.with_lock("clare", fn ->
+               Api.reject_ticket(ticket.id, "Please add tests.",
+                 tickets_root: root,
+                 now: "2026-05-06T00:03:00Z",
+                 citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                 pane_lookup: fn "clare" -> {:ok, self()} end,
+                 pane_injector: fn "clare", _prompt ->
+                   flunk("busy hardline feedback should not inject into the pane")
+                 end
+               )
+             end)
+
+    assert ticket_id == ticket.id
+
+    assert {:ok, %{ticket: shown, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert shown.state == "in_progress"
+    assert shown.assignees == ["clare"]
+
+    assert Enum.take(Enum.map(history, & &1["event"]), -4) == [
+             "rejected",
+             "state_change",
+             "feedback_injection_attempted",
+             "feedback_injection_failed"
+           ]
+
+    assert List.last(history)["error"] =~ "execution_busy"
+    refute Enum.any?(history, &match?(%{"event" => "feedback_injected"}, &1))
+  end
+
   test "reject_ticket injects feedback to every current assignee" do
     root = tmp_root()
     parent = self()
