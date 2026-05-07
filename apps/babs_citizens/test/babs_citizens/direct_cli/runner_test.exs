@@ -258,6 +258,147 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
     assert attempted["status"] == "queued"
   end
 
+  test "assign_ticket routes direct backend assignment prompts through the runner" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    parent = self()
+    ticket = create_ticket!(root)
+
+    executor = fn command ->
+      send(parent, {:direct_assignment_command, command})
+
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => "fake-session-flora",
+             "content" => "assignment acknowledged"
+           })
+       }}
+    end
+
+    assert {:ok, %{ticket: assigned, delivery: {:injected, "flora"}}} =
+             Api.assign_ticket(ticket.id, "flora",
+               tickets_root: root,
+               citizen_config_fetcher: fn "flora" -> config end,
+               adapter: Fake,
+               executor: executor,
+               reply_capture: fn _turn -> :ok end,
+               pane_lookup: fn "flora" -> flunk("direct assignment should not look up a pane") end,
+               citizen_starter: fn "flora" ->
+                 flunk("direct assignment should not start a hardline citizen")
+               end,
+               pane_injector: fn "flora", _prompt ->
+                 flunk("direct assignment should not inject into a pane")
+               end
+             )
+
+    assert assigned.state == "in_progress"
+    assert assigned.assignees == ["flora"]
+
+    assert_receive {:direct_assignment_command, command}, 1_000
+    prompt = List.last(command.args)
+    assert command.provider == "fake"
+    assert command.resume? == false
+    assert prompt =~ "[Babs Ticket #{ticket.id} assigned]"
+    assert prompt =~ "Use a direct CLI provider."
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(
+          %{"event" => "comment", "by" => "flora", "body" => "assignment acknowledged"},
+          &1
+        )
+      )
+    end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_attempted", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(history, &match?(%{"event" => "injected", "injected_to" => ["flora"]}, &1))
+  end
+
+  test "reject_ticket routes direct backend feedback prompts through the runner" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    parent = self()
+
+    ticket =
+      create_ticket!(root, %{
+        state: "pending_approval",
+        assignees: ["flora"]
+      })
+
+    executor = fn command ->
+      send(parent, {:direct_feedback_command, command})
+
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => "fake-session-flora",
+             "content" => "feedback acknowledged"
+           })
+       }}
+    end
+
+    assert {:ok, %{ticket: rejected, delivery: {:feedback_injected, ["flora"]}}} =
+             Api.reject_ticket(ticket.id, "Please add the regression test.",
+               tickets_root: root,
+               citizen_config_fetcher: fn "flora" -> config end,
+               adapter: Fake,
+               executor: executor,
+               reply_capture: fn _turn -> :ok end,
+               pane_lookup: fn "flora" -> flunk("direct feedback should not look up a pane") end,
+               citizen_starter: fn "flora" ->
+                 flunk("direct feedback should not start a hardline citizen")
+               end,
+               pane_injector: fn "flora", _prompt ->
+                 flunk("direct feedback should not inject into a pane")
+               end
+             )
+
+    assert rejected.state == "in_progress"
+    assert rejected.assignees == ["flora"]
+
+    assert_receive {:direct_feedback_command, command}, 1_000
+    prompt = List.last(command.args)
+    assert command.provider == "fake"
+    assert prompt =~ "[Babs Ticket #{ticket.id} rejected]"
+    assert prompt =~ "Please add the regression test."
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(
+          %{"event" => "comment", "by" => "flora", "body" => "feedback acknowledged"},
+          &1
+        )
+      )
+    end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_attempted", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "feedback_injected", "injected_to" => ["flora"]}, &1)
+           )
+  end
+
   test "per-citizen execution lock reports busy for overlapping work" do
     assert :held =
              ExecutionLock.with_lock("clare", fn ->

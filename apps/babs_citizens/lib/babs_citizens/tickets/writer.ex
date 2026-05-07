@@ -123,12 +123,18 @@ defmodule Babs.Citizens.Tickets.Writer do
       with {:ok, original} <- read_current(path, id),
            {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
            {:ok, assigned} <- StateMachine.assign(ticket, slug) do
-        case Injector.prepare(slug, opts) do
-          :ok ->
-            persist_assignment(state.root, path, original, assigned, slug, opts)
+        case delivery_backend(slug, opts) do
+          "direct_cli" = backend ->
+            persist_assignment(state.root, path, original, assigned, slug, opts, backend)
 
-          {:error, reason} ->
-            persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+          backend ->
+            case Injector.prepare(slug, opts) do
+              :ok ->
+                persist_assignment(state.root, path, original, assigned, slug, opts, backend)
+
+              {:error, reason} ->
+                persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+            end
         end
       end
 
@@ -285,28 +291,50 @@ defmodule Babs.Citizens.Tickets.Writer do
     |> maybe_add_captured_reply_event(ticket, now, by, notify?, turn)
   end
 
-  defp persist_assignment(root, path, original, assigned, slug, opts) do
+  defp persist_assignment(root, path, original, assigned, slug, opts, backend) do
     id = assigned.id
     now = now(opts)
     by = by(opts)
     assigned = %{assigned | updated_at: now}
+    turn = assignment_turn(slug, now, backend)
 
     with :ok <- run_before_write(path, opts),
          :ok <- detect_conflict(path, original, id),
          :ok <- write_markdown(root, id, TicketMarkdown.render(assigned)),
-         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by)),
+         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by, backend, turn)),
          prompt <- Injector.prompt(assigned, slug) do
-      case Injector.inject(slug, prompt, opts) do
-        :ok ->
-          with :ok <- History.append(root, id, injected_event(assigned, slug, now)) do
-            track_reply_capture(root, assigned, slug, now, opts)
-            {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
-          end
+      deliver_assignment(root, assigned, slug, prompt, now, backend, turn, opts)
+    end
+  end
 
-        {:error, reason} ->
-          _ignored = History.append(root, id, injection_failed_event(assigned, slug, now, reason))
-          {:error, reason}
-      end
+  defp deliver_assignment(root, assigned, slug, prompt, now, "direct_cli", turn, opts) do
+    case deliver_direct_turn(root, assigned, slug, prompt, turn, opts) do
+      :ok ->
+        with :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
+          {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
+        end
+
+      {:error, reason} ->
+        _ignored =
+          History.append(root, assigned.id, injection_failed_event(assigned, slug, now, reason))
+
+        {:error, reason}
+    end
+  end
+
+  defp deliver_assignment(root, assigned, slug, prompt, now, _backend, _turn, opts) do
+    case Injector.inject(slug, prompt, opts) do
+      :ok ->
+        with :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
+          track_reply_capture(root, assigned, slug, now, opts)
+          {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
+        end
+
+      {:error, reason} ->
+        _ignored =
+          History.append(root, assigned.id, injection_failed_event(assigned, slug, now, reason))
+
+        {:error, reason}
     end
   end
 
@@ -342,6 +370,17 @@ defmodule Babs.Citizens.Tickets.Writer do
       }
     ]
   end
+
+  defp assignment_events(ticket, slug, now, by, "direct_cli", turn) do
+    ticket = %{ticket | assignees: [slug]}
+
+    assignment_events(ticket, slug, now, by) ++
+      turn_created_events(ticket, now, by, turn) ++
+      [turn_delivery_attempted_event(ticket, now, turn, slug, delivery_backend: "direct_cli")]
+  end
+
+  defp assignment_events(ticket, slug, now, by, _backend, _turn),
+    do: assignment_events(ticket, slug, now, by)
 
   defp unassign_events(original, updated, slug, now, by) do
     events = [
@@ -617,6 +656,10 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp deliver_direct_comment(root, ticket, slug, prompt, turn, opts) do
+    deliver_direct_turn(root, ticket, slug, prompt, turn, opts)
+  end
+
+  defp deliver_direct_turn(root, ticket, slug, prompt, turn, opts) do
     with {:ok, config} <- direct_config(slug, opts),
          :ok <-
            DirectRunner.start_turn(
@@ -700,6 +743,47 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp deliver_feedback(root, ticket, slug, feedback, now, by, opts) do
     prompt = Injector.feedback_prompt(ticket, slug, feedback)
 
+    case delivery_backend(slug, opts) do
+      "direct_cli" ->
+        deliver_direct_feedback(root, ticket, slug, prompt, now, by, opts)
+
+      _backend ->
+        deliver_hardline_feedback(root, ticket, slug, prompt, now, by, opts)
+    end
+  end
+
+  defp deliver_direct_feedback(root, ticket, slug, prompt, now, by, opts) do
+    turn = single_slug_turn(slug, now)
+    ticket = %{ticket | assignees: [slug]}
+
+    with :ok <-
+           append_events(
+             root,
+             ticket.id,
+             turn_created_events(ticket, now, by, turn) ++
+               [
+                 turn_delivery_attempted_event(ticket, now, turn, slug,
+                   delivery_backend: "direct_cli"
+                 )
+               ]
+           ),
+         :ok <- deliver_direct_turn(root, ticket, slug, prompt, turn, opts),
+         :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
+      :ok
+    else
+      {:error, reason} ->
+        _ignored =
+          History.append(
+            root,
+            ticket.id,
+            feedback_injection_failed_event(ticket, slug, now, by, reason)
+          )
+
+        {:error, reason}
+    end
+  end
+
+  defp deliver_hardline_feedback(root, ticket, slug, prompt, now, by, opts) do
     with :ok <- Injector.prepare(slug, opts),
          :ok <- Injector.inject(slug, prompt, opts),
          :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
@@ -716,6 +800,20 @@ defmodule Babs.Citizens.Tickets.Writer do
 
         {:error, reason}
     end
+  end
+
+  defp assignment_turn(slug, now, "direct_cli"), do: single_slug_turn(slug, now)
+  defp assignment_turn(_slug, _now, _backend), do: %{new_turn?: false}
+
+  defp single_slug_turn(slug, now) do
+    %{
+      turn_id: TurnIds.generate!(:turn, now),
+      message_id: TurnIds.generate!(:message, now),
+      captured_attempt_id: nil,
+      parent_turn_id: nil,
+      attempt_ids: %{slug => TurnIds.generate!(:attempt, now)},
+      new_turn?: true
+    }
   end
 
   defp append_events(root, id, events) do

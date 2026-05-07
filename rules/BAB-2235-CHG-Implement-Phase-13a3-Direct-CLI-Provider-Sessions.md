@@ -220,16 +220,18 @@ Final results:
 
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- Focused direct CLI suite: 21 tests, 0 failures.
-- Focused direct/Ticket/provider session suite: 60 tests, 0 failures.
+- Focused direct CLI runner suite after round-5 review fix: 9 tests,
+  0 failures.
+- Focused direct/Ticket provider-delivery suite after round-5 review fix:
+  59 tests, 0 failures.
 - Focused hardline-lock/direct suite after Trinity advisories: 49 tests,
   0 failures.
-- `mise exec -- mix test`: 376 tests, 0 failures.
+- `mise exec -- mix test`: 378 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a3`: 376 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a3`: 378 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed thresholds with
-    `:babs_citizens` 81.37% total and `:babs` 87.62% total.
+    `:babs_citizens` 81.40% total and `:babs` 87.62% total.
   - Note: direct umbrella `mix test --cover` completed tests and printed a
     passing `:babs_citizens` summary, but this local OTP/Mix environment
     crashed in the Erlang HTML cover writer; the export plus per-app report is
@@ -269,7 +271,11 @@ Final results:
   delivery and returns `{:error, {:execution_busy, slug}}` instead of silently
   dropping the prompt. Round 4 produced one P2 finding on erlexec monitor
   non-zero exit messages; direct execution now handles both `{:status, status}`
-  and `{:exit_status, status}` without waiting for timeout.
+  and `{:exit_status, status}` without waiting for timeout. Round 5 produced
+  one P1 finding on assignment/rejection feedback bypassing the selected
+  backend; direct-cli assignment and rejection prompts now route through the
+  direct runner, avoid Hardline pane startup/injection, and have regression
+  tests for both entry points.
 - Additional Trinity Gemini implementation review ran on 2026-05-07 in
   `.trinity/reviews/20260507-203855-phase-13a3-direct-cli-provider-sessions`.
   It found P1 process timeout cleanup/fallback issues. Direct CLI execution now
