@@ -215,7 +215,8 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
     end
   end
 
-  defp key(turn), do: {turn.root, turn.ticket_id, turn.slug, turn.started_at}
+  defp key(turn),
+    do: {turn.root, turn.ticket_id, turn.slug, turn.started_at, turn.turn_id, turn.attempt_id}
 
   defp normalize_body(body) do
     body

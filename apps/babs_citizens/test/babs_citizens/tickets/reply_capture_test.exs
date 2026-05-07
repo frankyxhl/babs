@@ -200,6 +200,38 @@ defmodule Babs.Citizens.Tickets.ReplyCaptureTest do
              ReplyCapture.handle_info(:unexpected, %{turns: %{}, interval_ms: 10})
   end
 
+  test "tracks same-second attempts separately by turn and attempt id", %{
+    root: root,
+    ticket: ticket
+  } do
+    first =
+      turn(root, ticket.id)
+      |> Map.put(:turn_id, "turn_20260506000000_first")
+      |> Map.put(:attempt_id, "attempt_20260506000000_first")
+
+    second =
+      turn(root, ticket.id)
+      |> Map.put(:turn_id, "turn_20260506000000_second")
+      |> Map.put(:attempt_id, "attempt_20260506000000_second")
+
+    assert {:noreply, state} =
+             ReplyCapture.handle_cast({:track, first}, %{turns: %{}, interval_ms: 10})
+
+    assert {:noreply, state} = ReplyCapture.handle_cast({:track, second}, state)
+
+    assert map_size(state.turns) == 2
+
+    assert Enum.sort(Enum.map(state.turns, fn {_key, turn} -> turn.turn_id end)) == [
+             first.turn_id,
+             second.turn_id
+           ]
+
+    assert Enum.sort(Enum.map(state.turns, fn {_key, turn} -> turn.attempt_id end)) == [
+             first.attempt_id,
+             second.attempt_id
+           ]
+  end
+
   test "capture can be disabled by option", %{root: root, ticket: ticket, config: config} do
     assert :disabled =
              ReplyCapture.capture_once(turn(root, ticket.id),
