@@ -13,6 +13,7 @@ defmodule Babs.Citizens.RepoCase do
 
   setup do
     Babs.Citizens.RepoCase.ensure_repo!()
+    Babs.Citizens.Repo.delete_all(Babs.Citizens.ProviderSession)
     Babs.Citizens.Repo.delete_all(Babs.Citizens.CitizenRecord)
     :ok
   end
@@ -36,6 +37,7 @@ defmodule Babs.Citizens.RepoCase do
           cli: "/bin/zsh",
           cli_args: ["-f"],
           launch_profile: "safe_interactive",
+          ticket_backend: "hardline",
           env: %{},
           status: "running",
           metadata: %{},
@@ -80,6 +82,7 @@ defmodule Babs.Citizens.RepoCase do
           cli: "/bin/zsh",
           cli_args: ["-f"],
           launch_profile: "safe_interactive",
+          ticket_backend: "hardline",
           cwd: slug,
           env: %{},
           role: nil
@@ -106,6 +109,7 @@ defmodule Babs.Citizens.RepoCase do
       ~s(cli = "#{attrs.cli}"),
       "cli_args = #{inspect(attrs.cli_args)}",
       ~s(launch_profile = "#{attrs.launch_profile}"),
+      ~s(ticket_backend = "#{attrs.ticket_backend}"),
       ~s(cwd = "#{attrs.cwd}"),
       env_table(attrs.env),
       role_table(attrs.role)

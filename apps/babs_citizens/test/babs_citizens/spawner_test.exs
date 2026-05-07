@@ -166,6 +166,7 @@ defmodule Babs.Citizens.SpawnerTest do
     assert record.cwd == Path.join(root, "workspaces/spawn-ok")
     assert record.cli == "/bin/zsh"
     assert record.cli_args == ["-f"]
+    assert record.ticket_backend == "hardline"
     assert record.status == "running"
     assert String.starts_with?(record.id, "BAB-CIT-")
     assert File.dir?(record.cwd)
@@ -173,6 +174,7 @@ defmodule Babs.Citizens.SpawnerTest do
     toml_path = Path.join(root, "citizens/citizen-spawn-ok.toml")
     assert File.exists?(toml_path)
     assert File.read!(toml_path) =~ ~s(cwd = "spawn-ok")
+    assert File.read!(toml_path) =~ ~s(ticket_backend = "hardline")
 
     assert_receive {:lifecycle_started, config}
     assert config.path == toml_path
@@ -201,6 +203,7 @@ defmodule Babs.Citizens.SpawnerTest do
     assert record.cli == "copilot"
     assert record.cli_args == []
     assert record.launch_profile == "trusted_autonomous"
+    assert record.ticket_backend == "hardline"
 
     toml = File.read!(Path.join(root, "citizens/citizen-copilot-ok.toml"))
     assert toml =~ ~s(cli = "copilot")

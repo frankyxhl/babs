@@ -11,11 +11,14 @@ defmodule Babs.Citizens.Application do
         {Registry, keys: :unique, name: Babs.Citizens.PaneRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.SpawnerRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.LifecycleRegistry},
+        {Registry, keys: :unique, name: Babs.Citizens.ExecutionLockRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.Tickets.WriterRegistry},
+        {Task.Supervisor, name: Babs.Citizens.DirectCli.TaskSupervisor},
+        Babs.Citizens.Repo,
+        Babs.Citizens.DirectCli.Runner,
         Babs.Citizens.Tickets.WriterSupervisor,
         Babs.Citizens.Tickets.Watcher,
         Babs.Citizens.Tickets.ReplyCapture,
-        Babs.Citizens.Repo,
         {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
       ] ++ reattach_children()
 

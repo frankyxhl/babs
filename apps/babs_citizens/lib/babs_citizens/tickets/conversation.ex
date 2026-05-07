@@ -97,6 +97,23 @@ defmodule Babs.Citizens.Tickets.Conversation do
   defp reduce_event(
          conversation,
          %{
+           "event" => "turn_execution_started",
+           "turn_id" => turn_id,
+           "attempt_id" => attempt_id,
+           "to" => slug
+         } = event,
+         _index
+       ) do
+    update_attempt(conversation, turn_id, slug, attempt_id, %{
+      backend: event["backend"] || "direct_cli",
+      status: "running",
+      started_at: event["ts"]
+    })
+  end
+
+  defp reduce_event(
+         conversation,
+         %{
            "event" => "turn_delivered",
            "turn_id" => turn_id,
            "attempt_id" => attempt_id,

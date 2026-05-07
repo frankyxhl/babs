@@ -32,6 +32,7 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     assert config.slug == "tester"
     assert config.cli_args == ["-f"]
     assert config.launch_profile == "trusted_autonomous"
+    assert config.ticket_backend == "hardline"
     assert config.env == %{"BABS_TEST_TOKEN" => "secret-token"}
     assert config.cwd == Path.join(root, "workspaces/tester")
   after
@@ -60,6 +61,26 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     assert config.path == Path.join(root, "citizens/citizen-reader.toml")
     assert config.cwd == Path.join(root, "workspaces/reader")
     assert config.launch_profile == "safe_interactive"
+    assert config.ticket_backend == "hardline"
+  end
+
+  test "loads supported ticket backend values" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-direct.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-DIRECT"
+    slug = "direct"
+    display_name = "Direct"
+    cli = "codex"
+    cwd = "direct"
+    ticket_backend = "direct_cli"
+    """)
+
+    assert {:ok, config} = Config.load_file(path, root: root)
+    assert config.ticket_backend == "direct_cli"
   end
 
   test "custom workspace_root resolves relative cwd outside the application root" do
@@ -361,6 +382,25 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     """)
 
     assert {:error, {:invalid_launch_profile, "trust-me"}} =
+             Config.load_file(path, root: root)
+  end
+
+  test "rejects unsupported ticket backends before runner construction" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-bad-ticket-backend.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-BAD-TICKET-BACKEND"
+    slug = "bad-ticket-backend"
+    display_name = "Bad Ticket Backend"
+    cli = "codex"
+    ticket_backend = "batch"
+    cwd = "bad-ticket-backend"
+    """)
+
+    assert {:error, {:invalid_ticket_backend, "batch"}} =
              Config.load_file(path, root: root)
   end
 

@@ -14,6 +14,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
         cli: "claude",
         cli_args: ["--continue"],
         launch_profile: "trusted_autonomous",
+        ticket_backend: "direct_cli",
         env: %{"ANTHROPIC_API_KEY" => "secret"},
         role: %{"name" => "developer", "skills" => ["elixir", "phoenix"]},
         status: "running",
@@ -26,6 +27,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
     record = Ecto.Changeset.apply_changes(changeset)
     assert record.cli_args == ["--continue"]
     assert record.launch_profile == "trusted_autonomous"
+    assert record.ticket_backend == "direct_cli"
     assert record.env == %{"ANTHROPIC_API_KEY" => "secret"}
     assert record.role == %{"name" => "developer", "skills" => ["elixir", "phoenix"]}
     assert record.metadata == %{"seed" => true}
@@ -36,6 +38,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
 
     assert record.cli_args == []
     assert record.launch_profile == "safe_interactive"
+    assert record.ticket_backend == "hardline"
     assert record.env == %{}
     assert record.metadata == %{}
     refute record.is_mayor
@@ -48,6 +51,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
     refute_valid(%{attrs | status: "paused"})
     refute_valid(%{attrs | cli_args: ["-f", 1]})
     refute_valid(%{attrs | launch_profile: "trust-me"})
+    refute_valid(%{attrs | ticket_backend: "batch"})
     refute_valid(%{attrs | env: ["TOKEN"]})
     refute_valid(%{attrs | metadata: ["seed"]})
     refute_valid(%{attrs | role: %{"name" => "developer", "skills" => ["ok", 1]}})
@@ -82,6 +86,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       launch_profile: "safe_interactive",
+      ticket_backend: "hardline",
       env: %{},
       role: nil,
       status: "running",

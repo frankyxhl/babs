@@ -75,6 +75,26 @@ defmodule Babs.Citizens.Tickets.ConversationTest do
              Conversation.attempt(conversation, "turn_a", "clare", "attempt_b")
   end
 
+  test "marks a direct CLI attempt running after execution starts" do
+    history = [
+      attempted("turn_a", "attempt_a", "dylan", "queued", "direct_cli"),
+      %{
+        "ts" => "2026-05-07T10:00:01Z",
+        "event" => "turn_execution_started",
+        "by" => "system",
+        "ticket_id" => "T-1",
+        "turn_id" => "turn_a",
+        "attempt_id" => "attempt_a",
+        "to" => "dylan"
+      }
+    ]
+
+    conversation = Conversation.from_history(history)
+
+    assert %{status: "running", backend: "direct_cli", started_at: "2026-05-07T10:00:01Z"} =
+             Conversation.attempt(conversation, "turn_a", "dylan", "attempt_a")
+  end
+
   defp comment(ts, message_id, turn_id, by, body) do
     %{
       "ts" => ts,
@@ -88,6 +108,10 @@ defmodule Babs.Citizens.Tickets.ConversationTest do
   end
 
   defp attempted(turn_id, attempt_id, slug, status) do
+    attempted(turn_id, attempt_id, slug, status, "hardline")
+  end
+
+  defp attempted(turn_id, attempt_id, slug, status, backend) do
     %{
       "ts" => "2026-05-07T10:00:00Z",
       "event" => "turn_delivery_attempted",
@@ -96,7 +120,7 @@ defmodule Babs.Citizens.Tickets.ConversationTest do
       "turn_id" => turn_id,
       "attempt_id" => attempt_id,
       "to" => slug,
-      "backend" => "hardline",
+      "backend" => backend,
       "status" => status
     }
   end

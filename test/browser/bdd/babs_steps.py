@@ -339,6 +339,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_ticket_new_form_captures_elena_copilot_jsonl_reply,
         ),
         Scenario(
+            name="ticket chat shows direct CLI fake reply",
+            given="a Ticket detail page is open",
+            when="a deterministic direct CLI provider turn completes",
+            then="the Ticket chat shows the direct provider reply and direct turn history",
+            run=scenario_ticket_chat_shows_direct_cli_fake_reply,
+        ),
+        Scenario(
             name="malformed ticket is visible",
             given="a malformed runtime Ticket file exists",
             when="the operator opens /tickets",
@@ -1028,6 +1035,43 @@ def scenario_ticket_new_form_captures_elena_copilot_jsonl_reply(context: BabsBdd
         if ticket_id is not None:
             cleanup_ticket(context.tickets_root, ticket_id)
         shutil.rmtree(copilot_home, ignore_errors=True)
+
+
+def scenario_ticket_chat_shows_direct_cli_fake_reply(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    reply = f"BDD direct CLI fake reply {int(time.time() * 1000)}."
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Direct CLI Ticket", "Direct CLI body.")
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-detail']", "direct CLI Ticket detail")
+        assert_element_visible('[data-testid="ticket-comments-empty"]', "empty Ticket comments state")
+
+        run_fake_direct_turn_once(context.tickets_root, ticket_id, reply)
+
+        wait_until(
+            "direct CLI fake reply to appear in Ticket chat",
+            lambda: ticket_comment_message_contains(reply) and "dylan" in js("document.body.innerText"),
+            timeout=15,
+        )
+
+        events = ticket_history_events(context.tickets_root, ticket_id)
+        assert any(
+            event.get("event") == "turn_execution_started" and event.get("backend") == "direct_cli"
+            for event in events
+        )
+        assert any(
+            event.get("event") == "turn_delivered"
+            and event.get("backend") == "direct_cli"
+            and event.get("provider_session_id")
+            for event in events
+        )
+        assert any(
+            event.get("event") == "comment" and event.get("by") == "dylan" and event.get("body") == reply
+            for event in events
+        )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
 
 
 def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:
@@ -1879,6 +1923,93 @@ def run_elena_reply_capture_once(
     if result.returncode != 0:
         raise AssertionError(
             "Elena Copilot reply capture failed:\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+
+def run_fake_direct_turn_once(tickets_root_path: Path, ticket_id: str, reply: str) -> None:
+    script = """
+    root = System.fetch_env!("BABS_BDD_TICKETS_ROOT")
+    ticket_id = System.fetch_env!("BABS_BDD_TICKET_ID")
+    reply = System.fetch_env!("BABS_BDD_DIRECT_REPLY")
+
+    Application.put_env(:babs_citizens, :autostart, false)
+    Application.put_env(:babs_citizens, :tickets_root, root)
+    Application.put_env(:babs_citizens, :ai_reply_capture_enabled, false)
+
+    {:ok, _apps} = Application.ensure_all_started(:babs_citizens)
+
+    Ecto.Migrator.with_repo(Babs.Citizens.Repo, fn repo ->
+      Ecto.Migrator.run(repo, Application.app_dir(:babs_citizens, "priv/repo/migrations"), :up, all: true)
+    end)
+
+    config = %Babs.Citizens.CitizenConfig{
+      id: "BAB-CIT-BDD-DYLAN",
+      slug: "dylan",
+      display_name: "Dylan",
+      cli: "babs-fake-ai",
+      cli_args: [],
+      launch_profile: "trusted_autonomous",
+      ticket_backend: "direct_cli",
+      cwd: File.cwd!(),
+      env: %{}
+    }
+
+    session_id = "bdd-direct-session-" <> ticket_id
+
+    executor = fn command ->
+      {:ok,
+       %{
+         stdout: Jason.encode!(%{"session_id" => command.provider_session_id || session_id, "content" => reply}),
+         stderr: ""
+       }}
+    end
+
+    turn = %{
+      root: root,
+      ticket_id: ticket_id,
+      slug: "dylan",
+      turn_id: "turn_bdd_direct_" <> Integer.to_string(System.unique_integer([:positive])),
+      attempt_id: "attempt_bdd_direct_" <> Integer.to_string(System.unique_integer([:positive])),
+      backend: "direct_cli",
+      prompt: "Reply through the fake direct CLI provider.",
+      config: config,
+      fallback: :none
+    }
+
+    case Babs.Citizens.DirectCli.Runner.run_turn(turn,
+           adapter: Babs.Citizens.DirectCli.Adapters.Fake,
+           executor: executor
+         ) do
+      :ok ->
+        :ok
+
+      other ->
+        IO.inspect(other, label: "direct_turn")
+        System.halt(1)
+    end
+    """
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "BABS_BDD_TICKETS_ROOT": str(tickets_root_path),
+            "BABS_BDD_TICKET_ID": ticket_id,
+            "BABS_BDD_DIRECT_REPLY": reply,
+        }
+    )
+    result = subprocess.run(
+        ["mise", "exec", "--", "mix", "run", "--no-start", "-e", script],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            "Direct CLI fake turn failed:\n"
             f"stdout:\n{result.stdout}\n"
             f"stderr:\n{result.stderr}"
         )

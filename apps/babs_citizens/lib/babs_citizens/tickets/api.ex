@@ -108,6 +108,17 @@ defmodule Babs.Citizens.Tickets.Api do
     end
   end
 
+  @spec append_ticket_events(String.t(), [map()], keyword()) :: :ok | {:error, term()}
+  def append_ticket_events(id, events, opts \\ []) when is_binary(id) and is_list(events) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.append_history_events(pid, id, events, opts)
+    end
+  end
+
   defp new_ticket(id, title, body, path, attrs, opts) do
     now = Keyword.get(opts, :now, DateTime.utc_now(:second) |> DateTime.to_iso8601())
 

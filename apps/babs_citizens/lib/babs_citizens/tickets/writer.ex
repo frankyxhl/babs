@@ -6,6 +6,9 @@ defmodule Babs.Citizens.Tickets.Writer do
   use GenServer
 
   alias Babs.Citizens.Citizen.Config, as: CitizenConfig
+  alias Babs.Citizens.Catalog
+  alias Babs.Citizens.DirectCli.Runner, as: DirectRunner
+  alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
@@ -19,6 +22,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   require Logger
 
   @idle_timeout 60_000
+  @ticket_backends ~w(hardline direct_cli lazy_tmux)
 
   def start_link(opts) do
     id = Keyword.fetch!(opts, :id)
@@ -54,6 +58,10 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   def reject(pid, id, feedback, opts \\ []) do
     GenServer.call(pid, {:reject, id, feedback, opts}, 30_000)
+  end
+
+  def append_history_events(pid, id, events, opts \\ []) do
+    GenServer.call(pid, {:append_history_events, id, events, opts}, 30_000)
   end
 
   @impl true
@@ -93,7 +101,7 @@ defmodule Babs.Citizens.Tickets.Writer do
            updated = %{ticket | updated_at: now},
            notify? <- Keyword.get(opts, :notify_assignees, true),
            turn <- comment_turn(ticket, attrs, now, by, notify?),
-           events <- comment_events(ticket, body, now, by, notify?, turn),
+           events <- comment_events(ticket, body, now, by, notify?, turn, opts),
            :ok <- validate_events(id, events),
            :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
            :ok <- append_events(state.root, id, events) do
@@ -115,12 +123,18 @@ defmodule Babs.Citizens.Tickets.Writer do
       with {:ok, original} <- read_current(path, id),
            {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
            {:ok, assigned} <- StateMachine.assign(ticket, slug) do
-        case Injector.prepare(slug, opts) do
-          :ok ->
-            persist_assignment(state.root, path, original, assigned, slug, opts)
+        case delivery_backend(slug, opts) do
+          "direct_cli" = backend ->
+            persist_assignment(state.root, path, original, assigned, slug, opts, backend)
 
-          {:error, reason} ->
-            persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+          backend ->
+            case Injector.prepare(slug, opts) do
+              :ok ->
+                persist_assignment(state.root, path, original, assigned, slug, opts, backend)
+
+              {:error, reason} ->
+                persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+            end
         end
       end
 
@@ -225,6 +239,18 @@ defmodule Babs.Citizens.Tickets.Writer do
     {:reply, result, state}
   end
 
+  def handle_call({:append_history_events, id, events, opts}, _from, state) do
+    state = reset_idle(state, opts)
+
+    result =
+      with :ok <- validate_events(id, events),
+           :ok <- append_events(state.root, id, events) do
+        :ok
+      end
+
+    {:reply, result, state}
+  end
+
   @impl true
   def handle_info({:idle_timeout, ref}, %{idle_ref: ref} = state) do
     {:stop, :normal, state}
@@ -256,37 +282,63 @@ defmodule Babs.Citizens.Tickets.Writer do
     |> put_optional("attempt_id", turn.captured_attempt_id)
   end
 
-  defp comment_events(ticket, body, now, by, notify?, turn) do
+  defp comment_events(ticket, body, now, by, notify?, turn, opts) do
     events =
       [comment_event(ticket, now, by, body, turn)] ++ turn_created_events(ticket, now, by, turn)
 
     events
-    |> maybe_add_notification_attempts(ticket, now, by, notify?, turn)
+    |> maybe_add_notification_attempts(ticket, now, by, notify?, turn, opts)
     |> maybe_add_captured_reply_event(ticket, now, by, notify?, turn)
   end
 
-  defp persist_assignment(root, path, original, assigned, slug, opts) do
+  defp persist_assignment(root, path, original, assigned, slug, opts, backend) do
     id = assigned.id
     now = now(opts)
     by = by(opts)
     assigned = %{assigned | updated_at: now}
+    turn = assignment_turn(slug, now, backend)
 
     with :ok <- run_before_write(path, opts),
          :ok <- detect_conflict(path, original, id),
          :ok <- write_markdown(root, id, TicketMarkdown.render(assigned)),
-         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by)),
+         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by, backend, turn)),
          prompt <- Injector.prompt(assigned, slug) do
-      case Injector.inject(slug, prompt, opts) do
-        :ok ->
-          with :ok <- History.append(root, id, injected_event(assigned, slug, now)) do
-            track_reply_capture(root, assigned, slug, now, opts)
-            {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
-          end
+      deliver_assignment(root, assigned, slug, prompt, now, backend, turn, opts)
+    end
+  end
 
-        {:error, reason} ->
-          _ignored = History.append(root, id, injection_failed_event(assigned, slug, now, reason))
-          {:error, reason}
+  defp deliver_assignment(root, assigned, slug, prompt, now, "direct_cli", turn, opts) do
+    case deliver_direct_turn(root, assigned, slug, prompt, turn, opts) do
+      :ok ->
+        with :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
+          {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
+        end
+
+      {:error, reason} ->
+        _ignored =
+          History.append(root, assigned.id, injection_failed_event(assigned, slug, now, reason))
+
+        {:error, reason}
+    end
+  end
+
+  defp deliver_assignment(root, assigned, slug, prompt, now, _backend, _turn, opts) do
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.inject(slug, prompt, opts),
+           :ok <- History.append(root, assigned.id, injected_event(assigned, slug, now)) do
+        track_reply_capture(root, assigned, slug, now, opts)
+        {:ok, %{ticket: assigned, delivery: {:injected, slug}}}
       end
+    end)
+    |> case do
+      {:ok, %{ticket: _assigned, delivery: {:injected, _slug}}} = result ->
+        result
+
+      {:error, reason} ->
+        _ignored =
+          History.append(root, assigned.id, injection_failed_event(assigned, slug, now, reason))
+
+        {:error, reason}
     end
   end
 
@@ -322,6 +374,17 @@ defmodule Babs.Citizens.Tickets.Writer do
       }
     ]
   end
+
+  defp assignment_events(ticket, slug, now, by, "direct_cli", turn) do
+    ticket = %{ticket | assignees: [slug]}
+
+    assignment_events(ticket, slug, now, by) ++
+      turn_created_events(ticket, now, by, turn) ++
+      [turn_delivery_attempted_event(ticket, now, turn, slug, delivery_backend: "direct_cli")]
+  end
+
+  defp assignment_events(ticket, slug, now, by, _backend, _turn),
+    do: assignment_events(ticket, slug, now, by)
 
   defp unassign_events(original, updated, slug, now, by) do
     events = [
@@ -448,7 +511,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     ]
   end
 
-  defp maybe_add_notification_attempts(events, ticket, now, by, true, turn) do
+  defp maybe_add_notification_attempts(events, ticket, now, by, true, turn, opts) do
     legacy_events =
       if ticket.assignees == [],
         do: [],
@@ -457,7 +520,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     turn_events =
       if is_binary(turn.turn_id) and map_size(turn.attempt_ids) > 0 do
         Enum.map(ticket.assignees, fn slug ->
-          turn_delivery_attempted_event(ticket, now, turn, slug)
+          turn_delivery_attempted_event(ticket, now, turn, slug, opts)
         end)
       else
         []
@@ -466,7 +529,8 @@ defmodule Babs.Citizens.Tickets.Writer do
     events ++ legacy_events ++ turn_events
   end
 
-  defp maybe_add_notification_attempts(events, _ticket, _now, _by, _notify?, _turn), do: events
+  defp maybe_add_notification_attempts(events, _ticket, _now, _by, _notify?, _turn, _opts),
+    do: events
 
   defp maybe_add_captured_reply_event(events, ticket, now, by, false, %{
          turn_id: turn_id,
@@ -491,7 +555,7 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   defp maybe_add_captured_reply_event(events, _ticket, _now, _by, _notify?, _turn), do: events
 
-  defp turn_delivery_attempted_event(ticket, now, turn, slug) do
+  defp turn_delivery_attempted_event(ticket, now, turn, slug, opts) do
     %{
       "ts" => now,
       "event" => "turn_delivery_attempted",
@@ -500,12 +564,12 @@ defmodule Babs.Citizens.Tickets.Writer do
       "turn_id" => turn.turn_id,
       "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
       "to" => slug,
-      "backend" => "hardline",
+      "backend" => delivery_backend(slug, opts),
       "status" => "queued"
     }
   end
 
-  defp turn_delivered_event(ticket, slug, now, turn) do
+  defp turn_delivered_event(ticket, slug, now, turn, backend) do
     %{
       "ts" => now,
       "event" => "turn_delivered",
@@ -514,21 +578,7 @@ defmodule Babs.Citizens.Tickets.Writer do
       "turn_id" => turn.turn_id,
       "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
       "to" => slug,
-      "backend" => "hardline"
-    }
-  end
-
-  defp turn_delivery_failed_event(ticket, slug, now, turn, reason) do
-    %{
-      "ts" => now,
-      "event" => "turn_delivery_failed",
-      "by" => "system",
-      "ticket_id" => ticket.id,
-      "turn_id" => turn.turn_id,
-      "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
-      "to" => slug,
-      "backend" => "hardline",
-      "error" => error_text(reason)
+      "backend" => backend
     }
   end
 
@@ -597,25 +647,84 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp deliver_comment(root, ticket, slug, body, now, by, turn, opts, conversation) do
     prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
 
-    with :ok <- Injector.prepare(slug, opts),
-         :ok <- Injector.inject(slug, prompt, opts),
+    case delivery_backend(slug, opts) do
+      "direct_cli" ->
+        deliver_direct_comment(root, ticket, slug, prompt, turn, opts)
+
+      "lazy_tmux" ->
+        deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
+
+      _backend ->
+        deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
+    end
+  end
+
+  defp deliver_direct_comment(root, ticket, slug, prompt, turn, opts) do
+    deliver_direct_turn(root, ticket, slug, prompt, turn, opts)
+  end
+
+  defp deliver_direct_turn(root, ticket, slug, prompt, turn, opts) do
+    with {:ok, config} <- direct_config(slug, opts),
          :ok <-
-           append_events(
-             root,
-             ticket.id,
-             [comment_notified_event(ticket, slug, now, by)] ++
-               turn_delivered_events(ticket, slug, now, turn)
+           DirectRunner.start_turn(
+             %{
+               root: root,
+               ticket_id: ticket.id,
+               slug: slug,
+               turn_id: turn.turn_id,
+               attempt_id: Map.fetch!(turn.attempt_ids, slug),
+               backend: "direct_cli",
+               prompt: prompt,
+               config: config,
+               fallback: :hardline
+             },
+             opts
            ) do
-      track_reply_capture(root, ticket, slug, now, opts, turn)
       :ok
     else
+      {:error, {:execution_busy, _slug} = reason} ->
+        {:error, reason}
+
+      {:error, reason} ->
+        _ignored =
+          append_events(
+            root,
+            ticket.id,
+            turn_delivery_failed_events(ticket, slug, now(opts), turn, reason, "direct_cli")
+          )
+
+        {:error, reason}
+    end
+  end
+
+  defp deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts) do
+    backend = delivery_backend(slug, opts)
+
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.prepare(slug, opts),
+           :ok <- Injector.inject(slug, prompt, opts),
+           :ok <-
+             append_events(
+               root,
+               ticket.id,
+               [comment_notified_event(ticket, slug, now, by)] ++
+                 turn_delivered_events(ticket, slug, now, turn, backend)
+             ) do
+        track_reply_capture(root, ticket, slug, now, opts, turn)
+        :ok
+      end
+    end)
+    |> case do
+      :ok ->
+        :ok
+
       {:error, reason} ->
         _ignored =
           append_events(
             root,
             ticket.id,
             [comment_notification_failed_event(ticket, slug, now, by, reason)] ++
-              turn_delivery_failed_events(ticket, slug, now, turn, reason)
+              turn_delivery_failed_events(ticket, slug, now, turn, reason, backend)
           )
 
         {:error, reason}
@@ -641,10 +750,32 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp deliver_feedback(root, ticket, slug, feedback, now, by, opts) do
     prompt = Injector.feedback_prompt(ticket, slug, feedback)
 
-    with :ok <- Injector.prepare(slug, opts),
-         :ok <- Injector.inject(slug, prompt, opts),
+    case delivery_backend(slug, opts) do
+      "direct_cli" ->
+        deliver_direct_feedback(root, ticket, slug, prompt, now, by, opts)
+
+      _backend ->
+        deliver_hardline_feedback(root, ticket, slug, prompt, now, by, opts)
+    end
+  end
+
+  defp deliver_direct_feedback(root, ticket, slug, prompt, now, by, opts) do
+    turn = single_slug_turn(slug, now)
+    ticket = %{ticket | assignees: [slug]}
+
+    with :ok <-
+           append_events(
+             root,
+             ticket.id,
+             turn_created_events(ticket, now, by, turn) ++
+               [
+                 turn_delivery_attempted_event(ticket, now, turn, slug,
+                   delivery_backend: "direct_cli"
+                 )
+               ]
+           ),
+         :ok <- deliver_direct_turn(root, ticket, slug, prompt, turn, opts),
          :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
-      track_reply_capture(root, ticket, slug, now, opts)
       :ok
     else
       {:error, reason} ->
@@ -657,6 +788,45 @@ defmodule Babs.Citizens.Tickets.Writer do
 
         {:error, reason}
     end
+  end
+
+  defp deliver_hardline_feedback(root, ticket, slug, prompt, now, by, opts) do
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.prepare(slug, opts),
+           :ok <- Injector.inject(slug, prompt, opts),
+           :ok <- History.append(root, ticket.id, feedback_injected_event(ticket, slug, now, by)) do
+        track_reply_capture(root, ticket, slug, now, opts)
+        :ok
+      end
+    end)
+    |> case do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        _ignored =
+          History.append(
+            root,
+            ticket.id,
+            feedback_injection_failed_event(ticket, slug, now, by, reason)
+          )
+
+        {:error, reason}
+    end
+  end
+
+  defp assignment_turn(slug, now, "direct_cli"), do: single_slug_turn(slug, now)
+  defp assignment_turn(_slug, _now, _backend), do: %{new_turn?: false}
+
+  defp single_slug_turn(slug, now) do
+    %{
+      turn_id: TurnIds.generate!(:turn, now),
+      message_id: TurnIds.generate!(:message, now),
+      captured_attempt_id: nil,
+      parent_turn_id: nil,
+      attempt_ids: %{slug => TurnIds.generate!(:attempt, now)},
+      new_turn?: true
+    }
   end
 
   defp append_events(root, id, events) do
@@ -704,25 +874,107 @@ defmodule Babs.Citizens.Tickets.Writer do
     :ok
   end
 
-  defp turn_delivered_events(_ticket, _slug, _now, %{turn_id: nil}), do: []
+  defp turn_delivered_events(_ticket, _slug, _now, %{turn_id: nil}, _backend), do: []
 
-  defp turn_delivered_events(ticket, slug, now, turn) do
+  defp turn_delivered_events(ticket, slug, now, turn, backend) do
     if Map.has_key?(turn.attempt_ids, slug) do
-      [turn_delivered_event(ticket, slug, now, turn)]
+      [turn_delivered_event(ticket, slug, now, turn, backend)]
     else
       []
     end
   end
 
-  defp turn_delivery_failed_events(_ticket, _slug, _now, %{turn_id: nil}, _reason), do: []
-
-  defp turn_delivery_failed_events(ticket, slug, now, turn, reason) do
+  defp turn_delivery_failed_events(ticket, slug, now, turn, reason, backend) do
     if Map.has_key?(turn.attempt_ids, slug) do
-      [turn_delivery_failed_event(ticket, slug, now, turn, reason)]
+      [turn_delivery_failed_event(ticket, slug, now, turn, reason, backend)]
     else
       []
     end
   end
+
+  defp turn_delivery_failed_event(ticket, slug, now, turn, reason, backend) do
+    %{
+      "ts" => now,
+      "event" => "turn_delivery_failed",
+      "by" => "system",
+      "ticket_id" => ticket.id,
+      "turn_id" => turn.turn_id,
+      "attempt_id" => Map.fetch!(turn.attempt_ids, slug),
+      "to" => slug,
+      "backend" => backend,
+      "error" => error_text(reason)
+    }
+  end
+
+  defp delivery_backend(slug, opts) do
+    case Keyword.get(opts, :delivery_backend) do
+      fun when is_function(fun, 1) ->
+        normalize_ticket_backend(fun.(slug))
+
+      backend when is_binary(backend) ->
+        normalize_ticket_backend(backend)
+
+      _other ->
+        case fetch_citizen_config(slug, opts) do
+          {:ok, config} -> normalize_ticket_backend(config_backend(config))
+          {:error, _reason} -> "hardline"
+        end
+    end
+  end
+
+  defp direct_config(slug, opts), do: fetch_citizen_config(slug, opts)
+
+  defp fetch_citizen_config(slug, opts) do
+    cond do
+      fetcher = Keyword.get(opts, :citizen_config_fetcher) ->
+        normalize_config_result(fetcher.(slug), slug)
+
+      configs = Keyword.get(opts, :direct_configs) ->
+        fetch_config_from_map(configs, slug)
+
+      config = Keyword.get(opts, :direct_config) ->
+        normalize_config_result(config, slug)
+
+      true ->
+        fetch_config_from_catalog(slug)
+    end
+  end
+
+  defp fetch_config_from_map(configs, slug) when is_map(configs) do
+    configs
+    |> Map.fetch(slug)
+    |> case do
+      {:ok, config} -> normalize_config_result(config, slug)
+      :error -> {:error, {:unknown_citizen, slug}}
+    end
+  end
+
+  defp fetch_config_from_map(_configs, slug), do: {:error, {:unknown_citizen, slug}}
+
+  defp fetch_config_from_catalog(slug) do
+    case Catalog.get_by_slug(slug) do
+      nil -> {:error, {:unknown_citizen, slug}}
+      record -> {:ok, Catalog.to_config(record)}
+    end
+  rescue
+    error -> {:error, {:catalog_unavailable, Exception.message(error)}}
+  catch
+    :exit, reason -> {:error, {:catalog_unavailable, reason}}
+  end
+
+  defp normalize_config_result({:ok, config}, _slug), do: {:ok, config}
+  defp normalize_config_result({:error, reason}, _slug), do: {:error, reason}
+  defp normalize_config_result(nil, slug), do: {:error, {:unknown_citizen, slug}}
+  defp normalize_config_result(config, _slug), do: {:ok, config}
+
+  defp config_backend(config) when is_map(config) do
+    Map.get(config, :ticket_backend) || Map.get(config, "ticket_backend")
+  end
+
+  defp config_backend(_config), do: nil
+
+  defp normalize_ticket_backend(backend) when backend in @ticket_backends, do: backend
+  defp normalize_ticket_backend(_backend), do: "hardline"
 
   defp comment_turn(ticket, attrs, now, by, notify?) do
     supplied_turn_id = fetch_attr(attrs, :turn_id)
