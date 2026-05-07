@@ -291,8 +291,18 @@ defmodule Babs.Citizens.Runner do
          {pid, ""} <- Integer.parse(value) do
       {:ok, pid}
     else
-      {:error, _reason} = error -> error
-      _ -> {:error, :invalid_pane_pid}
+      {:error, {:tmux_format_failed, _status, output}} = error when is_binary(output) ->
+        if tmux_missing_target_output?(output) do
+          {:error, :invalid_pane_pid}
+        else
+          error
+        end
+
+      {:error, _reason} = error ->
+        error
+
+      _ ->
+        {:error, :invalid_pane_pid}
     end
   end
 
@@ -313,6 +323,16 @@ defmodule Babs.Citizens.Runner do
       {:ok, {output, status}} -> {:error, {:tmux_format_failed, status, output}}
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  defp tmux_missing_target_output?(output) do
+    output = String.downcase(output)
+
+    String.contains?(output, [
+      "can't find",
+      "error connecting",
+      "no server running"
+    ])
   end
 
   defp tmux_cmd(args) do

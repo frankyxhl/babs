@@ -1,5 +1,5 @@
 defmodule Babs.Citizens.Citizen.LifecycleIntegrationTest do
-  use ExUnit.Case, async: false
+  use Babs.Citizens.RepoCase, async: false
 
   alias Babs.Citizens.{CitizenConfig, Lifecycle, Runner}
   alias Babs.Citizens.Hardline.Pane
