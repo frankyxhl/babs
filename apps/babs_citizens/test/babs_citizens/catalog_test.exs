@@ -189,6 +189,8 @@ defmodule Babs.Citizens.CatalogTest do
   test "list_configured_or_imported_citizens hides stale rows but keeps imported external sessions" do
     root = tmp_root!()
     write_citizen_toml!(root, "clare")
+    workspace = Path.join(root, "workspaces/clare")
+    refute File.exists?(workspace)
 
     insert_citizen!(%{slug: "clare", display_name: "Clare"})
     insert_citizen!(%{slug: "json", display_name: "Json", status: "stopped"})
@@ -208,6 +210,7 @@ defmodule Babs.Citizens.CatalogTest do
       |> Enum.map(& &1.slug)
 
     assert slugs == ["clare", "external"]
+    refute File.exists?(workspace)
   end
 
   test "imports do not log persisted env secret values" do

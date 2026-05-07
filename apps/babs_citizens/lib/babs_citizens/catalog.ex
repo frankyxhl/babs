@@ -251,6 +251,7 @@ defmodule Babs.Citizens.Catalog do
 
   defp configured_slug_set(opts) do
     opts
+    |> Keyword.put(:create_cwd, false)
     |> TomlConfig.list_configs()
     |> Enum.reduce(MapSet.new(), fn
       {:ok, %CitizenConfig{slug: slug}}, acc -> MapSet.put(acc, slug)

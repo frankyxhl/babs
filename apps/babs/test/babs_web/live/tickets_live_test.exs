@@ -423,12 +423,20 @@ defmodule BabsWeb.TicketsLiveTest do
 
     ticket = create_ticket!(root, "Assignable", "Only real Citizens should be assignable.")
 
-    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
 
     assert html =~ ~s(data-testid="ticket-assign-clare")
     assert html =~ ~s(data-testid="ticket-assign-external")
     refute html =~ ~s(data-testid="ticket-assign-json")
     refute html =~ "Json"
+
+    render_click(view, "assign", %{"slug" => "json"})
+    html = render_async(view, 1_000)
+
+    assert html =~ "Unknown Citizen: json"
+    assert {:ok, %{ticket: ticket}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert ticket.state == "open"
+    assert ticket.assignees == []
 
     stale_ticket =
       create_ticket!(root, "Stale assignment", "This row is no longer backed by TOML.",

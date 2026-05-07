@@ -152,6 +152,20 @@ ordinary stale rows.
   - `mise exec -- mix format --check-formatted`: pass
   - `af validate --root .`: 146 documents checked, 0 issues found
   - `git diff --check`: pass
+- 2026-05-08 GitHub Codex R1 fix validation:
+  - `mise exec -- mix format --check-formatted`: pass
+  - `mise exec -- mix test apps/babs/test/babs_web/live/tickets_live_test.exs apps/babs_citizens/test/babs_citizens/catalog_test.exs`
+    - `babs_citizens`: 9 tests, 0 failures
+    - `babs`: 17 tests, 0 failures
+  - `mise exec -- mix compile --warnings-as-errors`: pass
+  - `mise exec -- mix test`
+    - `babs_citizens`: 323 tests, 0 failures
+    - `babs`: 81 tests, 0 failures
+  - isolated Chrome browser-harness:
+    `BU_CDP_URL=http://127.0.0.1:9224 BABS_BDD_SCENARIO="ticket assignment hides stale sqlite citizen" npm run test:bdd`
+    - Scenario passed; BDD PASS
+  - `af validate --root .`: 146 documents checked, 0 issues found
+  - `git diff --check`: pass
 
 ## Review Results
 
@@ -169,6 +183,11 @@ ordinary stale rows.
 - Deferred non-blocking implementation advisories:
   TOML parse-error visibility, optional public helper docs if new helpers grow,
   and future stale-Citizen lifecycle/status UX beyond Ticket assignment.
+- 2026-05-08 GitHub Codex PR review R1:
+  - P2 fixed: server-side LiveView assign events now revalidate the slug
+    against the same TOML-backed-or-imported-external eligibility rule.
+  - P2 fixed: eligibility scans now pass `create_cwd: false` and do not create
+    workspaces while rendering Ticket assignment options.
 
 ## References
 
@@ -189,3 +208,4 @@ ordinary stale rows.
 | 2026-05-08 | Mark approved after Trinity review and add guard rails | Codex |
 | 2026-05-08 | Record implementation validation results | Codex |
 | 2026-05-08 | Record final Trinity implementation review | Codex |
+| 2026-05-08 | Record GitHub Codex R1 fixes and validation | Codex |
