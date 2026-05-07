@@ -445,7 +445,7 @@ test("ticket detail stores operator comments from the browser", async ({ page })
     await page.goto(`/tickets/${id}`);
 
     await expect(page.getByTestId("ticket-detail")).toBeVisible();
-    await expect(page.getByTestId("ticket-comments-chat")).toBeVisible();
+    await expect(page.getByTestId("ticket-detail-chat")).toBeVisible();
     await expect(page.getByTestId("ticket-comments-empty")).toBeVisible();
     await expect(page.getByTestId("ticket-comment-form")).toBeVisible();
     await expect(page.locator('[data-testid="ticket-comment"] [data-icon="send"]')).toBeVisible();
@@ -454,7 +454,7 @@ test("ticket detail stores operator comments from the browser", async ({ page })
     await page.getByTestId("ticket-comment").click();
 
     await expect(page.getByTestId("ticket-flash-info")).toContainText("Comment stored");
-    await expect(page.getByTestId("ticket-comment-message").filter({ hasText: comment })).toBeVisible();
+    await expect(page.getByTestId("ticket-chat-message").filter({ hasText: comment })).toBeVisible();
   } finally {
     cleanupTicket(id);
   }
@@ -487,7 +487,7 @@ test("ticket index creates a ticket and opens chat-ready detail", async ({ page 
     await expect(page.getByTestId("ticket-detail")).toBeVisible();
     await expect(page.getByTestId("ticket-detail")).toContainText(title);
     await expect(page.getByTestId("ticket-detail")).toContainText(body);
-    await expect(page.getByTestId("ticket-comments-chat")).toBeVisible();
+    await expect(page.getByTestId("ticket-detail-chat")).toBeVisible();
     await expect(page.getByTestId("ticket-comments-empty")).toBeVisible();
     await expect(page.getByTestId("ticket-comment-form")).toBeVisible();
     await expect(page.locator('[data-testid="ticket-comment"] [data-icon="send"]')).toBeVisible();
@@ -515,8 +515,8 @@ test("ticket detail refreshes captured citizen replies from history", async ({ p
       body: reply,
     });
 
-    await expect(page.getByTestId("ticket-comment-message").filter({ hasText: reply })).toBeVisible();
-    await expect(page.getByTestId("ticket-comment-message").filter({ hasText: "clare" })).toBeVisible();
+    await expect(page.getByTestId("ticket-chat-message").filter({ hasText: reply })).toBeVisible();
+    await expect(page.getByTestId("ticket-chat-message").filter({ hasText: "clare" })).toBeVisible();
   } finally {
     cleanupTicket(id);
   }

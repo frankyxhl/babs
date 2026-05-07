@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -20,7 +21,14 @@ def main() -> None:
     try:
         context.ensure_server()
 
+        scenario_filter = os.environ.get("BABS_BDD_SCENARIO", "").strip().lower()
+        selected = 0
+
         for scenario in scenarios():
+            if scenario_filter and scenario_filter not in scenario.name.lower():
+                continue
+
+            selected += 1
             print(f"\nSCENARIO {scenario.name}")
             print(f"  Given {scenario.given}")
             print(f"  When  {scenario.when}")
@@ -37,6 +45,9 @@ def main() -> None:
                 print("  PASS")
             finally:
                 context.close_test_tab()
+
+        if scenario_filter and selected == 0:
+            failures.append((scenario_filter, RuntimeError("no BDD scenario matched filter")))
     finally:
         context.cleanup()
 

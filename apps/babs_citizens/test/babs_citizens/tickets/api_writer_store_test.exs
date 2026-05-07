@@ -147,6 +147,112 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert attempted["injected_to"] == ["clare", "dylan"]
   end
 
+  test "comment_ticket emits turn events and attempt ids for hardline fanout" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Turn fanout",
+                 body: "Coordinate through turn events.",
+                 state: "in_progress",
+                 assignees: ["clare", "dylan"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    assert {:ok, %{delivery: {:comment_notified, ["clare", "dylan"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Second turn.", by: "user"},
+               tickets_root: root,
+               now: "2026-05-07T10:01:00Z",
+               citizen_fetcher: fn slug when slug in ["clare", "dylan"] -> %{slug: slug} end,
+               pane_lookup: fn slug when slug in ["clare", "dylan"] -> {:ok, self()} end,
+               pane_injector: fn _slug, _prompt -> :ok end
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    comment = Enum.find(history, &(&1["event"] == "comment" and &1["body"] == "Second turn."))
+    assert comment["turn_id"] =~ ~r/\Aturn_20260507100100_[a-z0-9]{10}\z/
+    assert comment["message_id"] =~ ~r/\Amsg_20260507100100_[a-z0-9]{10}\z/
+
+    assert %{
+             "event" => "turn_created",
+             "turn_id" => turn_id,
+             "prompt_message_id" => prompt_message_id,
+             "to" => ["clare", "dylan"]
+           } = Enum.find(history, &(&1["event"] == "turn_created"))
+
+    assert turn_id == comment["turn_id"]
+    assert prompt_message_id == comment["message_id"]
+
+    attempted = Enum.filter(history, &(&1["event"] == "turn_delivery_attempted"))
+    assert Enum.map(attempted, & &1["to"]) |> Enum.sort() == ["clare", "dylan"]
+    assert Enum.all?(attempted, &(&1["status"] == "queued"))
+    assert Enum.all?(attempted, &(&1["backend"] == "hardline"))
+
+    delivered = Enum.filter(history, &(&1["event"] == "turn_delivered"))
+    assert Enum.map(delivered, & &1["to"]) |> Enum.sort() == ["clare", "dylan"]
+
+    for attempted_event <- attempted do
+      assert Enum.any?(
+               delivered,
+               &(&1["turn_id"] == turn_id and &1["attempt_id"] == attempted_event["attempt_id"] and
+                   &1["to"] == attempted_event["to"])
+             )
+    end
+  end
+
+  test "captured replies can reference the source turn and attempt without renotifying" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Captured turn reply",
+                 body: "Captured replies should keep turn ids.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    assert {:ok, %{delivery: :comment_stored}} =
+             Api.comment_ticket(
+               ticket.id,
+               %{
+                 body: "Captured answer.",
+                 by: "clare",
+                 turn_id: "turn_20260507100100_abc123def0",
+                 attempt_id: "attempt_20260507100100_abc123def0"
+               },
+               tickets_root: root,
+               now: "2026-05-07T10:02:00Z",
+               notify_assignees: false
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    comment = Enum.find(history, &(&1["event"] == "comment" and &1["body"] == "Captured answer."))
+    assert comment["turn_id"] == "turn_20260507100100_abc123def0"
+    assert comment["message_id"] =~ ~r/\Amsg_20260507100200_[a-z0-9]{10}\z/
+
+    assert %{
+             "event" => "turn_reply_captured",
+             "turn_id" => "turn_20260507100100_abc123def0",
+             "attempt_id" => "attempt_20260507100100_abc123def0",
+             "message_id" => message_id,
+             "by_citizen" => "clare"
+           } = Enum.find(history, &(&1["event"] == "turn_reply_captured"))
+
+    assert message_id == comment["message_id"]
+    refute Enum.any?(history, &(&1["event"] == "comment_notification_attempted"))
+  end
+
   test "comment_ticket with notify_assignees false omits notification attempt history" do
     root = tmp_root()
 
@@ -172,6 +278,38 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
 
     assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
     assert Enum.map(history, & &1["event"]) == ["created", "comment"]
+  end
+
+  test "user comment with notify_assignees false is stored without turn fanout" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "User note",
+                 body: "Operator-only note should not notify assignees.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    assert {:ok, %{delivery: :comment_stored}} =
+             Api.comment_ticket(ticket.id, %{body: "Hold delivery for now.", by: "user"},
+               tickets_root: root,
+               now: "2026-05-07T10:01:00Z",
+               notify_assignees: false
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert Enum.map(history, & &1["event"]) == ["created", "comment"]
+
+    comment = List.last(history)
+    assert comment["by"] == "user"
+    assert comment["message_id"] =~ ~r/\Amsg_20260507100100_[a-z0-9]{10}\z/
+    refute Map.has_key?(comment, "turn_id")
   end
 
   test "comment_ticket tracks AI reply capture after successful notification injection" do

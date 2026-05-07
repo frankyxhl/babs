@@ -6,6 +6,8 @@ defmodule Babs.Citizens.Tickets.Injector do
   alias Babs.Citizens.Catalog
   alias Babs.Citizens.Hardline.Pane
   alias Babs.Citizens.Lifecycle
+  alias Babs.Citizens.Tickets.Conversation
+  alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.Ticket
 
   @spec prompt(Ticket.t(), String.t()) :: String.t()
@@ -47,6 +49,19 @@ defmodule Babs.Citizens.Tickets.Injector do
   @spec comment_prompt(Ticket.t(), String.t(), String.t(), String.t()) :: String.t()
   def comment_prompt(%Ticket{} = ticket, slug, by, body)
       when is_binary(slug) and is_binary(by) and is_binary(body) do
+    comment_prompt(ticket, slug, by, body, [])
+  end
+
+  @spec comment_prompt(Ticket.t(), String.t(), String.t(), String.t(), [map()] | Conversation.t()) ::
+          String.t()
+  def comment_prompt(%Ticket{} = ticket, slug, by, body, history_or_conversation)
+      when is_binary(slug) and is_binary(by) and is_binary(body) do
+    follow_up =
+      PromptAssembler.follow_up_prompt(ticket, history_or_conversation,
+        citizen_slug: slug,
+        latest_message: body
+      )
+
     """
     #{runtime_protocol(ticket, slug)}
 
@@ -55,7 +70,7 @@ defmodule Babs.Citizens.Tickets.Injector do
     Assignee: #{slug}
     From: #{by}
 
-    #{String.trim(body)}
+    #{follow_up}
 
     This comment is persisted in Ticket history. Continue coordination with:
     BABS_REPLY #{ticket.id}: your response

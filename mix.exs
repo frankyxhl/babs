@@ -16,7 +16,10 @@ defmodule Babs.Umbrella.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get"],
+      setup: ["deps.get", "assets.setup"],
+      "assets.setup": ["tailwind.install --if-missing"],
+      "assets.build": ["tailwind default"],
+      "assets.deploy": ["tailwind default --minify"],
       test: ["test"]
     ]
   end

@@ -25,6 +25,18 @@ config :babs, Babs.DevReloader,
   watch_path: "apps/babs_citizens/lib",
   debounce_ms: 300
 
+config :babs, :kitchen_sink_enabled, config_env() in [:dev, :test]
+
+config :tailwind,
+  version: "4.1.12",
+  default: [
+    args: ~w(
+        --input=apps/babs/assets/css/app.css
+        --output=apps/babs/priv/static/css/app.css
+      ),
+    cd: Path.expand("..", __DIR__)
+  ]
+
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]

@@ -42,9 +42,13 @@ config :babs, BabsWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
+  watchers: [
+    tailwind: {Tailwind, :install_and_run, [:default, ~w(--watch)]}
+  ],
   live_reload: [
     patterns: [
-      ~r"apps/babs/lib/.*(ex)$"
+      ~r"apps/babs/lib/.*(ex)$",
+      ~r"apps/babs/priv/static/css/.*(css)$"
     ]
   ],
   secret_key_base: String.duplicate("babs_dev_secret", 6)

@@ -127,7 +127,14 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
     else
       case Api.comment_ticket(
              turn.ticket_id,
-             %{body: String.trim(body), by: turn.slug},
+             %{
+               body: String.trim(body),
+               by: turn.slug,
+               turn_id: turn.turn_id,
+               attempt_id: turn.attempt_id
+             }
+             |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+             |> Map.new(),
              Keyword.merge(opts,
                tickets_root: turn.root,
                notify_assignees: false
@@ -188,6 +195,8 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
       root: Map.fetch!(turn, :root),
       ticket_id: Map.fetch!(turn, :ticket_id),
       slug: Map.fetch!(turn, :slug),
+      turn_id: Map.get(turn, :turn_id),
+      attempt_id: Map.get(turn, :attempt_id),
       started_at: started_at,
       window_ms: Map.get(turn, :window_ms, Keyword.get(opts, :window_ms, @window_ms))
     }

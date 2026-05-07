@@ -60,9 +60,9 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
     assert option_like_comment_output =~ "T-2026-05-06-001 comment stored"
     assert option_like_comment_output =~ "no assignees to notify"
 
-    history_events = history_events(root, "T-2026-05-06-001")
-    assert List.last(history_events)["body"] == "--by"
-    assert List.last(history_events)["by"] == "user"
+    comment_events = comment_events(root, "T-2026-05-06-001")
+    assert List.last(comment_events)["body"] == "--by"
+    assert List.last(comment_events)["by"] == "user"
 
     leading_by_output =
       capture_io(fn ->
@@ -76,9 +76,9 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
 
     assert leading_by_output =~ "T-2026-05-06-001 comment stored"
 
-    history_events = history_events(root, "T-2026-05-06-001")
-    assert List.last(history_events)["body"] == "Leading author option."
-    assert List.last(history_events)["by"] == "clare"
+    comment_events = comment_events(root, "T-2026-05-06-001")
+    assert List.last(comment_events)["body"] == "Leading author option."
+    assert List.last(comment_events)["by"] == "clare"
   end
 
   test "mix babs.ticket.assign/transition/reject/approve/unassign bridge mutates tickets", %{
@@ -192,5 +192,11 @@ defmodule Babs.Citizens.Tickets.MixTasksTest do
     |> File.read!()
     |> String.split("\n", trim: true)
     |> Enum.map(&Jason.decode!/1)
+  end
+
+  defp comment_events(root, id) do
+    root
+    |> history_events(id)
+    |> Enum.filter(&(&1["event"] == "comment"))
   end
 end

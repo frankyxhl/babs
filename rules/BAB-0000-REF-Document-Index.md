@@ -67,6 +67,11 @@
 | 2227 | CHG | Implement Phase 13 Imported Tmux Session Attach |
 | 2228 | CHG | Fix AI Transcript Reply Capture |
 | 2229 | CHG | Citizen Launch Profiles for Trusted AI CLIs |
+| 2230 | CHG | Elena Copilot Reply Capture BDD Coverage |
+| 2231 | CHG | Fix Copilot Compact Paste System Injection |
+| 2232 | PRP | Phase 13a Multi Turn Ticket Sessions and Direct CLI Backend |
+| 2233 | CHG | Implement Phase 13a1 Tailwind UI Correction |
+| 2234 | CHG | Implement Phase 13a2 Multi Turn Ticket Chat |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

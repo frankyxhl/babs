@@ -1,8 +1,8 @@
 # PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-06
-**Last reviewed:** 2026-05-06
+**Last updated:** 2026-05-07
+**Last reviewed:** 2026-05-07
 **Status:** Active
 **Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
 **Sources:** v0.1 design session 2026-05-03; Trinity Review `BAB-1006`
@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins.
 
 ---
 
@@ -30,7 +30,7 @@ Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-22
 | **M2** | 2-6 | **V0-S complete** — multi-citizen browser console with persistence; manual coordination |
 | **M2.5** | 6.5 | Manual ticket dogfood validation (waived as gate; retained as reference) |
 | **M3** | 7-12a | **V0-M complete** — filesystem-first ticket-driven multi-agent system with reliable hardline delivery and AI CLI reply capture |
-| **M4** | 13-17 | **V0-L complete** — imported tmux attach; Mayor + Inspector autonomy; PWA + read-only federation |
+| **M4** | 13, 13a, 14-17 | **V0-L complete** — imported tmux attach; multi-turn Ticket sessions; Mayor + Inspector autonomy; PWA + read-only federation |
 
 ---
 
@@ -252,6 +252,37 @@ injection paths, detach without killing the external tmux session, and reattach
 after Babs restart when the tmux target still exists.
 **Estimate**: 4-7 days
 
+### Phase 13a — Multi-Turn Ticket Sessions + Direct CLI Backend
+
+**Planning doc**: `BAB-2232` PRP
+**Current status**: Approved PRP. CHG 13a.1 (`BAB-2233`) completed the Tailwind
+UI foundation and kitchen-sink correction. CHG 13a.2 (`BAB-2234`) completed the
+multi-turn Ticket model, prompt assembler, turn/attempt events, and light-theme
+Ticket detail chat locally after Trinity implementation R3 PASS. Next
+implementation slice is 13a.3 direct CLI provider sessions.
+**Scope**: Make Ticket detail pages true multi-turn conversation surfaces and
+add a direct CLI execution backend for Ticket turns. Phase 13a.1 also introduces
+a light-theme `/dev/kitchen-sink` page so Ticket chat and shared UI components
+can be reviewed before production polish lands. After operator review rejected
+the first ad-hoc palette, Phase 13a.1 must install the Phoenix Tailwind CSS
+pipeline, define Babs theme tokens, and rebuild the kitchen sink against shared
+component styling before polishing the production Ticket detail UI. Ticket
+history remains the
+authoritative communication record. Existing tmux Hardline execution remains
+the default live/debug backend; direct CLI is an additive backend for providers
+with non-interactive prompt and resume support. A conservative lazy-tmux path may
+open a live terminal only when the operator needs interactive inspection. Phase
+13a explicitly does not replace Ecto/SQLite with `better-sqlite3`; Babs keeps
+`ecto_sqlite3` / `exqlite` for runtime persistence.
+**Acceptance**: A Ticket supports at least two operator-to-Citizen turns in the
+same chat UI; the second turn resumes the same provider session where supported;
+captured replies are correlated to the correct turn without duplicates; direct
+CLI can complete a Ticket turn without a persistent tmux pane; the operator can
+still open a Hardline when needed; direct CLI process lifecycle and per-Citizen
+execution serialization are covered by tests; existing Hardline assignment,
+reply capture, restart, and imported tmux validations still pass.
+**Estimate**: 10-16 days
+
 ### Phase 14 — Citizen Roles
 
 **Scope**: `citizens.role` SQLite field (was reserved in Phase 3) becomes user-settable. UI shows role; `/citizens/new` form has role field. Tickets can specify `assignee_role` instead of named `assignee`. Babs picks an idle Citizen of that role (round-robin).
@@ -291,12 +322,13 @@ after Babs restart when the tmux target still exists.
 | Phase 7-12 (V0-M flywheel) | 21-33 days | 42-66 days |
 | Phase 12a (relay reliability) | 4-7 days | 8-14 days |
 | Phase 13 (imported tmux attach) | 4-7 days | 8-14 days |
+| Phase 13a (multi-turn direct CLI) | 10-16 days | 20-32 days |
 | Phase 14-15 (V0-L early) | 10-15 days | 20-30 days |
 | Phase 16 (Mayor) | 14-21 days | 28-42 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~93-143 days (~13-21 weeks)** | **~184-285 days (~26-41 weeks, 6-10 months)** |
+| **Total** | **~103-159 days (~15-23 weeks)** | **~204-317 days (~29-45 weeks, 7-11 months)** |
 
-**Be honest**: The realistic column is the operating estimate. Plan for 6-10 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
+**Be honest**: The realistic column is the operating estimate. Plan for 7-11 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
 ---
 
@@ -310,6 +342,7 @@ Per the design intent (and Trinity confirmation), velocity increases as more cap
 | Phase 7-9 | 1.5× | Multi-citizen, can split frontend / backend in parallel |
 | Phase 10-12 | 2× | Tickets-create-tickets meta-loop |
 | Phase 12a-13 | 2× | Reliable delivery/reply capture plus imported tmux attach reduce manual intervention and context loss |
+| Phase 13a | 2.5× | Multi-turn Ticket sessions and provider session ids reduce manual re-prompt/reopen-terminal loops before role automation |
 | Phase 14-15 | 3× | Inspector automation removes user-as-bottleneck |
 | Phase 16-17 | 5× | Mayor self-plans the roadmap; user becomes director only |
 
@@ -321,7 +354,7 @@ These are aspirational. Trinity flagged that AI rework cycles + context exhausti
 
 - **NO Discord / Telegram / Slack adapters in v0.1.** Removed from earlier scope (D6); deferred indefinitely.
 - **NO cross-machine citizen-to-citizen messaging in v0.1.** UI federation is read-only only. See `BAB-1109`.
-- **NO support for non-interactive AI workflows (batch jobs).** Babs is for live, interactive citizens. Background jobs are a different design.
+- **NO generic non-interactive AI workflows (batch jobs).** Babs is for live, interactive citizens. Phase 13a adds a narrow direct CLI backend for Ticket turns only; background job scheduling remains a different design.
 - **NO multi-tenancy / multi-user auth.** Single-operator default; Tailscale network identity is the only auth in v0.1.
 - **NO Babs-managed model API quotas / cost tracking** in v0.1. Operator manages provider quotas externally.
 
@@ -384,3 +417,6 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-06 | Record local Phase 8 Ticket UI and watcher implementation plus validation pass | Codex |
 | 2026-05-06 | Mark Phase 8 PR #17 merged and add `BAB-2221` Phase 9-10 assignment/state-machine CHG reference | Codex |
 | 2026-05-06 | Mark `BAB-2221` approved after Trinity R2 GLM/DeepSeek PASS | Codex |
+| 2026-05-07 | Add Phase 13a after imported tmux attach for multi-turn Ticket sessions, direct CLI provider sessions, lazy tmux, and the decision not to adopt `better-sqlite3` for the Elixir runtime | Codex |
+| 2026-05-07 | Increase Phase 13a estimate after Claude/Codex direct review identified supervised runner, direct reply pipeline, session migration, redaction/env, and lazy-tmux concurrency scope | Codex |
+| 2026-05-07 | Align Phase 13a with light-first UI and kitchen-sink route from `BAB-1004` | Codex |

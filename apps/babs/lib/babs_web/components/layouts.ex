@@ -13,6 +13,7 @@ defmodule BabsWeb.Layouts do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
+        <link phx-track-static rel="stylesheet" href="/css/app.css" />
         <title>Babs</title>
       </head>
       <body>

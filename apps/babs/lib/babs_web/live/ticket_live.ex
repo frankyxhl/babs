@@ -7,6 +7,7 @@ defmodule BabsWeb.TicketLive do
 
   alias Babs.Citizens.Catalog
   alias Babs.Citizens.Tickets.Api
+  alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.Watcher
   alias BabsWeb.CitizenPath
@@ -103,58 +104,59 @@ defmodule BabsWeb.TicketLive do
   @impl true
   def render(%{error: nil} = assigns) do
     ~H"""
-    <style>
-      <%= Phoenix.HTML.raw(styles()) %>
-    </style>
-
-    <div class="tickets-page" data-testid="ticket-detail">
-      <main class="tickets-shell">
-        <header class="tickets-header">
+    <div class="ks-page" data-testid="ticket-detail">
+      <main class="ks-shell">
+        <header class="ks-header">
           <div>
-            <a class="back-link" href={TicketPath.index(@socket_token)}>
+            <a class="ks-button" href={TicketPath.index(@socket_token)}>
               <BabsWeb.Icon.icon name="arrow-left" /> Tickets
             </a>
             <h1>{@ticket.title}</h1>
-            <p class="tickets-subtitle">{@ticket.id}</p>
+            <p class="ks-subtitle">{@ticket.id}</p>
           </div>
 
-          <nav class="tickets-nav" aria-label="Ticket detail navigation">
-            <a class="button" href={CitizenPath.index(@socket_token)}>
+          <nav class="ks-nav" aria-label="Ticket detail navigation">
+            <a class="ks-button" href={CitizenPath.index(@socket_token)}>
               <BabsWeb.Icon.icon name="users" /> Citizens
             </a>
-            <a class="button" href={TicketPath.index(@socket_token)}>
+            <a class="ks-button" href={TicketPath.index(@socket_token)}>
               <BabsWeb.Icon.icon name="list" /> Ticket List
             </a>
           </nav>
         </header>
 
-        <div :if={Phoenix.Flash.get(@flash, :info)} class="ticket-flash" data-testid="ticket-flash-info">
+        <div :if={Phoenix.Flash.get(@flash, :info)} class="ks-card ticket-flash" data-testid="ticket-flash-info">
           {Phoenix.Flash.get(@flash, :info)}
         </div>
 
         <div
           :if={Phoenix.Flash.get(@flash, :error)}
-          class="ticket-flash ticket-flash-error"
+          class="ks-card ticket-flash ticket-flash-error"
           data-testid="ticket-flash-error"
         >
           {Phoenix.Flash.get(@flash, :error)}
         </div>
 
-        <section class="detail-grid">
-          <article class="detail-main">
-            <div class={"state-badge state-#{@ticket.state}"}>{@ticket.state}</div>
-            <pre class="ticket-body">{@ticket.body}</pre>
-          </article>
+        <section class="ticket-layout">
+          <aside class="ticket-rail" data-testid="ticket-state-rail">
+            <section class="rail-block">
+              <p class="rail-label">State</p>
+              <span class={state_badge_class(@ticket.state)}><span class="dot"></span>{@ticket.state}</span>
+            </section>
 
-          <aside class="detail-side">
-            <section class="summary-panel action-panel" data-testid="ticket-actions">
-              <h2>Actions</h2>
-              <div class="ticket-actions">
+            <section class="rail-block">
+              <p class="rail-label">Ticket Body</p>
+              <pre class="ticket-body">{@ticket.body}</pre>
+            </section>
+
+            <section class="rail-block" data-testid="ticket-actions">
+              <p class="rail-label">Actions</p>
+              <div class="rail-actions">
                 <button
                   :for={citizen <- @citizens}
                   :if={assignable?(@ticket)}
                   type="button"
-                  class="button"
+                  class="ks-button"
                   phx-click="assign"
                   phx-value-slug={citizen.slug}
                   disabled={ticket_action_busy?(@ticket_action_inflight)}
@@ -168,7 +170,7 @@ defmodule BabsWeb.TicketLive do
                 <button
                   :if={ready_for_approval?(@ticket)}
                   type="button"
-                  class="button"
+                  class="ks-button"
                   phx-click="transition"
                   phx-value-to="pending_approval"
                   disabled={ticket_action_busy?(@ticket_action_inflight)}
@@ -182,7 +184,7 @@ defmodule BabsWeb.TicketLive do
                 <button
                   :if={approvable?(@ticket)}
                   type="button"
-                  class="button"
+                  class="ks-button primary"
                   phx-click="approve"
                   disabled={ticket_action_busy?(@ticket_action_inflight)}
                   data-testid="ticket-approve"
@@ -209,7 +211,7 @@ defmodule BabsWeb.TicketLive do
                   ></textarea>
                   <button
                     type="submit"
-                    class="button button-danger"
+                    class="ks-button danger"
                     disabled={ticket_action_busy?(@ticket_action_inflight)}
                     data-testid="ticket-reject"
                     aria-label="Reject ticket"
@@ -223,7 +225,7 @@ defmodule BabsWeb.TicketLive do
                   :for={slug <- @ticket.assignees}
                   :if={unassignable?(@ticket)}
                   type="button"
-                  class="button"
+                  class="ks-button"
                   phx-click="unassign"
                   phx-value-slug={slug}
                   phx-confirm={"Unassign #{slug} from #{@ticket.id}?"}
@@ -238,7 +240,7 @@ defmodule BabsWeb.TicketLive do
                 <button
                   :if={cancellable?(@ticket)}
                   type="button"
-                  class="button button-danger"
+                  class="ks-button danger"
                   phx-click="transition"
                   phx-value-to="cancelled"
                   phx-value-event="cancelled"
@@ -253,9 +255,9 @@ defmodule BabsWeb.TicketLive do
               </div>
             </section>
 
-            <section class="summary-panel">
-              <h2>Frontmatter</h2>
-              <dl>
+            <section class="rail-block">
+              <p class="rail-label">Frontmatter</p>
+              <dl class="stat-list">
                 <div :for={{label, value} <- TicketPresenter.frontmatter(@ticket)} class="summary-row">
                   <dt>{label}</dt>
                   <dd>{value}</dd>
@@ -263,50 +265,83 @@ defmodule BabsWeb.TicketLive do
               </dl>
             </section>
 
-            <section :if={@ticket.warnings != []} class="summary-panel warning-panel">
-              <h2>Warnings</h2>
+            <section :if={@ticket.warnings != []} class="rail-block warning-panel">
+              <p class="rail-label">Warnings</p>
               <p :for={warning <- @ticket.warnings}>{TicketPresenter.warning(warning)}</p>
             </section>
+
+            <section :if={failed_attempts(@conversation) != []} class="rail-block">
+              <p class="rail-label">Failed Delivery</p>
+              <div class="rail-actions">
+                <button
+                  :for={attempt <- failed_attempts(@conversation)}
+                  type="button"
+                  class="ks-button danger"
+                  disabled
+                  data-testid="ticket-retry-delivery"
+                  title={"Retry #{attempt.citizen_slug}"}
+                  aria-label={"Retry #{attempt.citizen_slug}"}
+                >
+                  <BabsWeb.Icon.icon name="refresh" /> Retry {attempt.citizen_slug}
+                </button>
+                <a
+                  :for={attempt <- failed_attempts(@conversation)}
+                  class="ks-button"
+                  href={CitizenPath.terminal(attempt.citizen_slug, @socket_token)}
+                  data-testid="ticket-open-terminal"
+                  title={"Open #{attempt.citizen_slug} terminal"}
+                  aria-label={"Open #{attempt.citizen_slug} terminal"}
+                >
+                  <BabsWeb.Icon.icon name="maximize" /> Open Terminal
+                </a>
+              </div>
+            </section>
           </aside>
-        </section>
 
-        <section class="chat-panel" data-testid="ticket-comments-chat">
-          <header class="chat-header">
+          <article class="chat-card" data-testid="ticket-detail-chat">
+            <header class="chat-head">
             <div>
-              <h2>Comments</h2>
-              <p class="chat-subtitle">Citizen replies and operator messages</p>
+              <h2>Ticket Chat</h2>
+              <p>Operator follow-ups, Citizen replies, and delivery state.</p>
             </div>
-          </header>
+            </header>
 
-          <div :if={comment_events(@history) == []} class="chat-empty" data-testid="ticket-comments-empty">
+          <div :if={@conversation.messages == []} class="empty-state" data-testid="ticket-comments-empty">
             No comments yet.
           </div>
 
-          <ol :if={comment_events(@history) != []} class="chat-list">
+          <ol :if={@conversation.messages != []} class="message-list">
             <li
-              :for={comment <- comment_events(@history)}
-              class={comment_class(comment)}
-              data-testid="ticket-comment-message"
+              :for={message <- @conversation.messages}
+              class={message_class(message)}
+              data-testid="ticket-chat-message"
             >
-              <div class="comment-bubble">
-                <div class="comment-meta">
-                  <span class="comment-author">{comment["by"] || "unknown"}</span>
-                  <time>{comment["ts"]}</time>
+              <div class="bubble">
+                <div class="meta">
+                  <strong>{message.author}</strong>
+                  <time>{message.ts}</time>
+                  <span
+                    :for={attempt <- message_attempts(@conversation, message)}
+                    class={status_badge_class(attempt.status)}
+                    data-testid="ticket-turn-status"
+                  >
+                    <span class="dot"></span>{attempt.citizen_slug}: {attempt.status}
+                  </span>
+                  <span :if={message.legacy?} class="badge imported">legacy</span>
                 </div>
-                <p>{comment["body"]}</p>
+                <p>{message.body}</p>
               </div>
             </li>
           </ol>
 
           <form
             :if={commentable?(@ticket)}
-            class="chat-compose"
+            class="composer"
             phx-submit="comment"
             data-testid="ticket-comment-form"
           >
             <textarea
               name="body"
-              class="comment-body"
               rows="3"
               required
               disabled={ticket_action_busy?(@ticket_action_inflight)}
@@ -316,7 +351,7 @@ defmodule BabsWeb.TicketLive do
             ></textarea>
             <button
               type="submit"
-              class="button button-primary"
+              class="ks-button primary"
               disabled={ticket_action_busy?(@ticket_action_inflight)}
               data-testid="ticket-comment"
               aria-label="Add ticket comment"
@@ -325,9 +360,10 @@ defmodule BabsWeb.TicketLive do
               <BabsWeb.Icon.icon name="send" /> Send
             </button>
           </form>
+          </article>
         </section>
 
-        <section class="history-panel">
+        <section class="ks-card">
           <h2>History</h2>
           <ol class="history-list">
             <li :for={event <- @history} class="history-event" data-testid="ticket-history-event">
@@ -349,26 +385,22 @@ defmodule BabsWeb.TicketLive do
 
   def render(assigns) do
     ~H"""
-    <style>
-      <%= Phoenix.HTML.raw(styles()) %>
-    </style>
-
-    <div class="tickets-page" data-testid="ticket-detail-error">
-      <main class="tickets-shell">
-        <header class="tickets-header">
+    <div class="ks-page" data-testid="ticket-detail-error">
+      <main class="ks-shell">
+        <header class="ks-header">
           <div>
-            <a class="back-link" href={TicketPath.index(@socket_token)}>
+            <a class="ks-button" href={TicketPath.index(@socket_token)}>
               <BabsWeb.Icon.icon name="arrow-left" /> Tickets
             </a>
             <h1>Ticket unavailable</h1>
-            <p class="tickets-subtitle">{@id}</p>
+            <p class="ks-subtitle">{@id}</p>
           </div>
-          <a class="button" href={CitizenPath.index(@socket_token)}>
+          <a class="ks-button" href={CitizenPath.index(@socket_token)}>
             <BabsWeb.Icon.icon name="users" /> Citizens
           </a>
         </header>
 
-        <section class="error-panel">
+        <section class="ks-card error-panel">
           <BabsWeb.Icon.icon name="triangle-alert" />
           <div>
             <h2>{@error}</h2>
@@ -391,6 +423,7 @@ defmodule BabsWeb.TicketLive do
         socket
         |> assign(:ticket, ticket)
         |> assign(:history, history)
+        |> assign(:conversation, Conversation.from_history(history))
         |> assign(:citizens, citizens)
         |> assign(:error, nil)
 
@@ -398,172 +431,10 @@ defmodule BabsWeb.TicketLive do
         socket
         |> assign(:ticket, nil)
         |> assign(:history, [])
+        |> assign(:conversation, Conversation.from_history([]))
         |> assign(:citizens, citizens)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
-  end
-
-  def styles do
-    """
-    :root {
-      color-scheme: dark;
-      --bg: #0d0d10;
-      --panel: #16181d;
-      --panel-2: #1d2027;
-      --line: #2a2f39;
-      --text: #e7eaf0;
-      --muted: #9da5b4;
-      --danger: #dc6b6b;
-      --accent: #55b3a6;
-      --ok: #43d17d;
-      --wait: #d7ae55;
-      --done: #8ea0ff;
-      --accent-text: #07100e;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      min-height: 100%;
-      margin: 0;
-      background: var(--bg);
-      color: var(--text);
-      font: 15px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .tickets-page { min-height: 100vh; padding: 28px clamp(14px, 3vw, 38px); }
-    .tickets-shell { width: min(1180px, 100%); margin: 0 auto; display: grid; gap: 18px; }
-    .tickets-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-    h1 { margin: 6px 0 0; font-size: 27px; line-height: 1.12; font-weight: 700; letter-spacing: 0; }
-    h2 { margin: 0 0 10px; font-size: 15px; letter-spacing: 0; }
-    .tickets-subtitle { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
-    .ticket-flash {
-      border: 1px solid rgba(85, 179, 166, 0.5);
-      border-radius: 8px;
-      background: rgba(85, 179, 166, 0.12);
-      color: var(--text);
-      padding: 10px 12px;
-      font-size: 13px;
-    }
-    .ticket-flash-error { border-color: rgba(220, 107, 107, 0.55); background: rgba(220, 107, 107, 0.12); }
-    .tickets-nav { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-    .ticket-actions { display: flex; align-items: center; justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
-    .reject-form { flex: 1 1 100%; display: grid; gap: 8px; min-width: min(100%, 260px); }
-    .reject-feedback, .comment-body {
-      width: 100%;
-      min-height: 92px;
-      resize: vertical;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel-2);
-      color: var(--text);
-      padding: 8px 10px;
-      font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
-    .reject-feedback:disabled, .comment-body:disabled { opacity: 0.62; }
-    .button, .back-link {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--panel-2);
-      color: var(--text);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      min-height: 36px;
-      padding: 7px 11px;
-      text-decoration: none;
-      white-space: nowrap;
-      cursor: pointer;
-    }
-    .button:disabled { cursor: wait; opacity: 0.62; }
-    .button-primary { border-color: transparent; background: var(--accent); color: var(--accent-text); font-weight: 700; }
-    .button-primary:hover { color: var(--accent-text); }
-    .button-danger { color: var(--danger); }
-    .back-link { min-height: 30px; padding: 5px 9px; color: var(--muted); font-size: 13px; }
-    .button:hover, .back-link:hover { border-color: var(--accent); color: var(--text); }
-    .icon { width: 16px; height: 16px; flex: 0 0 auto; }
-    .detail-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.6fr); gap: 14px; align-items: start; }
-    .detail-main, .detail-side, .summary-panel, .chat-panel, .history-panel, .error-panel {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 14px;
-    }
-    .detail-side { display: grid; gap: 12px; padding: 0; border: 0; background: transparent; }
-    .ticket-body {
-      overflow: auto;
-      margin: 14px 0 0;
-      white-space: pre-wrap;
-      color: var(--text);
-      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    }
-    dl { display: grid; gap: 8px; margin: 0; }
-    .summary-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; min-width: 0; }
-    dt { color: var(--muted); font-size: 12px; text-transform: uppercase; }
-    dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--text); font-size: 13px; }
-    .warning-panel { border-color: var(--danger); }
-    .warning-panel p { margin: 0; color: var(--danger); font-size: 13px; }
-    .state-badge {
-      display: inline-flex;
-      width: fit-content;
-      align-items: center;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 3px 8px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .state-open { color: var(--ok); }
-    .state-in_progress { color: var(--wait); }
-    .state-pending_approval { color: var(--accent); }
-    .state-closed { color: var(--done); }
-    .state-cancelled { color: var(--danger); }
-    .chat-panel { display: grid; gap: 12px; }
-    .chat-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-    .chat-subtitle { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
-    .chat-empty {
-      border: 1px dashed var(--line);
-      border-radius: 8px;
-      padding: 18px;
-      color: var(--muted);
-      background: rgba(255, 255, 255, 0.02);
-    }
-    .chat-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-    .comment-message { display: flex; justify-content: flex-start; }
-    .comment-message.comment-user { justify-content: flex-end; }
-    .comment-bubble {
-      width: fit-content;
-      max-width: min(720px, 88%);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel-2);
-      padding: 9px 11px;
-    }
-    .comment-user .comment-bubble {
-      border-color: rgba(85, 179, 166, 0.45);
-      background: rgba(85, 179, 166, 0.14);
-    }
-    .comment-meta { display: flex; align-items: baseline; gap: 8px; color: var(--muted); font-size: 12px; }
-    .comment-author { color: var(--text); font-weight: 700; }
-    .comment-bubble p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-    .chat-compose { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
-    .history-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
-    .history-event { border-top: 1px solid var(--line); padding-top: 8px; }
-    .history-event:first-child { border-top: 0; padding-top: 0; }
-    .history-event-name { display: inline-block; color: var(--text); font-weight: 700; }
-    .history-event-meta { display: block; color: var(--muted); font-size: 12px; }
-    .history-event-body { margin: 5px 0 0; color: var(--text); font-size: 13px; white-space: pre-wrap; }
-    .error-panel { display: flex; align-items: flex-start; gap: 12px; color: var(--danger); }
-    .error-panel p { margin: 0; color: var(--muted); }
-    @media (max-width: 900px) {
-      .tickets-header { flex-direction: column; }
-      .tickets-nav { justify-content: flex-start; flex-wrap: wrap; }
-      .detail-grid { grid-template-columns: minmax(0, 1fr); }
-      .chat-compose { grid-template-columns: minmax(0, 1fr); }
-    }
-    @media (max-width: 560px) {
-      .tickets-page { padding: 18px 10px; }
-      .summary-row { grid-template-columns: minmax(0, 1fr); }
-    }
-    """
   end
 
   defp param(params, key) when is_map(params), do: Map.get(params, key)
@@ -595,15 +466,35 @@ defmodule BabsWeb.TicketLive do
 
   defp history_event_text(_event), do: nil
 
-  defp comment_events(history) do
-    Enum.filter(history, fn
-      %{"event" => "comment", "body" => body} when is_binary(body) and body != "" -> true
-      _event -> false
-    end)
+  defp state_badge_class("open"), do: "badge open"
+  defp state_badge_class("in_progress"), do: "badge working"
+  defp state_badge_class("pending_approval"), do: "badge pending"
+  defp state_badge_class("closed"), do: "badge captured"
+  defp state_badge_class("cancelled"), do: "badge failed"
+  defp state_badge_class(_state), do: "badge"
+
+  defp status_badge_class("captured"), do: "badge captured"
+  defp status_badge_class("delivered"), do: "badge delivered"
+  defp status_badge_class("failed"), do: "badge failed"
+  defp status_badge_class("queued"), do: "badge queued"
+  defp status_badge_class("busy"), do: "badge pending"
+  defp status_badge_class(_status), do: "badge"
+
+  defp message_class(%{legacy?: true}), do: "message legacy"
+  defp message_class(%{role: :user}), do: "message mine"
+  defp message_class(%{role: :system}), do: "message system"
+  defp message_class(_message), do: "message citizen"
+
+  defp message_attempts(conversation, %{turn_id: turn_id}) do
+    Conversation.attempts_for_turn(conversation, turn_id)
   end
 
-  defp comment_class(%{"by" => "user"}), do: "comment-message comment-user"
-  defp comment_class(_comment), do: "comment-message"
+  defp failed_attempts(conversation) do
+    conversation.attempts
+    |> Map.values()
+    |> Enum.filter(&(&1.status == "failed"))
+    |> Enum.sort_by(&{&1.turn_id, &1.citizen_slug, &1.attempt_id})
+  end
 
   defp start_ticket_action(socket, action, fun) do
     if ticket_action_busy?(socket.assigns.ticket_action_inflight) do
