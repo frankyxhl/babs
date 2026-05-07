@@ -181,6 +181,55 @@ defmodule Babs.Citizens.SpawnerTest do
     assert config.cwd == record.cwd
   end
 
+  test "creates direct_cli citizen without starting lifecycle" do
+    root = tmp_root!()
+
+    assert {:ok, record} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "direct-ok",
+                 "display_name" => "Direct OK",
+                 "description" => "Ticket-only direct Citizen",
+                 "cli_preset" => "copilot-cli",
+                 "ticket_backend" => "direct_cli",
+                 "cwd" => ""
+               },
+               root: root,
+               lifecycle_start: unexpected_lifecycle()
+             )
+
+    assert record.slug == "direct-ok"
+    assert record.status == "stopped"
+    assert record.ticket_backend == "direct_cli"
+    assert record.cli == "copilot"
+    assert File.dir?(record.cwd)
+
+    toml = File.read!(Path.join(root, "citizens/citizen-direct-ok.toml"))
+    assert toml =~ ~s(cli = "copilot")
+    assert toml =~ ~s(ticket_backend = "direct_cli")
+  end
+
+  test "rejects lazy_tmux from browser creation" do
+    root = tmp_root!()
+
+    assert {:error, {:validation_failed, errors}} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "lazy-browser",
+                 "display_name" => "Lazy Browser",
+                 "cli_preset" => "copilot-cli",
+                 "ticket_backend" => "lazy_tmux",
+                 "cwd" => "lazy-browser"
+               },
+               root: root,
+               lifecycle_start: unexpected_lifecycle()
+             )
+
+    assert errors.ticket_backend == "is not supported for browser creation"
+    refute File.exists?(Path.join(root, "citizens/citizen-lazy-browser.toml"))
+    assert Catalog.get_by_slug("lazy-browser") == nil
+  end
+
   test "copilot preset uses direct Copilot with trusted autonomous launch profile" do
     root = tmp_root!()
     parent = self()

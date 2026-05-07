@@ -326,7 +326,18 @@ defmodule BabsWeb.TicketsLiveTest do
 
   test "assign action injects prompt and exposes legal transition controls", %{root: root} do
     parent = self()
-    Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "clare",
+      display_name: "Clare",
+      ticket_backend: "hardline"
+    })
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "dylan",
+      display_name: "Dylan",
+      ticket_backend: "direct_cli"
+    })
 
     Application.put_env(:babs_citizens, :ticket_runtime_opts,
       citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
@@ -341,7 +352,12 @@ defmodule BabsWeb.TicketsLiveTest do
 
     {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}?socket_token=token-1")
     assert html =~ ~s(data-testid="ticket-assign-clare")
+    assert html =~ ~s(data-testid="ticket-assign-dylan")
     assert html =~ ~s(data-icon="user-plus")
+    assert html =~ "Hardline"
+    assert html =~ "starts tmux if stopped"
+    assert html =~ "Direct CLI"
+    assert html =~ "no tmux start"
 
     view
     |> element(~s(button[data-testid="ticket-assign-clare"]))

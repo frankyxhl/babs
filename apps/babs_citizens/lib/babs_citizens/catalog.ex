@@ -48,11 +48,13 @@ defmodule Babs.Citizens.Catalog do
     Repo.get_by(CitizenRecord, slug: slug)
   end
 
-  def insert_new(%CitizenConfig{} = config) do
+  def insert_new(%CitizenConfig{} = config, opts \\ []) do
+    initial_status = Keyword.get(opts, :initial_status, "running")
+
     attrs =
       config
       |> config_attrs()
-      |> Map.put(:status, "running")
+      |> Map.put(:status, initial_status)
       |> Map.put(:metadata, %{})
       |> Map.put(:is_mayor, false)
 

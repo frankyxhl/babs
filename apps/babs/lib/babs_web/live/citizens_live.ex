@@ -231,7 +231,7 @@ defmodule BabsWeb.CitizensLive do
 
       .citizen-row {
         display: grid;
-        grid-template-columns: minmax(180px, 1.1fr) minmax(112px, 0.55fr) minmax(130px, 0.65fr) minmax(170px, 1fr) auto;
+        grid-template-columns: minmax(180px, 1.1fr) minmax(112px, 0.55fr) minmax(130px, 0.65fr) minmax(120px, 0.55fr) minmax(170px, 1fr) auto;
         gap: 12px;
         align-items: center;
         min-width: 0;
@@ -424,6 +424,9 @@ defmodule BabsWeb.CitizensLive do
             </div>
 
             <div class="citizen-meta">{citizen.cli_label}</div>
+            <div class="citizen-meta" data-testid={"citizen-backend-#{citizen.slug}"}>
+              {citizen.ticket_backend_label}
+            </div>
             <div class={if citizen.last_error, do: "citizen-error", else: "citizen-meta"}>
               {citizen.last_error || citizen.target_label || citizen.cwd_label}
             </div>

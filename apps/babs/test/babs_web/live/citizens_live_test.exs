@@ -49,6 +49,7 @@ defmodule BabsWeb.CitizensLiveTest do
       display_name: "Dylan",
       cli: "gh",
       cli_args: ["copilot"],
+      ticket_backend: "direct_cli",
       cwd: Path.join(workspace_root, "dylan")
     })
 
@@ -75,9 +76,13 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(data-testid="citizen-status-clare")
     assert html =~ "up"
     assert html =~ "claude"
+    assert html =~ ~s(data-testid="citizen-backend-clare")
+    assert html =~ "Hardline"
     assert html =~ "workspaces/clare"
     assert html =~ ~s(data-testid="citizen-row-dylan")
     assert html =~ "copilot-cli"
+    assert html =~ ~s(data-testid="citizen-backend-dylan")
+    assert html =~ "Direct CLI"
     assert html =~ "reattaching"
     assert html =~ "stopped"
     assert html =~ "failed"

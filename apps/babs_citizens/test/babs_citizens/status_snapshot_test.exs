@@ -95,6 +95,20 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     refute inspect(snapshot) =~ "SECRET_TOKEN"
   end
 
+  test "exposes safe ticket backend labels for display" do
+    insert_citizen!(%{slug: "hardline-one", ticket_backend: "hardline"})
+    insert_citizen!(%{slug: "direct-one", ticket_backend: "direct_cli"})
+
+    snapshots =
+      StatusSnapshot.list()
+      |> Map.new(&{&1.slug, &1})
+
+    assert snapshots["hardline-one"].ticket_backend == "hardline"
+    assert snapshots["hardline-one"].ticket_backend_label == "Hardline"
+    assert snapshots["direct-one"].ticket_backend == "direct_cli"
+    assert snapshots["direct-one"].ticket_backend_label == "Direct CLI"
+  end
+
   test "labels known CLI presets and custom commands" do
     insert_citizen!(%{slug: "shell-one", cli: "/bin/zsh", cli_args: ["-f"]})
     insert_citizen!(%{slug: "claude-one", cli: "claude", cli_args: []})
