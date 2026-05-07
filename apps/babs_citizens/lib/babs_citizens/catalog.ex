@@ -98,6 +98,7 @@ defmodule Babs.Citizens.Catalog do
         status: existing.status,
         metadata: existing.metadata || %{},
         role: incoming.role,
+        ticket_backend: incoming.ticket_backend || "hardline",
         is_mayor: existing.is_mayor || false,
         last_error: existing.last_error
       }
@@ -154,6 +155,7 @@ defmodule Babs.Citizens.Catalog do
       cli: record.cli,
       cli_args: record.cli_args || [],
       launch_profile: record.launch_profile || "safe_interactive",
+      ticket_backend: record.ticket_backend || "hardline",
       cwd: record.cwd,
       env: record.env || %{},
       role: record.role,
@@ -204,6 +206,7 @@ defmodule Babs.Citizens.Catalog do
       cli: config.cli,
       cli_args: config.cli_args || [],
       launch_profile: config.launch_profile || "safe_interactive",
+      ticket_backend: config.ticket_backend || "hardline",
       env: config.env || %{},
       role: config.role
     }

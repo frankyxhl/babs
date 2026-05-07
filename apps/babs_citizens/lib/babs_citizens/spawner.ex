@@ -223,6 +223,7 @@ defmodule Babs.Citizens.Spawner do
        cli: cli,
        cli_args: cli_args,
        launch_profile: launch_profile,
+       ticket_backend: "hardline",
        cwd: resolved_cwd,
        env: %{},
        role: nil,

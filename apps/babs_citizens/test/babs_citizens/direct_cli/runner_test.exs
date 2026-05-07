@@ -1,0 +1,302 @@
+defmodule Babs.Citizens.DirectCli.RunnerTest do
+  use Babs.Citizens.RepoCase, async: false
+
+  alias Babs.Citizens.{ExecutionLock, ProviderSession, ProviderSessions, Repo}
+  alias Babs.Citizens.CitizenConfig
+  alias Babs.Citizens.DirectCli.Adapters.Fake
+  alias Babs.Citizens.DirectCli.Runner
+  alias Babs.Citizens.Tickets.Api
+
+  test "runs a direct turn, stores the provider session, and appends a captured reply" do
+    root = tmp_root!()
+    config = fake_config("elena")
+    ticket = create_ticket!(root)
+    parent = self()
+
+    executor = fn command ->
+      send(parent, {:direct_command, command})
+
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{
+             "session_id" => command.provider_session_id,
+             "content" => "fake direct reply"
+           }),
+         stderr: ""
+       }}
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               fallback: :none
+             )
+
+    assert_receive {:direct_command, %{resume?: false, provider_session_id: "fake-session-elena"}}
+
+    session = Repo.one!(ProviderSession)
+    assert session.citizen_slug == "elena"
+    assert session.ticket_id == ticket.id
+    assert session.provider == "fake"
+    assert session.provider_session_id == "fake-session-elena"
+    assert session.status == "active"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_execution_started", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "comment", "by" => "elena", "body" => "fake direct reply"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_reply_captured", "by_citizen" => "elena"}, &1)
+           )
+  end
+
+  test "resumes an existing provider session on the next direct turn" do
+    root = tmp_root!()
+    config = fake_config("dylan")
+    ticket = create_ticket!(root)
+    parent = self()
+
+    assert {:ok, _session} =
+             ProviderSessions.upsert_active(%{
+               citizen_slug: "dylan",
+               ticket_id: ticket.id,
+               provider: "fake",
+               backend: "direct_cli",
+               provider_session_id: "stored-session",
+               workspace_ref: "citizen:dylan"
+             })
+
+    executor = fn command ->
+      send(parent, {:direct_command, command})
+
+      {:ok,
+       %{stdout: Jason.encode!(%{"session_id" => "stored-session", "content" => "resumed reply"})}}
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               fallback: :none
+             )
+
+    assert_receive {:direct_command,
+                    %{
+                      resume?: true,
+                      provider_session_id: "stored-session",
+                      args: ["babs-fake-ai", "--resume", "stored-session", "--reply", _prompt]
+                    }}
+  end
+
+  test "falls back to hardline when direct execution fails" do
+    root = tmp_root!()
+    config = fake_config("clare")
+    ticket = create_ticket!(root)
+    parent = self()
+
+    executor = fn _command -> {:error, :boom} end
+
+    hardline_injector = fn slug, prompt, _opts ->
+      send(parent, {:fallback_injected, slug, prompt})
+      :ok
+    end
+
+    reply_capture = fn turn ->
+      send(parent, {:reply_capture, turn})
+      :ok
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               hardline_injector: hardline_injector,
+               reply_capture: reply_capture
+             )
+
+    assert_receive {:fallback_injected, "clare", "Please answer."}
+    assert_receive {:reply_capture, %{slug: "clare", ticket_id: ticket_id}}
+    assert ticket_id == ticket.id
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_attempted", "backend" => "hardline"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
+           )
+
+    failed_session = Repo.one!(ProviderSession)
+    assert failed_session.status == "failed"
+    assert failed_session.os_pid == nil
+    assert failed_session.started_at == nil
+  end
+
+  test "comment_ticket routes direct backend comments through the runner" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    parent = self()
+
+    insert_citizen!(%{
+      slug: "flora",
+      display_name: "Flora",
+      cli: "babs-fake-ai",
+      cli_args: [],
+      cwd: config.cwd,
+      ticket_backend: "direct_cli"
+    })
+
+    ticket =
+      create_ticket!(root, %{
+        state: "in_progress",
+        assignees: ["flora"]
+      })
+
+    executor = fn command ->
+      send(parent, {:direct_command, command})
+
+      {:ok,
+       %{
+         stdout:
+           Jason.encode!(%{"session_id" => "fake-session-flora", "content" => "flora says hi"})
+       }}
+    end
+
+    assert {:ok, %{delivery: {:comment_notified, ["flora"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Say hi.", by: "user"},
+               tickets_root: root,
+               citizen_config_fetcher: fn "flora" -> config end,
+               adapter: Fake,
+               executor: executor,
+               reply_capture: fn _turn -> :ok end
+             )
+
+    assert_receive {:direct_command, %{provider: "fake", resume?: false}}, 1_000
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(%{"event" => "comment", "by" => "flora", "body" => "flora says hi"}, &1)
+      )
+    end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    attempted =
+      Enum.find(history, &match?(%{"event" => "turn_delivery_attempted", "to" => "flora"}, &1))
+
+    assert attempted["backend"] == "direct_cli"
+    assert attempted["status"] == "queued"
+  end
+
+  test "per-citizen execution lock reports busy for overlapping work" do
+    assert :held =
+             ExecutionLock.with_lock("clare", fn ->
+               assert {:error, {:execution_busy, "clare"}} =
+                        ExecutionLock.with_lock("clare", fn -> :unexpected end)
+
+               :held
+             end)
+  end
+
+  defp create_ticket!(root, attrs \\ %{}) do
+    attrs =
+      Map.merge(
+        %{
+          title: "Direct CLI Ticket",
+          body: "Use a direct CLI provider.",
+          state: "open",
+          assignees: []
+        },
+        attrs
+      )
+
+    assert {:ok, ticket} =
+             Api.create_ticket(attrs,
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    ticket
+  end
+
+  defp turn(root, ticket_id, config) do
+    %{
+      root: root,
+      ticket_id: ticket_id,
+      slug: config.slug,
+      turn_id: "turn_20260507100100_testturn01",
+      attempt_id: "attempt_20260507100100_testatt01",
+      backend: "direct_cli",
+      prompt: "Please answer.",
+      config: config,
+      fallback: :hardline
+    }
+  end
+
+  defp fake_config(slug) do
+    cwd = tmp_cwd!()
+
+    %CitizenConfig{
+      id: "BAB-CIT-#{String.upcase(slug)}",
+      slug: slug,
+      display_name: String.capitalize(slug),
+      cli: "babs-fake-ai",
+      cli_args: [],
+      launch_profile: "trusted_autonomous",
+      ticket_backend: "direct_cli",
+      cwd: cwd,
+      env: %{}
+    }
+  end
+
+  defp wait_until(fun, timeout_ms \\ 1_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    wait_until(fun, deadline, nil)
+  end
+
+  defp wait_until(fun, deadline, last_result) do
+    case fun.() do
+      true ->
+        :ok
+
+      other ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          flunk(
+            "condition did not become true before timeout, last result: #{inspect(last_result || other)}"
+          )
+        else
+          Process.sleep(20)
+          wait_until(fun, deadline, other)
+        end
+    end
+  end
+end

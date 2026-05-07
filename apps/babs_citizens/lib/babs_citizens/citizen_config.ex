@@ -13,6 +13,7 @@ defmodule Babs.Citizens.CitizenConfig do
           description: String.t() | nil,
           cli_args: [String.t()],
           launch_profile: String.t(),
+          ticket_backend: String.t(),
           env: %{optional(String.t()) => String.t()},
           role: map() | String.t() | nil,
           path: String.t() | nil
@@ -27,6 +28,7 @@ defmodule Babs.Citizens.CitizenConfig do
     :description,
     cli_args: [],
     launch_profile: "safe_interactive",
+    ticket_backend: "hardline",
     env: %{},
     role: nil,
     path: nil

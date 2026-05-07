@@ -1,6 +1,7 @@
 defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   use ExUnit.Case, async: false
 
+  alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
@@ -401,6 +402,54 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
 
     assert Enum.find(history, &(&1["event"] == "comment"))["body"] == "Please inspect."
     refute List.last(history)["error"] =~ "fixture-value"
+  end
+
+  test "comment_ticket records hardline delivery busy when the assignee lock is held" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Busy hardline delivery",
+                 body: "The assignee is already executing.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               tickets_root: root,
+               date: ~D[2026-05-07],
+               now: "2026-05-07T10:00:00Z"
+             )
+
+    assert {:ok,
+            %{
+              delivery:
+                {:comment_notification_failed, [], [{"clare", {:execution_busy, "clare"}}]}
+            }} =
+             ExecutionLock.with_lock("clare", fn ->
+               Api.comment_ticket(ticket.id, %{body: "Please queue safely.", by: "user"},
+                 tickets_root: root,
+                 now: "2026-05-07T10:01:00Z",
+                 citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                 pane_lookup: fn "clare" -> {:ok, self()} end,
+                 pane_injector: fn _slug, _prompt -> flunk("busy hardline delivery injected") end
+               )
+             end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_failed", "backend" => "hardline"}, &1)
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{"event" => "comment_notification_failed", "error" => error}
+               when is_binary(error),
+               &1
+             )
+           )
   end
 
   test "comment_ticket rejects terminal tickets and invalid authors before rewriting" do

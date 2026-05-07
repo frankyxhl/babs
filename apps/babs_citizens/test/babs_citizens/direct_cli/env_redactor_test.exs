@@ -1,0 +1,52 @@
+defmodule Babs.Citizens.DirectCli.EnvRedactorTest do
+  use ExUnit.Case, async: false
+
+  alias Babs.Citizens.CitizenConfig
+  alias Babs.Citizens.DirectCli.{Env, Redactor}
+
+  test "builds bounded env from allowlist plus citizen env" do
+    original_path = System.get_env("PATH")
+
+    try do
+      System.put_env("BABS_SHOULD_NOT_LEAK", "nope")
+      System.put_env("PATH", "/bin")
+
+      env = Env.build(config(%{"CUSTOM_TOKEN" => "secret"}), allowlist: ["PATH"])
+
+      assert {"PATH", "/bin"} in env
+      assert {"CUSTOM_TOKEN", "secret"} in env
+      assert {"BABS_DIRECT_CLI", "1"} in env
+      refute Enum.any?(env, &match?({"BABS_SHOULD_NOT_LEAK", _}, &1))
+    after
+      System.delete_env("BABS_SHOULD_NOT_LEAK")
+      restore_env("PATH", original_path)
+    end
+  end
+
+  test "redacts tokens paths and private ips while bounding output" do
+    text = "api_token=secret path=/Users/alice/Projects/babs host=100.64.0.1"
+
+    redacted = Redactor.redact_text(text)
+
+    refute redacted =~ "secret"
+    refute redacted =~ "/Users/alice"
+    refute redacted =~ "100.64.0.1"
+    assert redacted =~ "[REDACTED"
+
+    assert Redactor.bound_output(String.duplicate("x", 12), 4) == "xxxx\n[TRUNCATED]"
+  end
+
+  defp config(env) do
+    %CitizenConfig{
+      id: "BAB-CIT-TEST",
+      slug: "tester",
+      display_name: "Tester",
+      cli: "codex",
+      cwd: "/workspace/tester",
+      env: env
+    }
+  end
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
+end

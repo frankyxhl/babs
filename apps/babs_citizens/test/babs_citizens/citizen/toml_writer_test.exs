@@ -16,6 +16,7 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
       description: "Line one\\two\nLine two",
       cli: "/bin/zsh",
       cli_args: [],
+      ticket_backend: "direct_cli",
       cwd: Path.join(workspace_root, "toml-cwd"),
       env: %{},
       role: nil
@@ -34,6 +35,7 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
     assert content =~ ~s(display_name = "Toml \\"Writer\\"")
     assert content =~ ~s(description = "Line one\\\\two\\nLine two")
     assert content =~ "cli_args = []"
+    assert content =~ ~s(ticket_backend = "direct_cli")
     refute content =~ "[env]"
     refute content =~ "role"
 
@@ -41,6 +43,7 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
     assert loaded.display_name == ~s(Toml "Writer")
     assert loaded.description == "Line one\\two\nLine two"
     assert loaded.cli_args == []
+    assert loaded.ticket_backend == "direct_cli"
     assert loaded.cwd == Path.join(workspace_root, "toml-cwd")
   end
 
