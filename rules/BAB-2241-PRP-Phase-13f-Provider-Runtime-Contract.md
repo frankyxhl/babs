@@ -1,10 +1,10 @@
 # PRP-2241: Phase 13f Provider Runtime Contract
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-08
-**Last reviewed:** 2026-05-08
+**Last updated:** 2026-05-07
+**Last reviewed:** 2026-05-07
 **Status:** Approved
-**Date:** 2026-05-08
+**Date:** 2026-05-07
 **Requested by:** Operator
 **Priority:** High
 
@@ -261,7 +261,7 @@ isolated Chrome profile and `BU_CDP_URL` per `BAB-1503`.
 
 ## Review Results
 
-- 2026-05-08 Trinity fast-review of this PRP: GLM PASS, DeepSeek PASS.
+- 2026-05-07 Trinity fast-review of this PRP: GLM PASS, DeepSeek PASS.
 - Review packet:
   `.trinity/reviews/20260508-045436-rules-BAB-2241-PRP-Phase-13f-Provider-Runtime-Contract.md`
 - Non-blocking advisories folded into this document:
@@ -274,8 +274,8 @@ isolated Chrome profile and `BU_CDP_URL` per `BAB-1503`.
 
 ## Validation Results
 
-- 2026-05-08 `af validate --root .`: 149 documents checked, 0 issues found.
-- 2026-05-08 `git diff --check`: pass.
+- 2026-05-07 `af validate --root .`: 149 documents checked, 0 issues found.
+- 2026-05-07 `git diff --check`: pass.
 
 ## References
 
@@ -296,5 +296,5 @@ isolated Chrome profile and `BU_CDP_URL` per `BAB-1503`.
 
 | Date | Change | By |
 |------|--------|----|
-| 2026-05-08 | Initial Phase 13f provider runtime contract PRP | Codex |
-| 2026-05-08 | Mark approved after Trinity review and fold in provider contract advisories | Codex |
+| 2026-05-07 | Initial Phase 13f provider runtime contract PRP | Codex |
+| 2026-05-07 | Mark approved after Trinity review and fold in provider contract advisories | Codex |
