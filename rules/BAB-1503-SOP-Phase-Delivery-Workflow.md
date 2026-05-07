@@ -1,7 +1,7 @@
 # SOP-1503: Phase Delivery Workflow
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-05
+**Last updated:** 2026-05-07
 **Last reviewed:** 2026-05-05
 **Status:** Active
 
@@ -70,6 +70,36 @@ A completed phase delivery produces:
 - Trinity plan-review and code-review records when required by the phase
 - a GitHub PR opened by `ryosaeba1985`
 - follow-up handling of PR review comments until merge or explicit defer
+
+## Workflow Graph
+
+The numbered steps below are authoritative; this graph is a quick visual map of
+the normal control flow and the two review loops.
+
+```mermaid
+flowchart TD
+  A[1 Route the work] --> B[2 Load phase context]
+  B --> C[3 Write or update PRP/CHG]
+  C --> D[4 Trinity plan review]
+  D --> E{Plan blockers?}
+  E -->|Yes| C
+  E -->|No| F[5 Make implementation checklist]
+  F --> G[6 Implement with test pressure]
+  G --> H[7 Run validation stack]
+  H --> I{Validation passes?}
+  I -->|No| F
+  I -->|Yes| J[8 Update phase document with facts]
+  J --> K[9 Trinity code review]
+  K --> L{Code-review blockers?}
+  L -->|Yes| G
+  L -->|No| M[10 Clean worktree and privacy-scan]
+  M --> N[11 Commit and push]
+  N --> O[12 Open PR as ryosaeba1985]
+  O --> P[13 COR-1615/COR-1612 PR review loop]
+  P --> Q{Required PR changes?}
+  Q -->|Yes| G
+  Q -->|No| R[14 Close out after merge]
+```
 
 ## Steps
 
@@ -228,3 +258,4 @@ A completed phase delivery produces:
 | 2026-05-05 | Clarify active PR monitoring cadence: poll every few minutes and resume after each push until reviews/checks settle | Codex |
 | 2026-05-05 | Link PR review handling to `BAB-1504` for GitHub Codex reaction/status mechanics | Codex |
 | 2026-05-05 | Switch active PR review handling from Babs-specific `BAB-1504` to promoted `COR-1615` plus `COR-1612` | Codex |
+| 2026-05-07 | Add Mermaid workflow graph for the phase delivery control flow | Codex |
