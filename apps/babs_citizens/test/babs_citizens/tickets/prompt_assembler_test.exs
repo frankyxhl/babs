@@ -163,7 +163,8 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
       updated_at: "2026-05-07T10:02:00Z",
       metadata: %{},
       title: "Redaction",
-      body: "Read /home/frank/private and /root/.config with api-key: my long secret value",
+      body:
+        "Read /home/frank/private, /root/.config, /workspace/babs/tmp.log, and /tmp/scratch with api-key: my long secret value",
       path: nil,
       warnings: []
     }
@@ -176,6 +177,8 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
 
     refute prompt =~ "/home/frank"
     refute prompt =~ "/root/.config"
+    refute prompt =~ "/workspace/babs"
+    refute prompt =~ "/tmp/scratch"
     refute prompt =~ "my long secret value"
     refute prompt =~ "another long secret value"
     assert prompt =~ "[local-path]"

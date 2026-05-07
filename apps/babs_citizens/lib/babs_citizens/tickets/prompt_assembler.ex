@@ -79,7 +79,10 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
 
   defp sanitize(value) when is_binary(value) do
     value
-    |> String.replace(~r{/(?:Users|home)/[^\s]+|/root(?:/[^\s]+)?}, "[local-path]")
+    |> String.replace(
+      ~r{/(?:Users|home|workspace|tmp|var|private|opt|Volumes|Applications)/[^\s]+|/root(?:/[^\s]+)?},
+      "[local-path]"
+    )
     |> String.replace(~r/\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/, "[private-ip]")
     |> String.replace(
       ~r/\b100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b/,
