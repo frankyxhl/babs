@@ -32,6 +32,11 @@ jobs:
           version-file: .mise.toml
           version-type: strict
 
+      - name: Install Linux test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential inotify-tools tmux zsh
+
       - name: Cache Mix deps and build
         uses: actions/cache@v4
         with:

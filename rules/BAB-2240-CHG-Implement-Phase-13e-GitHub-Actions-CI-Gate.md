@@ -69,12 +69,16 @@ before merge.
    - Confirm `mix test` does not require frontend asset deployment or Python.
    - Treat SQLite native/runtime package assumptions as the most likely first
      Linux runner compatibility check.
+   - Install the Linux packages needed by existing tests: `build-essential`,
+     `inotify-tools`, `tmux`, and `zsh`.
 
 3. **Implementation**
    - Add `.github/workflows/test.yml`.
    - Use `erlef/setup-beam@v1`.
    - Use `version-file: .mise.toml` with strict version handling so CI consumes
      the same `erlang` and `elixir` pins as local development.
+   - Install the minimal Linux system packages required by existing watcher,
+     tmux, zsh, and native dependency tests.
    - Set job-level `MIX_ENV: test`.
    - Use least-privilege workflow permissions: `contents: read`.
    - Add a bounded job timeout and cancel superseded runs for the same branch
@@ -146,6 +150,15 @@ before merge.
     - `babs`: 82 tests, 0 failures
   - `af validate --root .`: 148 documents checked, 0 issues found
   - `git diff --check`: pass
+- 2026-05-08 GitHub Actions PR run R1:
+  - Workflow triggered on PR #34.
+  - `mix compile --warnings-as-errors` and `mix format --check-formatted`
+    reached the runner.
+  - `mix test` failed on missing Linux test runtime dependencies:
+    `inotify-tools` for file watchers and tmux/zsh runtime assumptions for
+    hardline tests.
+  - Follow-up patch added `build-essential`, `inotify-tools`, `tmux`, and
+    `zsh` installation before dependency/cache/test steps.
 
 ## Deferred Gates
 
@@ -173,3 +186,4 @@ before merge.
 | 2026-05-08 | Add local CI-equivalent validation results | Codex |
 | 2026-05-08 | Fold implementation review advisories into workflow timeout, concurrency, and deps command | Codex |
 | 2026-05-08 | Record implementation review and post-advisory validation | Codex |
+| 2026-05-08 | Patch CI Linux runner dependencies after PR run R1 | Codex |
