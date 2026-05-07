@@ -86,6 +86,12 @@ defmodule Babs.Citizens.DirectCli.Executor do
           {:error, [{:exit_status, status} | sync_output(out_acc, err_acc)]},
           command
         )
+
+      {:DOWN, ^os_pid, :process, ^pid, {:status, status}} ->
+        normalize_result(
+          {:error, [{:exit_status, status} | sync_output(out_acc, err_acc)]},
+          command
+        )
     after
       command.timeout_ms ->
         stop_timed_out(os_pid)

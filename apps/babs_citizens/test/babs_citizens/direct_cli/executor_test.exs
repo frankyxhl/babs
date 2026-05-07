@@ -72,6 +72,26 @@ defmodule Babs.Citizens.DirectCli.ExecutorTest do
     end
   end
 
+  test "returns non-zero exit status without waiting for command timeout" do
+    command = %Command{
+      args: ["/bin/sh", "-c", "echo provider-out; echo provider-err >&2; exit 7"],
+      env: [{"PATH", System.get_env("PATH", "")}],
+      output_limit: 1024,
+      timeout_ms: 3_000
+    }
+
+    started_at = System.monotonic_time(:millisecond)
+
+    assert {:error, {:exit_status, status, artifacts}} = Executor.run(command)
+
+    elapsed_ms = System.monotonic_time(:millisecond) - started_at
+    assert elapsed_ms < 1_000
+    assert is_integer(status)
+    assert status != 0
+    assert artifacts.stdout == "provider-out\n"
+    assert artifacts.stderr == "provider-err\n"
+  end
+
   test "returns executable_not_found without spawning" do
     command = %Command{
       args: ["babs-missing-direct-cli"],
