@@ -16,8 +16,19 @@ defmodule Babs.Citizens.StatusSnapshot do
     lookup = Keyword.get(opts, :lookup, &Lifecycle.lookup/1)
     workspace_root = workspace_root(opts)
 
-    Catalog.list_citizens()
+    opts
+    |> citizen_records()
     |> Enum.map(&from_record(&1, lookup, workspace_root))
+  end
+
+  defp citizen_records(opts) do
+    if Keyword.get(opts, :include_stale?, false) do
+      Catalog.list_citizens()
+    else
+      opts
+      |> Keyword.take([:root, :config_dir])
+      |> Catalog.list_configured_or_imported_citizens()
+    end
   end
 
   defp from_record(%CitizenRecord{} = record, lookup, workspace_root) do

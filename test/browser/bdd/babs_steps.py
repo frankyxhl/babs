@@ -374,6 +374,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_ticket_assignment_hides_stale_sqlite_citizen,
         ),
         Scenario(
+            name="citizens index hides stale sqlite citizen",
+            given="a Citizen still has a SQLite row after its TOML is deleted",
+            when="the operator opens /citizens",
+            then="the stale Citizen is not shown in the normal fleet index",
+            run=scenario_citizens_index_hides_stale_sqlite_citizen,
+        ),
+        Scenario(
             name="malformed ticket is visible",
             given="a malformed runtime Ticket file exists",
             when="the operator opens /tickets",
@@ -1254,6 +1261,27 @@ def scenario_ticket_assignment_hides_stale_sqlite_citizen(context: BabsBddContex
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)
+
+
+def scenario_citizens_index_hides_stale_sqlite_citizen(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-stale-index")
+    visible_slug = unique_slug("bdd-visible-index")
+
+    try:
+        create_shell_citizen_from_ui(context, visible_slug)
+        context.close_test_tab()
+        create_shell_citizen_from_ui(context, slug)
+        context.close_test_tab()
+        wait_until("stale index Citizen row to exist in SQLite", lambda: sqlite_citizen_row(slug) is not None, timeout=10)
+        citizen_toml_path(slug).unlink()
+
+        context.open_path("/citizens")
+        assert_element_visible("[data-testid='citizens-index']", "citizens index")
+        assert_element_visible(f'[data-testid="citizen-row-{visible_slug}"]', f"row for configured Citizen {visible_slug}")
+        assert_no_element(f'[data-testid="citizen-row-{slug}"]', f"row for stale Citizen {slug}")
+    finally:
+        cleanup_spawned_citizen(slug)
+        cleanup_spawned_citizen(visible_slug)
 
 
 def scenario_malformed_ticket_is_visible(context: BabsBddContext) -> None:

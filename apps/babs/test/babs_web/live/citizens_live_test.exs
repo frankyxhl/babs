@@ -12,12 +12,23 @@ defmodule BabsWeb.CitizensLiveTest do
     ensure_repo!()
     Repo.delete_all(CitizenRecord)
     previous = Application.get_env(:babs, BabsWeb.CitizensLive)
+    previous_root = Application.get_env(:babs_citizens, :root)
+    config_root = tmp_root!()
+    Application.put_env(:babs_citizens, :root, config_root)
 
     on_exit(fn ->
+      File.rm_rf!(config_root)
+
       if previous do
         Application.put_env(:babs, BabsWeb.CitizensLive, previous)
       else
         Application.delete_env(:babs, BabsWeb.CitizensLive)
+      end
+
+      if previous_root do
+        Application.put_env(:babs_citizens, :root, previous_root)
+      else
+        Application.delete_env(:babs_citizens, :root)
       end
     end)
   end
@@ -36,7 +47,7 @@ defmodule BabsWeb.CitizensLiveTest do
 
     on_exit(fn -> Application.delete_env(:babs_citizens, :workspace_root) end)
 
-    insert_citizen!(%{
+    insert_configured_citizen!(%{
       slug: "clare",
       display_name: "Clare",
       cli: "claude",
@@ -44,7 +55,7 @@ defmodule BabsWeb.CitizensLiveTest do
       env: %{"SECRET_TOKEN" => "raw-secret-value"}
     })
 
-    insert_citizen!(%{
+    insert_configured_citizen!(%{
       slug: "dylan",
       display_name: "Dylan",
       cli: "gh",
@@ -53,14 +64,19 @@ defmodule BabsWeb.CitizensLiveTest do
       cwd: Path.join(workspace_root, "dylan")
     })
 
-    insert_citizen!(%{
+    insert_configured_citizen!(%{
       slug: "failed-one",
       display_name: "Failed One",
       status: "failed",
       last_error: "redacted boom"
     })
 
-    insert_citizen!(%{slug: "stopped-one", display_name: "Stopped One", status: "stopped"})
+    insert_configured_citizen!(%{
+      slug: "stopped-one",
+      display_name: "Stopped One",
+      status: "stopped"
+    })
+
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "clare", nil)
 
     {:ok, _view, html} = live(build_conn(), "/citizens?socket_token=socket-token")
@@ -151,8 +167,18 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ "Reattach"
   end
 
+  test "hides stale SQLite-only citizens from the normal index" do
+    insert_configured_citizen!(%{slug: "clare", display_name: "Clare"})
+    insert_citizen!(%{slug: "json", display_name: "Json", status: "stopped"})
+
+    {:ok, _view, html} = live(build_conn(), "/citizens")
+
+    assert html =~ ~s(data-testid="citizen-row-clare")
+    refute html =~ ~s(data-testid="citizen-row-json")
+  end
+
   test "start control invokes lifecycle boundary and refreshes the row" do
-    record = insert_citizen!(%{slug: "start-me", status: "stopped"})
+    record = insert_configured_citizen!(%{slug: "start-me", status: "stopped"})
     parent = self()
 
     Application.put_env(:babs, BabsWeb.CitizensLive,
@@ -194,7 +220,7 @@ defmodule BabsWeb.CitizensLiveTest do
   end
 
   test "stop control invokes lifecycle boundary and refreshes the row" do
-    record = insert_citizen!(%{slug: "stop-me", status: "running"})
+    record = insert_configured_citizen!(%{slug: "stop-me", status: "running"})
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
     parent = self()
 
@@ -224,7 +250,7 @@ defmodule BabsWeb.CitizensLiveTest do
   end
 
   test "restart control reports redacted lifecycle errors" do
-    insert_citizen!(%{slug: "restart-error", status: "running"})
+    insert_configured_citizen!(%{slug: "restart-error", status: "running"})
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "restart-error", nil)
 
     Application.put_env(:babs, BabsWeb.CitizensLive,
@@ -247,7 +273,7 @@ defmodule BabsWeb.CitizensLiveTest do
   end
 
   test "lifecycle controls disable sibling controls while a request is in flight" do
-    record = insert_citizen!(%{slug: "busy-one", status: "running"})
+    record = insert_configured_citizen!(%{slug: "busy-one", status: "running"})
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
     parent = self()
 
@@ -283,7 +309,7 @@ defmodule BabsWeb.CitizensLiveTest do
   end
 
   test "refresh tick reflects status changes" do
-    record = insert_citizen!(%{slug: "tick-one", status: "running"})
+    record = insert_configured_citizen!(%{slug: "tick-one", status: "running"})
 
     {:ok, view, html} = live(build_conn(), "/citizens")
     assert html =~ "reattaching"
@@ -325,6 +351,34 @@ defmodule BabsWeb.CitizensLiveTest do
     %CitizenRecord{}
     |> CitizenRecord.changeset(attrs)
     |> Repo.insert!()
+  end
+
+  defp insert_configured_citizen!(attrs) do
+    record = insert_citizen!(attrs)
+    write_citizen_toml!(record)
+    record
+  end
+
+  defp write_citizen_toml!(%CitizenRecord{} = record) do
+    root = Application.fetch_env!(:babs_citizens, :root)
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-#{record.slug}.toml")
+
+    File.write!(path, """
+    id = "#{record.id}"
+    slug = "#{record.slug}"
+    display_name = "#{record.display_name}"
+    cli = "#{record.cli}"
+    cli_args = #{inspect(record.cli_args || [])}
+    launch_profile = "#{record.launch_profile || "safe_interactive"}"
+    ticket_backend = "#{record.ticket_backend || "hardline"}"
+    cwd = "#{record.cwd}"
+
+    [env]
+    """)
+
+    path
   end
 
   defp tmp_root! do
