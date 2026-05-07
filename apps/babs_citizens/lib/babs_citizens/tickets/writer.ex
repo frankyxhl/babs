@@ -682,6 +682,9 @@ defmodule Babs.Citizens.Tickets.Writer do
            ) do
       :ok
     else
+      {:error, {:execution_busy, _slug} = reason} ->
+        {:error, reason}
+
       {:error, reason} ->
         _ignored =
           append_events(

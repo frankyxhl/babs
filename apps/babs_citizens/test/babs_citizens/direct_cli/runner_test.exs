@@ -343,6 +343,88 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
     assert attempted["status"] == "queued"
   end
 
+  test "comment_ticket direct backend surfaces busy notification failure" do
+    root = tmp_root!()
+    config = fake_config("flora")
+
+    insert_citizen!(%{
+      slug: "flora",
+      display_name: "Flora",
+      cli: "babs-fake-ai",
+      cli_args: [],
+      cwd: config.cwd,
+      ticket_backend: "direct_cli"
+    })
+
+    ticket =
+      create_ticket!(root, %{
+        state: "in_progress",
+        assignees: ["flora"]
+      })
+
+    assert {:ok,
+            %{
+              delivery:
+                {:comment_notification_failed, [], [{"flora", {:execution_busy, "flora"}}]}
+            }} =
+             ExecutionLock.with_lock("flora", fn ->
+               Api.comment_ticket(ticket.id, %{body: "Please reply.", by: "user"},
+                 tickets_root: root,
+                 citizen_config_fetcher: fn "flora" -> config end,
+                 adapter: Fake,
+                 executor: fn _command -> flunk("busy direct comment should not execute") end,
+                 hardline_injector: fn _slug, _prompt, _opts ->
+                   flunk("busy direct comment should not fall back to hardline")
+                 end,
+                 startup_ack_timeout_ms: 1_000
+               )
+             end)
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(
+          %{
+            "event" => "turn_delivery_attempted",
+            "backend" => "direct_cli",
+            "status" => "busy"
+          },
+          &1
+        )
+      ) and
+        Enum.any?(
+          history,
+          &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+        )
+    end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{"event" => "comment", "by" => "user", "body" => "Please reply."},
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{
+                 "event" => "turn_delivery_attempted",
+                 "backend" => "direct_cli",
+                 "status" => "busy"
+               },
+               &1
+             )
+           )
+
+    refute Enum.any?(history, &match?(%{"event" => "comment_notified"}, &1))
+  end
+
   test "assign_ticket routes direct backend assignment prompts through the runner" do
     root = tmp_root!()
     config = fake_config("flora")
@@ -408,6 +490,72 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
            )
 
     assert Enum.any?(history, &match?(%{"event" => "injected", "injected_to" => ["flora"]}, &1))
+  end
+
+  test "assign_ticket direct backend reports busy instead of injected delivery" do
+    root = tmp_root!()
+    config = fake_config("flora")
+    ticket = create_ticket!(root)
+
+    assert {:error, {:execution_busy, "flora"}} =
+             ExecutionLock.with_lock("flora", fn ->
+               Api.assign_ticket(ticket.id, "flora",
+                 tickets_root: root,
+                 citizen_config_fetcher: fn "flora" -> config end,
+                 adapter: Fake,
+                 executor: fn _command -> flunk("busy direct assignment should not execute") end,
+                 hardline_injector: fn _slug, _prompt, _opts ->
+                   flunk("busy direct assignment should not fall back to hardline")
+                 end,
+                 startup_ack_timeout_ms: 1_000
+               )
+             end)
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(
+          %{
+            "event" => "turn_delivery_attempted",
+            "backend" => "direct_cli",
+            "status" => "busy"
+          },
+          &1
+        )
+      ) and
+        Enum.any?(
+          history,
+          &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+        )
+    end)
+
+    assert {:ok, %{ticket: assigned, history: history}} =
+             Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert assigned.state == "in_progress"
+    assert assigned.assignees == ["flora"]
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{
+                 "event" => "turn_delivery_attempted",
+                 "backend" => "direct_cli",
+                 "status" => "busy"
+               },
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+           )
+
+    assert Enum.any?(history, &match?(%{"event" => "injection_failed"}, &1))
+    refute Enum.any?(history, &match?(%{"event" => "injected"}, &1))
   end
 
   test "reject_ticket routes direct backend feedback prompts through the runner" do
@@ -535,6 +683,68 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
     refute Enum.any?(
              history,
              &match?(%{"event" => "turn_delivered", "backend" => "hardline"}, &1)
+           )
+  end
+
+  test "start_turn reports busy before the caller records delivery success" do
+    root = tmp_root!()
+    config = fake_config("clare")
+    ticket = create_ticket!(root)
+
+    assert {:error, {:execution_busy, "clare"}} =
+             ExecutionLock.with_lock("clare", fn ->
+               Runner.start_turn(turn(root, ticket.id, config),
+                 adapter: Fake,
+                 executor: fn _command -> flunk("busy direct turn should not execute") end,
+                 hardline_injector: fn _slug, _prompt, _opts ->
+                   flunk("busy direct turn should not fall back to hardline")
+                 end,
+                 startup_ack_timeout_ms: 1_000
+               )
+             end)
+
+    wait_until(fn ->
+      {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+      Enum.any?(
+        history,
+        &match?(
+          %{
+            "event" => "turn_delivery_attempted",
+            "backend" => "direct_cli",
+            "status" => "busy"
+          },
+          &1
+        )
+      ) and
+        Enum.any?(
+          history,
+          &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+        )
+    end)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.any?(
+             history,
+             &match?(
+               %{
+                 "event" => "turn_delivery_attempted",
+                 "backend" => "direct_cli",
+                 "status" => "busy"
+               },
+               &1
+             )
+           )
+
+    assert Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+           )
+
+    refute Enum.any?(
+             history,
+             &match?(%{"event" => "turn_delivered", "backend" => "direct_cli"}, &1)
            )
   end
 

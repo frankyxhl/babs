@@ -12,6 +12,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
 
   require Logger
 
+  @startup_ack_timeout_ms 5_000
+
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
@@ -37,7 +39,12 @@ defmodule Babs.Citizens.DirectCli.Runner do
   @impl true
   def handle_call({:start_turn, turn, opts}, _from, state) do
     child_opts = Keyword.get(opts, :task_supervisor, Babs.Citizens.DirectCli.TaskSupervisor)
-    task_opts = Keyword.put(opts, :caller, self())
+    startup_ref = make_ref()
+
+    task_opts =
+      opts
+      |> Keyword.put(:caller, self())
+      |> Keyword.put(:startup_ref, {self(), startup_ref})
 
     result =
       Task.Supervisor.start_child(child_opts, fn ->
@@ -46,8 +53,15 @@ defmodule Babs.Citizens.DirectCli.Runner do
 
     reply =
       case result do
-        {:ok, _pid} -> :ok
-        {:error, reason} -> {:error, reason}
+        {:ok, pid} ->
+          await_startup_ack(
+            pid,
+            startup_ref,
+            Keyword.get(opts, :startup_ack_timeout_ms, @startup_ack_timeout_ms)
+          )
+
+        {:error, reason} ->
+          {:error, reason}
       end
 
     {:reply, reply, state}
@@ -57,8 +71,10 @@ defmodule Babs.Citizens.DirectCli.Runner do
     ExecutionLock.with_lock(turn.slug, fn -> run_locked(turn, opts) end)
     |> case do
       {:error, {:execution_busy, _slug} = reason} ->
+        notify_startup(opts, {:error, reason})
         _ignored = append_events(turn, [attempt_busy_event(turn)])
-        turn |> Map.put(:fallback, :none) |> handle_direct_failure(reason, opts)
+        result = turn |> Map.put(:fallback, :none) |> handle_direct_failure(reason, opts)
+        result
 
       result ->
         result
@@ -66,6 +82,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
   end
 
   defp run_locked(turn, opts) do
+    notify_startup(opts, :ok)
+
     with {:ok, adapter} <- adapter(turn, opts),
          {:ok, session} <- ensure_session(turn, adapter, opts),
          {:ok, command} <- command_for_turn(turn, adapter, session, opts),
@@ -77,6 +95,42 @@ defmodule Babs.Citizens.DirectCli.Runner do
         handle_direct_failure(turn, reason, opts)
     end
   end
+
+  defp await_startup_ack(pid, ref, timeout_ms) do
+    monitor = Process.monitor(pid)
+
+    receive do
+      {__MODULE__, ^ref, :ok} ->
+        Process.demonitor(monitor, [:flush])
+        :ok
+
+      {__MODULE__, ^ref, {:error, reason}} ->
+        Process.demonitor(monitor, [:flush])
+        {:error, reason}
+
+      {:DOWN, ^monitor, :process, ^pid, reason} ->
+        {:error, {:direct_runner_exit, reason}}
+    after
+      timeout_ms ->
+        Process.exit(pid, :kill)
+        Process.demonitor(monitor, [:flush])
+        {:error, :direct_runner_startup_timeout}
+    end
+  end
+
+  defp notify_startup(opts, result) do
+    case Keyword.get(opts, :startup_ref) do
+      {pid, ref} when is_pid(pid) and is_reference(ref) ->
+        send(pid, {__MODULE__, ref, normalize_startup_result(result)})
+
+      _other ->
+        :ok
+    end
+  end
+
+  defp normalize_startup_result(:ok), do: :ok
+  defp normalize_startup_result({:error, reason}), do: {:error, reason}
+  defp normalize_startup_result(_other), do: :ok
 
   defp execute_started_turn(started, turn, adapter, command, opts) do
     with {:ok, artifacts} <- execute_command(command, opts),
