@@ -33,6 +33,6 @@ defmodule Babs.Citizens.TicketBackend do
 
   def assign_hint(@hardline), do: "starts tmux if stopped"
   def assign_hint(@direct_cli), do: "no tmux start"
-  def assign_hint(@lazy_tmux), do: "opens tmux only when needed"
+  def assign_hint(@lazy_tmux), do: "currently uses Hardline"
   def assign_hint(_backend), do: assign_hint(@hardline)
 end

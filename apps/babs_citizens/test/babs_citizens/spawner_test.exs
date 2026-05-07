@@ -230,6 +230,27 @@ defmodule Babs.Citizens.SpawnerTest do
     assert Catalog.get_by_slug("lazy-browser") == nil
   end
 
+  test "rejects direct_cli for presets without a direct adapter" do
+    root = tmp_root!()
+
+    assert {:error, {:validation_failed, errors}} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "direct-shell",
+                 "display_name" => "Direct Shell",
+                 "cli_preset" => "shell",
+                 "ticket_backend" => "direct_cli",
+                 "cwd" => "direct-shell"
+               },
+               root: root,
+               lifecycle_start: unexpected_lifecycle()
+             )
+
+    assert errors.ticket_backend == "requires a direct-capable CLI preset"
+    refute File.exists?(Path.join(root, "citizens/citizen-direct-shell.toml"))
+    assert Catalog.get_by_slug("direct-shell") == nil
+  end
+
   test "copilot preset uses direct Copilot with trusted autonomous launch profile" do
     root = tmp_root!()
     parent = self()

@@ -187,18 +187,20 @@ Final results:
     2 tests, 0 failures.
   - Focused Spawner/StatusSnapshot/NewCitizenLive/CitizensLive/TicketsLive
     suite: 60 tests, 0 failures.
+  - Focused P2 regression suite after GitHub Codex review R1: 46 tests,
+    0 failures.
 - `python3 -m py_compile test/browser/bdd/babs_steps.py
   test/browser/bdd/run.py`: passed.
 - Focused browser-harness BDD with isolated Chrome CDP on local port 9333:
   `direct cli backend UI creation and assignment` passed.
 - `mise exec -- mix format --check-formatted`: passed.
 - `mise exec -- mix compile --warnings-as-errors`: passed.
-- `mise exec -- mix test`: 396 tests, 0 failures.
+- `mise exec -- mix test`: 397 tests, 0 failures.
 - Coverage export/report:
-  - `mise exec -- mix test --cover --export-coverage phase13a4`: 396 tests,
+  - `mise exec -- mix test --cover --export-coverage phase13a4`: 397 tests,
     0 failures.
   - `mise exec -- mix cmd mix test.coverage`: passed with `:babs_citizens`
-    82.21% total and `:babs` 88.50% total.
+    82.27% total and `:babs` 88.50% total.
 - `npm run test:js`: 15 tests, 0 failures.
 - `npm run test:e2e`: 13 tests total, 11 passed, 2 skipped.
 - `af validate --root <repo-root>`: 144 documents checked, 0 issues found.
@@ -223,6 +225,9 @@ Final results:
   Advisory follow-ups only: optional stricter insert arity handling, direct unit
   assertions for creation descriptions / `Catalog.insert_new/2`, and optional
   traceability polish.
+- GitHub Codex PR review R1 on commit `396418dfa7`: two P2 findings fixed:
+  reject `direct_cli` browser creation for unsupported CLI presets, and avoid
+  advertising unimplemented lazy-tmux assignment behavior.
 
 ## References
 
@@ -248,3 +253,4 @@ Final results:
 | 2026-05-07 | Record Trinity R3 plan-review PASS from GLM and DeepSeek | Codex |
 | 2026-05-07 | Record implementation validation results and GitHub tracking issue #28 | Codex |
 | 2026-05-08 | Record Trinity implementation review PASS from GLM and DeepSeek | Codex |
+| 2026-05-08 | Record GitHub Codex R1 P2 fixes and refreshed validation counts | Codex |

@@ -21,7 +21,7 @@ defmodule Babs.Citizens.TicketBackendTest do
 
     assert TicketBackend.assign_hint("hardline") == "starts tmux if stopped"
     assert TicketBackend.assign_hint("direct_cli") == "no tmux start"
-    assert TicketBackend.assign_hint("lazy_tmux") == "opens tmux only when needed"
+    assert TicketBackend.assign_hint("lazy_tmux") == "currently uses Hardline"
     assert TicketBackend.assign_hint("unknown") == "starts tmux if stopped"
   end
 end

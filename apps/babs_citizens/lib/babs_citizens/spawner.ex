@@ -23,6 +23,7 @@ defmodule Babs.Citizens.Spawner do
     "pi" => {"pi", [], "trusted_autonomous"},
     "copilot-cli" => {"copilot", [], "trusted_autonomous"}
   }
+  @direct_cli_presets ~w(claude codex copilot-cli)
 
   def presets, do: Map.keys(@presets)
 
@@ -62,7 +63,7 @@ defmodule Babs.Citizens.Spawner do
       |> validate_slug(slug)
       |> validate_display_name(display_name)
       |> validate_preset(preset)
-      |> validate_ticket_backend(ticket_backend)
+      |> validate_ticket_backend(ticket_backend, preset)
       |> validate_cwd(cwd)
 
     if map_size(errors) == 0 do
@@ -128,12 +129,20 @@ defmodule Babs.Citizens.Spawner do
       else: Map.put(errors, :cli_preset, "is not supported")
   end
 
-  defp validate_ticket_backend(errors, nil), do: Map.put(errors, :ticket_backend, "is required")
+  defp validate_ticket_backend(errors, nil, _preset),
+    do: Map.put(errors, :ticket_backend, "is required")
 
-  defp validate_ticket_backend(errors, ticket_backend) do
-    if TicketBackend.browser_creatable?(ticket_backend),
-      do: errors,
-      else: Map.put(errors, :ticket_backend, "is not supported for browser creation")
+  defp validate_ticket_backend(errors, "direct_cli", preset)
+       when preset not in @direct_cli_presets do
+    Map.put(errors, :ticket_backend, "requires a direct-capable CLI preset")
+  end
+
+  defp validate_ticket_backend(errors, ticket_backend, _preset) do
+    if TicketBackend.browser_creatable?(ticket_backend) do
+      errors
+    else
+      Map.put(errors, :ticket_backend, "is not supported for browser creation")
+    end
   end
 
   defp validate_cwd(errors, nil), do: errors
