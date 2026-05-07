@@ -65,7 +65,7 @@ defmodule Babs.Citizens.Tickets.WatcherTest do
   end
 
   defp receive_ticket_change(root, path) do
-    receive_ticket_change(root, path, System.monotonic_time(:millisecond) + 2_000)
+    receive_ticket_change(root, path, System.monotonic_time(:millisecond) + 5_000)
   end
 
   defp receive_ticket_change(root, path, deadline) do

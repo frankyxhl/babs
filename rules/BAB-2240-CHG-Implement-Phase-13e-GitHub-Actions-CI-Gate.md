@@ -97,6 +97,8 @@ before merge.
 - CI uses the repo `.mise.toml` BEAM line unless a future ADR changes it.
 - A fresh PR runs CI automatically.
 - CI runs compile, format, and ExUnit tests.
+- CI runs ExUnit serially in this first gate to avoid hiding unrelated
+  cross-test isolation work inside the initial workflow rollout.
 - No browser or secret-dependent tests are added to CI in this first slice.
 
 ## Guard Rails
@@ -110,6 +112,8 @@ before merge.
   machine version.
 - Keep the first CI gate bounded; do not let a hung runner consume unbounded
   minutes.
+- Keep CI hardening fixes narrow: only stabilize existing tests enough for the
+  first Linux runner gate; broader parallel-test isolation is deferred.
 
 ## Validation Results
 
@@ -159,6 +163,31 @@ before merge.
     hardline tests.
   - Follow-up patch added `build-essential`, `inotify-tools`, `tmux`, and
     `zsh` installation before dependency/cache/test steps.
+- 2026-05-08 GitHub Actions PR run R2:
+  - Linux runner dependencies were installed successfully.
+  - Remaining failures exposed clean-runner/CI timing assumptions:
+    - watcher retry test needed a longer Linux inotify receive window
+    - `Runner.tmux_pane_pid/1` should normalize missing tmux server/target to
+      `{:error, :invalid_pane_pid}` for missing sessions
+    - lifecycle integration tests needed explicit Repo migration setup
+  - Follow-up patch added focused test hardening and changed the first CI gate
+    to `mix test --max-cases 1` while broader parallel-isolation cleanup stays
+    deferred.
+- 2026-05-08 post-R2 local validation:
+  - focused tests for runner missing-session behavior, lifecycle integration,
+    and ticket watcher:
+    `mise exec -- mix test apps/babs_citizens/test/babs_citizens/runner_test.exs apps/babs_citizens/test/babs_citizens/citizen/lifecycle_integration_test.exs apps/babs_citizens/test/babs_citizens/tickets/watcher_test.exs`
+    - `babs_citizens`: 15 tests, 0 failures
+  - `mise exec -- mix compile --warnings-as-errors`: pass
+  - `mise exec -- mix format --check-formatted`: pass
+  - CI-equivalent ExUnit:
+    `mise exec -- mix test --max-cases 1`
+    - `babs_citizens`: 324 tests, 0 failures
+    - `babs`: 82 tests, 0 failures
+- 2026-05-08 Trinity fast-review of R2 hardening diff: GLM PASS, DeepSeek
+  PASS.
+- R2 hardening review packet:
+  `.trinity/reviews/20260508-043307-Phase-13e-CI-R2-hardening-diff`
 
 ## Deferred Gates
 
@@ -166,6 +195,7 @@ before merge.
 - Playwright E2E in CI.
 - JavaScript unit tests in CI.
 - Coverage threshold/upload in CI.
+- Parallel ExUnit CI after global tmux/SQLite/test-env assumptions are audited.
 - Credo, Dialyzer, macOS matrix, release packaging, and branch-protection
   enforcement.
 
@@ -187,3 +217,6 @@ before merge.
 | 2026-05-08 | Fold implementation review advisories into workflow timeout, concurrency, and deps command | Codex |
 | 2026-05-08 | Record implementation review and post-advisory validation | Codex |
 | 2026-05-08 | Patch CI Linux runner dependencies after PR run R1 | Codex |
+| 2026-05-08 | Add focused CI hardening after PR run R2 exposed clean-runner assumptions | Codex |
+| 2026-05-08 | Record post-R2 local validation | Codex |
+| 2026-05-08 | Record Trinity R2 hardening review | Codex |
