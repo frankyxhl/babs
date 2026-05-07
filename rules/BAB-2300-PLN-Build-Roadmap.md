@@ -17,7 +17,7 @@ Two stages:
 - **Bootstrap** (Phase 0-1): manually built by human in terminal `claude code`. ~2-5 weeks.
 - **Flywheel** (Phase 2-17): every phase is built BY a Citizen AI INSIDE the running Babs (the user is in browser only). ~24-38 weeks (per Trinity 2× multiplier).
 
-Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, and Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing.
+Phase 0 has its own PRP (`BAB-2200`). Optional Phase 0a has its own PRP (`BAB-2202`). Optional Phase 0b has its own PRP (`BAB-2203`). Optional Phase 0c has its own PRP (`BAB-2205`). Phase 1 has its own PRP (`BAB-2201`). Phases 2-17 are documented in this roadmap as concise sections; each will become a Ticket once the ticket system is online (Phase 7+) and that Ticket becomes the de facto PRP for that phase's work. Phase 13a has its own PRP (`BAB-2232`) because it changes the Ticket conversation and Citizen execution model before role automation begins. Phase 13f has its own PRP (`BAB-2241`) for the provider runtime contract, Phase 14 has its own PRP (`BAB-2242`) for multi-role Citizen routing, and Phase 15 has its own PRP (`BAB-2243`) for Inspector Council auto-approval.
 
 ---
 
@@ -321,11 +321,22 @@ to that Citizen even when `developer` is not the first role; legacy single-role
 Citizens still import and route correctly.
 **Estimate**: 5-8 days
 
-### Phase 15 — Inspector Role (Auto-Approval)
+### Phase 15 — Inspector Council (Auto-Approval)
 
-**Scope**: Dedicated Citizen with `role: inspector`. SOP: "When a ticket reaches Pending Approval, read the body + acceptance criteria + assignee's last comments; decide approve or reject with reasoning". Inspector becomes the default `inspector` for new tickets. User can override.
-**Acceptance**: T-003 reaches Pending Approval; inspector citizen wakes up (notified via PubSub on state change), reads ticket, writes approve/reject decision; user can intervene
-**Estimate**: 7-10 days (LLM protocol design)
+**Planning doc**: `BAB-2243` PRP
+**Current status**: Approved PRP after Trinity fast-review with GLM and
+DeepSeek PASS.
+**Scope**: Replace the earlier single-inspector plan with Ticket-level
+inspection policy and an Inspector Council. The human operator remains the
+default inspector; Tickets can explicitly opt into automatic inspection by one
+or more eligible Citizens selected by slug and/or Phase 14 roles. Inspector
+decisions are persisted to Ticket history, parsed as approve/reject/needs
+changes, and reduced by an initial conservative `all_pass` quorum.
+**Acceptance**: A Ticket in `pending_approval` can be auto-approved by a
+role-selected inspector Citizen; a rejected/needs-changes decision returns the
+Ticket to `in_progress` with feedback; a two-Citizen council can approve only
+when both inspectors approve; human override remains available.
+**Estimate**: 10-14 days (LLM protocol and quorum design)
 
 ### Phase 16 — Mayor Citizen (research-grade)
 
@@ -356,10 +367,10 @@ Citizens still import and route correctly.
 | Phase 13 (imported tmux attach) | 4-7 days | 8-14 days |
 | Phase 13a (multi-turn direct CLI) | 10-16 days | 20-32 days |
 | Phase 13f (provider runtime contract) | 4-8 days | 8-16 days |
-| Phase 14-15 (V0-L early) | 12-18 days | 24-36 days |
+| Phase 14-15 (V0-L early) | 15-22 days | 30-44 days |
 | Phase 16 (Mayor) | 14-21 days | 28-42 days |
 | Phase 17 (Polish) | 14-21 days | 28-42 days |
-| **Total** | **~109-170 days (~16-25 weeks)** | **~216-339 days (~31-49 weeks, 7-12 months)** |
+| **Total** | **~112-174 days (~16-25 weeks)** | **~222-347 days (~32-50 weeks, 7-12 months)** |
 
 **Be honest**: The realistic column is the operating estimate. Plan for 7-12 months of total elapsed time, with ~2-5 weeks of human-only effort and the rest as flywheel reviewing.
 
@@ -454,3 +465,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Increase Phase 13a estimate after Claude/Codex direct review identified supervised runner, direct reply pipeline, session migration, redaction/env, and lazy-tmux concurrency scope | Codex |
 | 2026-05-07 | Align Phase 13a with light-first UI and kitchen-sink route from `BAB-1004` | Codex |
 | 2026-05-07 | Add `BAB-2242` Phase 14 PRP and update Phase 14 from single-role to multi-role Citizen routing | Codex |
+| 2026-05-07 | Add `BAB-2243` Phase 15 PRP and update Phase 15 from a single inspector role to Inspector Council auto-approval | Codex |
