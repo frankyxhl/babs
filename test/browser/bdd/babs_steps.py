@@ -367,6 +367,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_direct_cli_compact_prompt,
         ),
         Scenario(
+            name="ticket assignment hides stale sqlite citizen",
+            given="a Citizen still has a SQLite row after its TOML is deleted",
+            when="the operator opens an assignable Ticket detail page",
+            then="the stale Citizen is not offered as an assignment target",
+            run=scenario_ticket_assignment_hides_stale_sqlite_citizen,
+        ),
+        Scenario(
             name="malformed ticket is visible",
             given="a malformed runtime Ticket file exists",
             when="the operator opens /tickets",
@@ -1225,6 +1232,25 @@ def scenario_direct_cli_compact_prompt(context: BabsBddContext) -> None:
         assert body not in second_prompt
         assert first_comment not in second_prompt
         assert "Recent visible chat messages" not in second_prompt
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
+def scenario_ticket_assignment_hides_stale_sqlite_citizen(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-stale")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        create_shell_citizen_from_ui(context, slug)
+        context.close_test_tab()
+        wait_until("stale Citizen row to exist in SQLite", lambda: sqlite_citizen_row(slug) is not None, timeout=10)
+        citizen_toml_path(slug).unlink()
+
+        write_ticket(context.tickets_root, ticket_id, "BDD Stale Citizen Ticket", f"Stale assignment body for {slug}.")
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-detail']", "stale Citizen Ticket detail")
+        assert_no_element(f'[data-testid="ticket-assign-{slug}"]', f"assign button for stale Citizen {slug}")
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)

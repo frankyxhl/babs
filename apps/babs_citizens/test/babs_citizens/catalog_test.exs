@@ -186,6 +186,30 @@ defmodule Babs.Citizens.CatalogTest do
     assert %{slug: ["has already been taken"]} = errors_on(changeset)
   end
 
+  test "list_configured_or_imported_citizens hides stale rows but keeps imported external sessions" do
+    root = tmp_root!()
+    write_citizen_toml!(root, "clare")
+
+    insert_citizen!(%{slug: "clare", display_name: "Clare"})
+    insert_citizen!(%{slug: "json", display_name: "Json", status: "stopped"})
+
+    external = insert_citizen!(%{slug: "external", display_name: "External"})
+
+    assert {:ok, _external} =
+             Catalog.mark_imported_external(external, %{
+               session_name: "operator-session",
+               window_index: "0",
+               pane_index: "0",
+               pane_id: "%42"
+             })
+
+    slugs =
+      Catalog.list_configured_or_imported_citizens(root: root, config_dir: "citizens")
+      |> Enum.map(& &1.slug)
+
+    assert slugs == ["clare", "external"]
+  end
+
   test "imports do not log persisted env secret values" do
     root = tmp_root!()
     write_citizen_toml!(root, "secret-env", %{env: %{"SECRET_TOKEN" => "super-secret-value"}})

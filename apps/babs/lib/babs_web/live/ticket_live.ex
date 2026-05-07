@@ -445,7 +445,7 @@ defmodule BabsWeb.TicketLive do
   defp param(_params, _key), do: nil
 
   defp citizen_options do
-    Catalog.list_citizens()
+    Catalog.list_configured_or_imported_citizens()
     |> Enum.map(fn citizen ->
       backend = citizen.ticket_backend || "hardline"
 

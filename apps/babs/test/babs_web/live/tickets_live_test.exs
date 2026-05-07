@@ -7,7 +7,7 @@ defmodule BabsWeb.TicketsLiveTest do
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Watcher
-  alias Babs.Citizens.{CitizenRecord, Repo}
+  alias Babs.Citizens.{Catalog, CitizenRecord, Repo}
 
   @endpoint BabsWeb.Endpoint
 
@@ -373,6 +373,73 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-testid="ticket-unassign-clare")
     assert html =~ ~s(data-icon="route")
     assert html =~ ~s(data-icon="undo")
+  end
+
+  test "ticket assignment options exclude stale SQLite-only citizens", %{root: root} do
+    config_root = Babs.Citizens.RepoCase.tmp_root!()
+    previous_babs_root = Application.get_env(:babs_citizens, :root)
+
+    Application.put_env(:babs_citizens, :root, config_root)
+
+    on_exit(fn ->
+      File.rm_rf!(config_root)
+
+      if previous_babs_root do
+        Application.put_env(:babs_citizens, :root, previous_babs_root)
+      else
+        Application.delete_env(:babs_citizens, :root)
+      end
+    end)
+
+    Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "clare",
+      display_name: "Clare",
+      ticket_backend: "hardline"
+    })
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "json",
+      display_name: "Json",
+      ticket_backend: "direct_cli",
+      status: "stopped"
+    })
+
+    external =
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "external",
+        display_name: "External",
+        ticket_backend: "hardline"
+      })
+
+    assert {:ok, _external} =
+             Catalog.mark_imported_external(external, %{
+               session_name: "operator-session",
+               window_index: "0",
+               pane_index: "0",
+               pane_id: "%42"
+             })
+
+    ticket = create_ticket!(root, "Assignable", "Only real Citizens should be assignable.")
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-assign-clare")
+    assert html =~ ~s(data-testid="ticket-assign-external")
+    refute html =~ ~s(data-testid="ticket-assign-json")
+    refute html =~ "Json"
+
+    stale_ticket =
+      create_ticket!(root, "Stale assignment", "This row is no longer backed by TOML.",
+        state: "in_progress",
+        assignees: ["json"]
+      )
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{stale_ticket.id}")
+
+    assert html =~ "unknown citizen: json"
+    refute html =~ ~s(data-testid="ticket-assign-json")
   end
 
   test "comment action stores history and notifies assignees", %{root: root} do
