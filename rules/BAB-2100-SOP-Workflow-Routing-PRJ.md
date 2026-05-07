@@ -23,7 +23,7 @@ It also enforces a discipline specific to Babs: the current foundational ADR set
 
 ## When to Use
 
-- Start of every session in `/Users/frank/Projects/babs/`
+- Start of every session in this repository
 - Before every new task in this repo
 - When the task spans multiple domains and isn't obviously covered by a single COR SOP
 

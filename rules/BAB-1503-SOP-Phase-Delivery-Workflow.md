@@ -55,8 +55,8 @@ rules.
   PRP/CHG/phase document.
 - For architecture-touching changes, read the affected `BAB-11xx` ADRs before
   proposing alternatives.
-- Run `af guide --root /Users/frank/Projects/babs` and
-  `af plan COR-1616 BAB-1503`.
+- Run `af guide --root <repo-root>` and
+  `af plan COR-1616 BAB-1503 --root <repo-root>`.
 - Confirm GitHub-visible writes use `gh` authenticated as `ryosaeba1985`.
 - Do not include private Tailscale IPs, local filesystem paths, machine-local
   URLs, tokens, or host-specific secrets in public docs, commits, PR bodies, or
@@ -108,7 +108,7 @@ contract:
 - `npm run test:bdd` for browser-harness BDD scenarios
 - `npm run test:e2e` while Playwright smoke coverage remains in the repo
 - phase-specific gates such as `mise exec -- mix babs.gate_a`
-- `af validate --root /Users/frank/Projects/babs`
+- `af validate --root <repo-root>`
 - `git diff --check`
 - privacy/artifact scan before commit
 
