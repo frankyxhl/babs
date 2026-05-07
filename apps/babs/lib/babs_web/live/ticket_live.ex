@@ -33,7 +33,9 @@ defmodule BabsWeb.TicketLive do
   def handle_event("assign", %{"slug" => slug}, socket) do
     {:noreply,
      start_ticket_action(socket, {:assign, slug}, fn ->
-       Api.assign_ticket(socket.assigns.id, slug)
+       with :ok <- ensure_assignable_citizen(slug) do
+         Api.assign_ticket(socket.assigns.id, slug)
+       end
      end)}
   end
 
@@ -445,7 +447,7 @@ defmodule BabsWeb.TicketLive do
   defp param(_params, _key), do: nil
 
   defp citizen_options do
-    Catalog.list_citizens()
+    Catalog.list_configured_or_imported_citizens()
     |> Enum.map(fn citizen ->
       backend = citizen.ticket_backend || "hardline"
 
@@ -459,6 +461,14 @@ defmodule BabsWeb.TicketLive do
     end)
   rescue
     _error -> []
+  end
+
+  defp ensure_assignable_citizen(slug) do
+    if Enum.any?(Catalog.list_configured_or_imported_citizens(), &(&1.slug == slug)) do
+      :ok
+    else
+      {:error, {:unknown_citizen, slug}}
+    end
   end
 
   defp assignable?(ticket), do: ticket.state == "open" and ticket.assignees == []

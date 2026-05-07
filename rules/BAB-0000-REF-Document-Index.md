@@ -75,6 +75,7 @@
 | 2235 | CHG | Implement Phase 13a3 Direct CLI Provider Sessions |
 | 2236 | CHG | Implement Phase 13a4 Direct Backend UI Controls |
 | 2237 | CHG | Implement Phase 13b Direct CLI Resumable Prompt Compaction |
+| 2238 | CHG | Implement Phase 13c Stale Citizen UI Guard |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

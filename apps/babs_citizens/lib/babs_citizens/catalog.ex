@@ -44,6 +44,13 @@ defmodule Babs.Citizens.Catalog do
     Repo.all(from(citizen in CitizenRecord, order_by: [asc: citizen.slug]))
   end
 
+  def list_configured_or_imported_citizens(opts \\ []) do
+    configured_slugs = configured_slug_set(opts)
+
+    list_citizens()
+    |> Enum.filter(&configured_or_imported_record?(&1, configured_slugs))
+  end
+
   def get_by_slug(slug) when is_binary(slug) do
     Repo.get_by(CitizenRecord, slug: slug)
   end
@@ -236,5 +243,19 @@ defmodule Babs.Citizens.Catalog do
       %CitizenRecord{} = record -> {:ok, record}
       nil -> {:error, :not_found}
     end
+  end
+
+  defp configured_or_imported_record?(%CitizenRecord{} = record, %MapSet{} = configured_slugs) do
+    MapSet.member?(configured_slugs, record.slug) or ImportedHardline.external?(record)
+  end
+
+  defp configured_slug_set(opts) do
+    opts
+    |> Keyword.put(:create_cwd, false)
+    |> TomlConfig.list_configs()
+    |> Enum.reduce(MapSet.new(), fn
+      {:ok, %CitizenConfig{slug: slug}}, acc -> MapSet.put(acc, slug)
+      {:error, _reason}, acc -> acc
+    end)
   end
 end
