@@ -23,7 +23,7 @@ It also enforces a discipline specific to Babs: the current foundational ADR set
 
 ## When to Use
 
-- Start of every session in `/Users/frank/Projects/babs/`
+- Start of every session in this repository
 - Before every new task in this repo
 - When the task spans multiple domains and isn't obviously covered by a single COR SOP
 
@@ -76,7 +76,7 @@ Inherits all of COR-1103 §"ALWAYS":
 |---|---|
 | Net-new architecture decision (not covered by existing ADRs) | PRP (COR-1102) → review (COR-1602) → ADR (COR-1100) → file as `BAB-11xx` |
 | Phase implementation spec | PRP (COR-1102) → file as `BAB-22xx`; Phase 2+ sequencing follows `BAB-2300` |
-| Phase delivery after scope is agreed | `BAB-1503` for plan review → TDD/BDD → validation → Trinity code review → PR |
+| Phase delivery after scope is agreed | `COR-1616` reviewed-delivery loop + `BAB-1503` Babs adapter |
 | Citizen seed config | Follow `BAB-2201`, `BAB-1002`, and `BAB-2209` (`citizens/citizen-<slug>.toml` + resolved `workspace_root/<slug>/`) |
 | New citizen archetype beyond Phase 1 seed layout | PRP (COR-1102) first if structurally novel; legacy `BAB-1500` is deferred |
 
@@ -132,14 +132,14 @@ Current post-Phase-1 experimental seed: `elena` uses direct `copilot` through `c
 
 ### Deliver a roadmap phase
 
-Use `BAB-1503` after the phase scope is agreed or when the operator asks to
-start/continue a roadmap phase. It captures the expected loop for Babs phases:
-write/update PRP or CHG, Trinity-review the plan, implement with test pressure,
-run coverage/BDD/E2E/phase gates, Trinity-review code, then create the PR using
-the correct GitHub identity. Once the PR is open, use `COR-1615` for the GitHub
-App PR review bot trigger/status/current-head loop, then `COR-1612` for fetched
-review findings. `BAB-1504` is deprecated historical Babs source material for
-the promoted COR workflow.
+Use `COR-1616` plus `BAB-1503` after the phase scope is agreed or when the
+operator asks to start/continue a roadmap phase. `COR-1616` is the authoritative
+contract-first delivery loop; `BAB-1503` is the Babs adapter that supplies
+Babs-specific contracts, Trinity defaults, validation commands, browser-harness
+settings, and GitHub identity rules. Once the PR is open, use `COR-1615` for
+the GitHub App PR review bot trigger/status/current-head loop, then `COR-1612`
+for fetched review findings. `BAB-1504` is deprecated historical Babs source
+material for the promoted COR workflow.
 
 ---
 
@@ -214,3 +214,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-05 | Replace active open-PR review routing with promoted `COR-1615` plus `COR-1612`; keep `BAB-1504` as deprecated source material | Codex |
 | 2026-05-05 | Phase 2a: route Citizen seed workspace references through configurable `workspace_root` from `BAB-2209` | Codex |
 | 2026-05-07 | Update Elena routing note to direct `copilot` after launch-profile support | Codex |
+| 2026-05-07 | Rebase phase-delivery routing onto promoted `COR-1616` with `BAB-1503` as the Babs adapter | Codex |
