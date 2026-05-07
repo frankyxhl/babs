@@ -7,7 +7,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     record = insert_citizen!(%{slug: "live-up", status: "running"})
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
 
-    [snapshot] = StatusSnapshot.list()
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
 
     assert snapshot.slug == "live-up"
     assert snapshot.live_status == :up
@@ -17,7 +17,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
   test "maps running citizens without live panes to reattaching and waiting" do
     insert_citizen!(%{slug: "reattaching", status: "running"})
 
-    [snapshot] = StatusSnapshot.list()
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
 
     assert snapshot.slug == "reattaching"
     assert snapshot.live_status == :reattaching
@@ -28,7 +28,9 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     insert_citizen!(%{slug: "stopped-one", status: "stopped"})
     insert_citizen!(%{slug: "failed-one", status: "failed", last_error: "redacted boom"})
 
-    snapshots = Map.new(StatusSnapshot.list(), &{&1.slug, &1})
+    snapshots =
+      StatusSnapshot.list(include_stale?: true)
+      |> Map.new(&{&1.slug, &1})
 
     assert snapshots["stopped-one"].live_status == :stopped
     assert snapshots["stopped-one"].visual_state == :paused
@@ -45,7 +47,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, up.slug, nil)
 
     snapshots =
-      StatusSnapshot.list()
+      StatusSnapshot.list(include_stale?: true)
       |> Map.new(&{&1.slug, &1.actions})
 
     assert snapshots["up-one"] == [:open, :full, :stop, :restart]
@@ -88,7 +90,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
       status: "running"
     })
 
-    [snapshot] = StatusSnapshot.list()
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
 
     refute Map.has_key?(snapshot, :env)
     refute inspect(snapshot) =~ "raw-secret-value"
@@ -100,7 +102,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     insert_citizen!(%{slug: "direct-one", ticket_backend: "direct_cli"})
 
     snapshots =
-      StatusSnapshot.list()
+      StatusSnapshot.list(include_stale?: true)
       |> Map.new(&{&1.slug, &1})
 
     assert snapshots["hardline-one"].ticket_backend == "hardline"
@@ -119,7 +121,7 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     insert_citizen!(%{slug: "custom-one", cli: "/opt/homebrew/bin/fish", cli_args: ["-l"]})
 
     labels =
-      StatusSnapshot.list()
+      StatusSnapshot.list(include_stale?: true)
       |> Map.new(&{&1.slug, &1.cli_label})
 
     assert labels["shell-one"] == "shell"
@@ -143,12 +145,38 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     insert_citizen!(%{slug: "external", cwd: external})
 
     snapshots =
-      StatusSnapshot.list(workspace_root: workspace_root)
+      StatusSnapshot.list(workspace_root: workspace_root, include_stale?: true)
       |> Map.new(&{&1.slug, &1})
 
     assert snapshots["clare"].cwd_label == "workspaces/clare"
     assert snapshots["clare"].cwd == in_workspace
     assert snapshots["external"].cwd_label == ".../project"
     assert snapshots["external"].cwd == external
+  end
+
+  test "normal list hides stale SQLite-only rows but keeps configured and imported Citizens" do
+    root = tmp_root!()
+    write_citizen_toml!(root, "clare")
+
+    insert_citizen!(%{slug: "clare", display_name: "Clare"})
+    insert_citizen!(%{slug: "json", display_name: "Json", status: "stopped"})
+
+    insert_citizen!(%{
+      slug: "external",
+      display_name: "External",
+      metadata: %{"hardline" => %{"ownership" => "external"}}
+    })
+
+    slugs =
+      StatusSnapshot.list(root: root, config_dir: "citizens")
+      |> Enum.map(& &1.slug)
+
+    assert slugs == ["clare", "external"]
+
+    raw_slugs =
+      StatusSnapshot.list(root: root, config_dir: "citizens", include_stale?: true)
+      |> Enum.map(& &1.slug)
+
+    assert raw_slugs == ["clare", "external", "json"]
   end
 end
