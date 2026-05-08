@@ -20,6 +20,7 @@ defmodule BabsWeb.Router do
   scope "/", BabsWeb do
     pipe_through(:browser)
 
+    get("/sw.js", PwaController, :service_worker)
     get("/", TerminalController, :index)
     get("/dev/kitchen-sink", TerminalController, :kitchen_sink)
     get("/citizens", TerminalController, :citizens)

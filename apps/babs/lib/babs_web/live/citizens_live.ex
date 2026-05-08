@@ -95,19 +95,20 @@ defmodule BabsWeb.CitizensLive do
     ~H"""
     <style>
       :root {
-        color-scheme: dark;
-        --bg: #0d0d10;
-        --panel: #16181d;
-        --panel-2: #1d2027;
-        --line: #2a2f39;
-        --text: #e7eaf0;
-        --muted: #9da5b4;
-        --field: #0b0c0f;
-        --ok: #43d17d;
-        --wait: #d7ae55;
-        --paused: #9da5b4;
-        --danger: #dc6b6b;
-        --accent: #55b3a6;
+        color-scheme: light;
+        --bg: #f6f8fa;
+        --panel: #ffffff;
+        --panel-2: #f3f4f6;
+        --line: #d0d7de;
+        --line-strong: #8c959f;
+        --text: #1f2328;
+        --muted: #57606a;
+        --field: #ffffff;
+        --ok: #1a7f37;
+        --wait: #9a6700;
+        --paused: #6e7781;
+        --danger: #cf222e;
+        --accent: #0969da;
       }
 
       * { box-sizing: border-box; }
@@ -156,14 +157,14 @@ defmodule BabsWeb.CitizensLive do
       .button {
         border: 1px solid var(--line);
         border-radius: 6px;
-        background: var(--panel-2);
+        background: var(--panel);
         color: var(--text);
         display: inline-flex;
         align-items: center;
         justify-content: center;
         gap: 7px;
-        min-height: 36px;
-        padding: 7px 11px;
+        min-height: 44px;
+        padding: 9px 12px;
         text-decoration: none;
         white-space: nowrap;
       }
@@ -174,7 +175,8 @@ defmodule BabsWeb.CitizensLive do
       }
 
       .button:hover {
-        border-color: var(--accent);
+        border-color: var(--line-strong);
+        background: var(--panel-2);
       }
 
       .button-disabled {
@@ -190,8 +192,14 @@ defmodule BabsWeb.CitizensLive do
       .button-primary {
         border-color: transparent;
         background: var(--accent);
-        color: #07100e;
+        color: #ffffff;
         font-weight: 700;
+      }
+
+      .button-primary:hover {
+        border-color: transparent;
+        background: #0757b8;
+        color: #ffffff;
       }
 
       .button-danger:hover {

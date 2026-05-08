@@ -25,7 +25,7 @@ defmodule BabsWeb.Endpoint do
   plug(Plug.Static,
     at: "/",
     from: :babs,
-    only: ~w(css js)
+    only: ~w(css js icons manifest.webmanifest)
   )
 
   plug(Plug.Session, @session_options)

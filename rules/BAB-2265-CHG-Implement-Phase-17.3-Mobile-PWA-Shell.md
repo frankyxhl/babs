@@ -217,9 +217,8 @@ Keep the BDD setup isolated. Use placeholder hosts and in-process fixtures only.
    - Add tests proving root layout includes manifest/theme/apple metadata.
    - Add endpoint/static tests for `/manifest.webmanifest`, `/sw.js`, and icon
      assets. Include `Cache-Control` expectations for `/sw.js`.
-   - Expand `Plug.Static` allowlist explicitly to the new static extensions this
-     slice needs, expected as `~w(css js png svg webmanifest)`. Note that
-     `Plug.Static` filters by extension, not by subdirectory.
+   - Expand `Plug.Static` allowlist explicitly to the new top-level static paths
+     this slice needs, expected as `~w(css js icons manifest.webmanifest)`.
 
 2. **RED/GREEN: service-worker registration**
    - Add a small browser JS module/function so `npm run test:js` can prove with
@@ -304,9 +303,41 @@ BDD path for Phase 17.3.
     blockers. Folded advisories for `Last updated` headers, 44px touch target
     consistency, 180px `apple-touch-icon`, and service-worker cache version bump
     strategy. Marked CHG Approved.
-- Implementation: Pending.
-- Validation: Pending.
-- Implementation review: Pending.
+- Implementation:
+  - Added root PWA metadata, manifest/icon static serving, and `/sw.js` with
+    `Cache-Control: no-cache`.
+  - Added `pwa_boot.js` so LiveView boot registers the service worker only in
+    secure browser contexts and no-ops on plain HTTP/local-network contexts.
+  - Added a static-shell service worker that caches only known shell assets and
+    bypasses API, LiveView socket, terminal socket, and navigation requests.
+  - Updated Tickets/Citizens mobile surfaces to a light-first palette and 44px
+    touch targets while leaving terminal canvases dark.
+  - Added endpoint/static tests, JS registration tests, and a browser-harness
+    mobile PWA shell BDD scenario.
+- Validation:
+  - PASS: `mise exec -- mix format --check-formatted`
+  - PASS: `mise exec -- mix compile --warnings-as-errors`
+  - PASS: `mise exec -- mix test` (623 tests, 0 failures)
+  - PASS: focused endpoint/Tickets/Citizens/terminal LiveView tests (56 tests, 0
+    failures)
+  - PASS: `npm run test:js` (19 tests, 0 failures)
+  - PASS: `BABS_BDD_SCENARIO='mobile pwa shell' npm run test:bdd`
+  - PASS: `mise exec -- mix test --cover --export-coverage phase17_3` (623
+    tests, 0 failures)
+  - NOTE: plain `mise exec -- mix test --cover` executed the app tests and
+    reported `babs_citizens` coverage at 82.64%, but the local Erlang `:cover`
+    HTML report writer exited while resolving its `tools` stylesheet. This is a
+    report-generation/tooling failure, not a test failure; the non-HTML export
+    path is the recorded cover gate for this run.
+  - PASS: `af validate --root .`
+  - PASS: `git diff --check`
+  - PASS: diff privacy grep for private endpoint data, local paths, and
+    credentials.
+- Implementation review:
+  - Trinity fast-review on 2026-05-09: GLM PASS and DeepSeek PASS with no
+    blockers. Folded advisories for SVG icon serving coverage, explicit
+    service-worker registration Promise handling, dead CSS removal, desktop
+    density for compact buttons, and service-worker cache preload diagnostics.
 - PR review loop: Pending.
 
 ---
@@ -317,3 +348,4 @@ BDD path for Phase 17.3.
 |------|--------|----|
 | 2026-05-09 | Initial Phase 17.3 mobile PWA shell CHG | Codex |
 | 2026-05-09 | Fold Trinity plan review blockers/advisories and mark Approved | Codex |
+| 2026-05-09 | Record implementation, validation, and implementation review results | Codex |
