@@ -1,7 +1,7 @@
 # REF-1004: UI Design Spec
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
+**Last updated:** 2026-05-09
 **Last reviewed:** 2026-05-07
 **Status:** Active
 
@@ -68,6 +68,26 @@ Accepted implementation route for Phase 13a UI correction:
 - do not adopt daisyUI default themes for the main product. It may be evaluated
   later for theme semantics, but Babs should not inherit its default visual
   personality.
+
+## v0.1 Mobile Amendment - Phase 17 (2026-05-09)
+
+The original "What This Spec Does NOT Define" section below said that
+mobile-responsive layouts were out of scope and that v1 was desktop-only. That
+statement is now historical. `BAB-2245` Phase 17 explicitly adds mobile/PWA
+operation over the operator's local/Tailscale network, and `BAB-2265` owns the
+first implementation slice.
+
+Authoritative mobile direction for Phase 17:
+
+- phone browser use must support the same local operator actions as desktop when
+  capability config permits;
+- Tickets, Citizens, remote read sections, and full terminal surfaces must be
+  usable at phone viewport widths;
+- touch controls should target roughly 44px for primary actions where density
+  allows;
+- the light-first token system remains the default; terminal canvases may remain
+  dark/black;
+- mobile offline mutation remains out of scope.
 
 ## Visual Identity
 
@@ -451,7 +471,9 @@ purely terminal, with a thin chrome.
 
 ## What This Spec Does NOT Define
 
-- Mobile-responsive layouts (v1 is desktop-only; the operations console doesn't need a phone view)
+- Full mobile-responsive layouts were originally out of scope, but Phase 17 now
+  owns phone/PWA requirements through `BAB-2245` and implementation CHGs such as
+  `BAB-2265`.
 - Onboarding flows / first-run experience (deferred until there's a "first run" — v1 assumes the operator already knows what they're doing)
 - Multi-user / collaboration features (v1 is single-operator; permissions are out of scope)
 - Localization (English-only v1)
@@ -470,3 +492,4 @@ When any of these become real needs, file a PRP — they each warrant their own 
 | 2026-05-07 | Add light-first UI amendment, define dev kitchen-sink route, and replace dark-only default with light theme tokens | Codex |
 | 2026-05-07 | Accept Tailwind-first UI correction route with Tailwind UI, shadcn token, Petal Components, and Tremor references | Codex |
 | 2026-05-07 | Mark old image-generation prompts as legacy dark-theme references until replacement light prompts are written | Codex |
+| 2026-05-09 | Add Phase 17 mobile amendment superseding the older desktop-only mobile-scope note | Codex |

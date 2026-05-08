@@ -1,7 +1,7 @@
 # PLN-2300: Build Roadmap (v0.1 → v1.0)
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
+**Last updated:** 2026-05-09
 **Last reviewed:** 2026-05-07
 **Status:** Active
 **Replaces:** Earlier 5-phase roadmap (Discord/Telegram + cross-machine A2A)
@@ -372,8 +372,9 @@ tickets root with role routing metadata preserved.
 **Planning doc**: `BAB-2245` PRP
 **Current status**: Approved PRP after Trinity R2 fast-review with GLM and
 DeepSeek PASS. Phase 17.1 merged via `BAB-2263` for node identity and the
-read-only federation API. Phase 17.2 has `BAB-2264` as the proposed
-implementation CHG for real-time remote reads.
+read-only federation API. Phase 17.2 merged via `BAB-2264` for real-time remote
+reads. Phase 17.3 has `BAB-2265` as the proposed implementation CHG for the
+mobile/PWA shell.
 **Scope**: Build the mobile and federation product layer. Add configurable node
 identity and peer nodes, start with real-time remote reads, make Babs usable as
 an installable mobile/PWA on the Tailscale network, and add explicitly
@@ -516,4 +517,5 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Add `BAB-2245` Phase 17 PRP and update federation scope from read-only PWA polish to mobile plus explicitly configured remote control | Codex |
 | 2026-05-09 | Mark Phase 16 merged through 16.4 and add `BAB-2263` Phase 17.1 node identity/read API CHG | Codex |
 | 2026-05-09 | Mark Phase 17.1 merged and add `BAB-2264` Phase 17.2 real-time remote reads CHG | Codex |
+| 2026-05-09 | Mark Phase 17.2 merged and add `BAB-2265` Phase 17.3 mobile/PWA shell CHG | Codex |
 | 2026-05-08 | Add `BAB-2246` Phase 13f.1 implementation CHG for Provider Runtime Contract and inventory | Codex |
