@@ -267,6 +267,17 @@ PR.
     in `inspection_failed.error`.
   - Focused event/API tests passed with 53 tests.
   - Full ExUnit and stable exported coverage gates passed after the fix.
+- 2026-05-08 GitHub Codex review R2:
+  - Fixed P3 inspection id generation bug: `InspectionEvents.new_id/2` now
+    formats arbitrary `DateTime` structs via Unix seconds instead of
+    `DateTime.shift_zone!/2`, avoiding timezone database failures for non-UTC
+    named zones.
+  - Added non-UTC DateTime regression coverage.
+  - Post-fix validation passed: focused event tests with 14 tests,
+    `mix format --check-formatted`, `mix compile --warnings-as-errors`, full
+    `mix test` with 397 `:babs_citizens` tests and 88 `:babs` tests, exported
+    coverage at `:babs_citizens` 84.52% and `:babs` 89.27%, `af validate`,
+    `git diff --check`, and added-line privacy scan.
 
 ## Change History
 
@@ -279,3 +290,4 @@ PR.
 | 2026-05-08 | Fold Trinity implementation R1 advisories and rerun focused/full validation | Codex |
 | 2026-05-08 | Trinity implementation R2 passed GLM and DeepSeek | Codex |
 | 2026-05-08 | Fixed GitHub Codex R1 P2 for redacted inspection failure reasons | Codex |
+| 2026-05-08 | Fixed GitHub Codex R2 P3 for non-UTC inspection id timestamps | Codex |

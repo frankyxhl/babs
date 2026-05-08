@@ -22,6 +22,25 @@ defmodule Babs.Citizens.Tickets.InspectionEventsTest do
     assert InspectionEvents.new_id(@now, unique: 43) =~ ~r/^insp_20260508000000_\d+$/
   end
 
+  test "generates ids from non-UTC DateTime structs without a timezone database" do
+    tokyo_datetime = %DateTime{
+      calendar: Calendar.ISO,
+      year: 2026,
+      month: 5,
+      day: 8,
+      hour: 9,
+      minute: 0,
+      second: 0,
+      microsecond: {0, 0},
+      std_offset: 0,
+      utc_offset: 32_400,
+      time_zone: "Asia/Tokyo",
+      zone_abbr: "JST"
+    }
+
+    assert InspectionEvents.new_id(tokyo_datetime, unique: 42) == @inspection_id
+  end
+
   test "builds appendable inspection_requested events" do
     assert {:ok, event} =
              InspectionEvents.requested(@id, @inspection_id, @policy, ["clare"], now: @now)

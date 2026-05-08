@@ -191,7 +191,8 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
 
   defp format_datetime(datetime) do
     datetime
-    |> DateTime.shift_zone!("Etc/UTC")
+    |> DateTime.to_unix(:second)
+    |> DateTime.from_unix!(:second)
     |> then(fn dt ->
       [
         dt.year,
