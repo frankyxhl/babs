@@ -6,7 +6,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
   use GenServer
 
   alias Babs.Citizens.{ExecutionLock, ProviderSessions}
-  alias Babs.Citizens.DirectCli.{Adapters, Env, Executor, Redactor}
+  alias Babs.Citizens.DirectCli.{Adapters, Env, Executor}
+  alias Babs.Citizens.ProviderRuntime.Diagnostics
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.TurnIds
 
@@ -140,7 +141,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
       persist_successful_turn(started, turn, result)
     else
       {:error, reason} ->
-        _ignored = ProviderSessions.mark_failed(started, reason)
+        _ignored = ProviderSessions.mark_failed(started, reason, secret_opts(turn.config))
         handle_direct_failure(turn, reason, opts)
     end
   end
@@ -384,7 +385,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
       "turn_id" => turn.turn_id,
       "attempt_id" => turn.attempt_id,
       "by_citizen" => turn.slug,
-      "error" => Redactor.redact_text(inspect(reason), secret_opts(turn.config))
+      "error" => diagnostic_summary(reason, turn)
     }
   end
 
@@ -398,14 +399,16 @@ defmodule Babs.Citizens.DirectCli.Runner do
       "attempt_id" => turn.attempt_id,
       "to" => turn.slug,
       "backend" => turn.backend || "direct_cli",
-      "error" => Redactor.redact_text(inspect(reason), secret_opts(turn.config))
+      "error" => diagnostic_summary(reason, turn)
     }
   end
 
   defp maybe_error(event, nil, _turn), do: event
 
   defp maybe_error(event, reason, turn),
-    do: Map.put(event, "error", Redactor.redact_text(inspect(reason), secret_opts(turn.config)))
+    do: Map.put(event, "error", diagnostic_summary(reason, turn))
+
+  defp diagnostic_summary(reason, turn), do: Diagnostics.summary(reason, secret_opts(turn.config))
 
   defp maybe_provider_session_id(event, session_id)
        when is_binary(session_id) and session_id != "",
