@@ -1428,12 +1428,17 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp proposal_review_action(root, id, opts, fun) do
     with {:ok, ticket} <- Store.read_ticket(root, id, opts),
          {:ok, history} <- History.read(root, id),
-         event_opts <- [now: now(opts), by: by(opts)],
+         event_opts <- proposal_event_opts(opts),
          {:ok, event} <- fun.(ticket, history, event_opts),
          :ok <- validate_events(id, [event]),
          :ok <- append_events(root, id, [event]) do
       {:ok, %{event: event}}
     end
+  end
+
+  defp proposal_event_opts(opts) do
+    [now: now(opts), by: by(opts)]
+    |> Keyword.merge(Keyword.take(opts, [:proposal_revision]))
   end
 
   defp request_inspection_once(root, id, opts) do

@@ -63,5 +63,8 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:mayor_proposal_review, {:invalid_policy, {:invalid_mayor, 42}}}) ==
              "Invalid Mayor policy: {:invalid_mayor, 42}"
+
+    assert Error.message({:mayor_proposal_review, {:stale_proposal_revision, "new", "old"}}) ==
+             "Mayor proposal changed; refresh before editing again"
   end
 end

@@ -74,6 +74,9 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:mayor_proposal_review, {:stale_proposal_id, expected, actual}}),
     do: "Mayor proposal changed: expected #{expected}, got #{actual}"
 
+  def message({:mayor_proposal_review, {:stale_proposal_revision, _expected, _actual}}),
+    do: "Mayor proposal changed; refresh before editing again"
+
   def message({:mayor_proposal_review, {:invalid_child_index, index}}),
     do: "Invalid proposal child index: #{inspect(index)}"
 

@@ -99,14 +99,16 @@ defmodule BabsWeb.TicketLive do
 
   def handle_event(
         "proposal_edit_child",
-        %{"proposal_id" => proposal_id, "child_index" => child_index, "child" => attrs},
+        %{"proposal_id" => proposal_id, "child_index" => child_index, "child" => attrs} = params,
         socket
       ) do
     case parse_index(child_index) do
       {:ok, index} ->
         {:noreply,
          start_ticket_action(socket, {:proposal_edit_child, index}, fn ->
-           Api.revise_mayor_proposal_child(socket.assigns.id, proposal_id, index, attrs)
+           Api.revise_mayor_proposal_child(socket.assigns.id, proposal_id, index, attrs,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
          end)}
 
       :error ->
@@ -116,14 +118,16 @@ defmodule BabsWeb.TicketLive do
 
   def handle_event(
         "proposal_remove_child",
-        %{"proposal_id" => proposal_id, "child_index" => child_index},
+        %{"proposal_id" => proposal_id, "child_index" => child_index} = params,
         socket
       ) do
     case parse_index(child_index) do
       {:ok, index} ->
         {:noreply,
          start_ticket_action(socket, {:proposal_remove_child, index}, fn ->
-           Api.remove_mayor_proposal_child(socket.assigns.id, proposal_id, index)
+           Api.remove_mayor_proposal_child(socket.assigns.id, proposal_id, index,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
          end)}
 
       :error ->
@@ -131,16 +135,18 @@ defmodule BabsWeb.TicketLive do
     end
   end
 
-  def handle_event("proposal_approve", %{"proposal_id" => proposal_id}, socket) do
+  def handle_event("proposal_approve", %{"proposal_id" => proposal_id} = params, socket) do
     {:noreply,
      start_ticket_action(socket, :proposal_approve, fn ->
-       Api.approve_mayor_proposal(socket.assigns.id, proposal_id)
+       Api.approve_mayor_proposal(socket.assigns.id, proposal_id,
+         proposal_revision: Map.get(params, "proposal_revision")
+       )
      end)}
   end
 
   def handle_event(
         "proposal_reject",
-        %{"proposal_id" => proposal_id, "feedback" => feedback},
+        %{"proposal_id" => proposal_id, "feedback" => feedback} = params,
         socket
       ) do
     case String.trim(feedback || "") do
@@ -150,7 +156,9 @@ defmodule BabsWeb.TicketLive do
       value ->
         {:noreply,
          start_ticket_action(socket, :proposal_reject, fn ->
-           Api.reject_mayor_proposal(socket.assigns.id, proposal_id, value)
+           Api.reject_mayor_proposal(socket.assigns.id, proposal_id, value,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
          end)}
     end
   end
@@ -535,6 +543,7 @@ defmodule BabsWeb.TicketLive do
                     data-testid={"ticket-proposal-edit-#{child.index}"}
                   >
                     <input type="hidden" name="proposal_id" value={@proposal_panel.proposal_id} />
+                    <input type="hidden" name="proposal_revision" value={@proposal_panel.revision_token} />
                     <input type="hidden" name="child_index" value={child.index} />
                     <label>
                       Title
@@ -580,6 +589,7 @@ defmodule BabsWeb.TicketLive do
                         class="ks-button danger"
                         phx-click="proposal_remove_child"
                         phx-value-proposal_id={@proposal_panel.proposal_id}
+                        phx-value-proposal_revision={@proposal_panel.revision_token}
                         phx-value-child_index={child.index}
                         disabled={ticket_action_busy?(@ticket_action_inflight)}
                         data-testid={"ticket-proposal-remove-#{child.index}"}
@@ -600,6 +610,7 @@ defmodule BabsWeb.TicketLive do
                   data-testid="ticket-proposal-reject-form"
                 >
                   <input type="hidden" name="proposal_id" value={@proposal_panel.proposal_id} />
+                  <input type="hidden" name="proposal_revision" value={@proposal_panel.revision_token} />
                   <textarea name="feedback" rows="3" required placeholder="Why reject this proposal?"></textarea>
                   <button
                     type="submit"
@@ -616,6 +627,7 @@ defmodule BabsWeb.TicketLive do
                   class="ks-button primary"
                   phx-click="proposal_approve"
                   phx-value-proposal_id={@proposal_panel.proposal_id}
+                  phx-value-proposal_revision={@proposal_panel.revision_token}
                   disabled={ticket_action_busy?(@ticket_action_inflight)}
                   data-testid="ticket-proposal-approve"
                   aria-label="Approve proposal"

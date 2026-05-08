@@ -6,6 +6,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.InspectionEvents
+  alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
 
@@ -153,6 +154,8 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
                tickets_root: root
              )
 
+    first_revision = proposal_revision(root, ticket.id)
+
     assert {:ok, %{event: revised}} =
              Api.revise_mayor_proposal_child(
                ticket.id,
@@ -160,24 +163,31 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
                0,
                %{title: "Build API", inspector: "auto"},
                tickets_root: root,
+               proposal_revision: first_revision,
                now: "2026-05-08T00:02:00Z"
              )
 
     assert revised["event"] == "mayor_proposal_revised"
     assert revised["proposal"]["children"] |> hd() |> Map.fetch!("title") == "Build API"
 
+    second_revision = proposal_revision(root, ticket.id)
+
     assert {:ok, %{event: removed}} =
              Api.remove_mayor_proposal_child(ticket.id, "prop_review", 1,
                tickets_root: root,
+               proposal_revision: second_revision,
                now: "2026-05-08T00:03:00Z"
              )
 
     assert removed["action"] == "remove_child"
     assert length(removed["proposal"]["children"]) == 1
 
+    third_revision = proposal_revision(root, ticket.id)
+
     assert {:ok, %{event: approved}} =
              Api.approve_mayor_proposal(ticket.id, "prop_review",
                tickets_root: root,
+               proposal_revision: third_revision,
                now: "2026-05-08T00:04:00Z"
              )
 
@@ -237,8 +247,29 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert {:error, {:mayor_proposal_review, {:stale_proposal_id, "prop_review", "old"}}} =
              Api.approve_mayor_proposal(ticket.id, "old", tickets_root: root)
 
+    stale_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: _revised}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_review", 0, %{title: "Build API"},
+               tickets_root: root,
+               proposal_revision: stale_revision
+             )
+
+    assert {:error,
+            {:mayor_proposal_review,
+             {:stale_proposal_revision, _current_revision, ^stale_revision}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_review",
+               tickets_root: root,
+               proposal_revision: stale_revision
+             )
+
+    fresh_revision = proposal_revision(root, ticket.id)
+
     assert {:ok, %{event: approved}} =
-             Api.approve_mayor_proposal(ticket.id, "prop_review", tickets_root: root)
+             Api.approve_mayor_proposal(ticket.id, "prop_review",
+               tickets_root: root,
+               proposal_revision: fresh_revision
+             )
 
     assert approved["event"] == "mayor_proposal_approved"
 
@@ -277,6 +308,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert Enum.map(history, & &1["event"]) == [
              "created",
              "mayor_proposal_received",
+             "mayor_proposal_revised",
              "mayor_proposal_approved"
            ]
   end
@@ -1789,6 +1821,14 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
       "proposal_id" => proposal["proposal_id"],
       "proposal" => proposal
     }
+  end
+
+  defp proposal_revision(root, ticket_id) do
+    assert {:ok, %{ticket: ticket, history: history}} =
+             Api.show_ticket(ticket_id, tickets_root: root)
+
+    assert {:ok, state} = MayorProposalReview.from_history(ticket, history)
+    state.revision_token
   end
 
   defp with_role_catalog(fun) do

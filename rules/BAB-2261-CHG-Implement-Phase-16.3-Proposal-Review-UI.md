@@ -94,8 +94,10 @@ execution code without introducing a second source of truth.
   authoritative; oversized proposal or revision events propagate
   `{:history_event_too_large, ticket_id}` without rewriting Ticket markdown.
 - Multiple browser sessions can edit the same proposal. Every review action must
-  include the expected `proposal_id`; stale proposal ids or stale child indexes
-  fail with stable errors and append no history event.
+  include the expected `proposal_id`; UI-originated actions also include a
+  revision token derived from the latest proposal event snapshot. Stale
+  proposal ids, stale revision tokens, or stale child indexes fail with stable
+  errors and append no history event.
 - A root Ticket has one active proposal in Phase 16.3. A newer
   `mayor_proposal_received` or `mayor_proposal_revised` event supersedes older
   active proposals; approval/rejection applies only to the latest active
@@ -264,16 +266,17 @@ For `"remove_child"`, `child_index` is the index in the pre-removal child list.
    - Accept proposal review actions only while the root Ticket is non-terminal;
      `closed` or `cancelled` Tickets reject edit/remove/approve/reject attempts
      without appending history.
-   - Return stable nested errors for no proposal, invalid proposal, stale
-     proposal id, invalid child index, invalid edit, empty feedback, and already
-     decided proposals.
-   - Use these error shapes:
-     - `{:mayor_proposal_review, :no_proposal}`;
-     - `{:mayor_proposal_review, {:invalid_proposal, reason}}`;
-     - `{:mayor_proposal_review, {:stale_proposal_id, expected, actual}}`;
-     - `{:mayor_proposal_review, {:invalid_child_index, index}}`;
-     - `{:mayor_proposal_review, {:invalid_edit, reason}}`;
-     - `{:mayor_proposal_review, :empty_feedback}`;
+  - Return stable nested errors for no proposal, invalid proposal, stale
+    proposal id, stale proposal revision, invalid child index, invalid edit,
+    empty feedback, and already decided proposals.
+  - Use these error shapes:
+    - `{:mayor_proposal_review, :no_proposal}`;
+    - `{:mayor_proposal_review, {:invalid_proposal, reason}}`;
+    - `{:mayor_proposal_review, {:stale_proposal_id, expected, actual}}`;
+    - `{:mayor_proposal_review, {:stale_proposal_revision, expected, actual}}`;
+    - `{:mayor_proposal_review, {:invalid_child_index, index}}`;
+    - `{:mayor_proposal_review, {:invalid_edit, reason}}`;
+    - `{:mayor_proposal_review, :empty_feedback}`;
      - `{:mayor_proposal_review, {:already_decided, status}}`.
    - Add API/Writer tests proving history append behavior and that approval
      does not create child Ticket files.
@@ -309,10 +312,13 @@ For `"remove_child"`, `child_index` is the index in the pre-removal child list.
    - Render the graph/tree as a compact indented tree: one root node showing
      the root Ticket id/title and one child node per proposed child showing its
      title and route label.
-   - Render validation errors in the existing flash error surface and keep
-     field-level `data-testid` hooks on the relevant child form row.
-   - Disable edit/remove/approve/reject controls after proposal rejection or
-     approval.
+  - Render validation errors in the existing flash error surface and keep
+    field-level `data-testid` hooks on the relevant child form row.
+  - Include the proposal revision token in proposal edit/remove/reject/approve
+    submissions so stale browser sessions cannot apply an indexed child edit to
+    a newer child list.
+  - Disable edit/remove/approve/reject controls after proposal rejection or
+    approval.
    - Add LiveView tests for Mayor-ready awaiting state, proposal render,
      validation errors, edit/remove, rejection, approval, icons, and no child
      Ticket creation.
@@ -424,6 +430,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added user-facing proposal review errors, including invalid policy,
     invalid proposal, stale proposal, invalid edit, empty feedback, already
     decided, and terminal Ticket cases.
+  - Added proposal revision tokens for UI-originated review actions so stale
+    browser sessions cannot apply an indexed edit/remove/approve/reject action
+    to a newer proposal snapshot.
   - Added `TicketPresenter.proposal_panel/2` and Ticket detail LiveView
     rendering for Mayor-ready, invalid, pending, approved, and rejected
     proposal states.
@@ -432,14 +441,14 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added tests for pure review reduction, API/Writer append behavior,
     Presenter state projection, and LiveView edit/remove/reject/approve flows.
 - 2026-05-08 validation:
-  - Focused Phase 16.3 suite passed: 77 tests.
+  - Focused Phase 16.3 suite passed: 80 tests.
   - `mise exec -- mix format --check-formatted` passed.
   - `mise exec -- mix compile --warnings-as-errors` passed.
   - `mise exec -- mix test --max-cases 1` passed: `babs_citizens` 468 tests,
-    `babs` 102 tests.
-  - `mise exec -- mix test` passed: `babs_citizens` 468 tests, `babs` 102
+    `babs` 103 tests.
+  - `mise exec -- mix test` passed: `babs_citizens` 468 tests, `babs` 103
     tests.
-  - Coverage passed: `babs_citizens` 86.18%, `babs` 89.14%.
+  - Coverage passed: `babs_citizens` 86.22%, `babs` 88.87%.
   - `npm run test:js` passed: 15 tests.
   - `npm run test:bdd` was attempted for regression signal but browser-harness
     produced no scenario output and was interrupted after the connector stalled;
@@ -467,6 +476,16 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Final implementation packet:
     `.trinity/reviews/20260508-223154-Phase-16.3-proposal-review-ui`.
     GLM PASS and DeepSeek PASS, with no blocking findings.
+- 2026-05-08 GitHub Codex review loop:
+  - PR #54 review on commit `11a5a3b2fa` reported one P2 finding: indexed
+    child edits could be stale when another browser session had already
+    revised the proposal without changing `proposal_id`.
+  - Fixed by deriving a `revision_token` from the latest proposal event
+    snapshot, submitting it with proposal edit/remove/reject/approve controls,
+    and rejecting stale revision tokens in the Writer path after history is
+    re-read but before appending a new event.
+  - Added pure reducer, API/Writer, and LiveView regression tests for stale
+    proposal revision handling.
 
 ---
 

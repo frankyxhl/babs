@@ -162,6 +162,7 @@ defmodule BabsWeb.TicketPresenter do
       status: state.status,
       actionable?: state.status == :pending,
       proposal_id: state.proposal_id,
+      revision_token: state.revision_token,
       summary: proposal["summary"],
       rules_refs: list(proposal["rules_refs_used"]),
       roles: proposal_roles(children),

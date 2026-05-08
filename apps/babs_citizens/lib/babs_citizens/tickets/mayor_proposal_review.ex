@@ -27,6 +27,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
                policy: policy,
                proposal: proposal,
                proposal_id: proposal["proposal_id"],
+               revision_token: revision_token(event),
                source_event: event,
                decision: decision,
                feedback: decision && decision["feedback"]
@@ -39,7 +40,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
   @spec revise_child(map(), [map()], String.t(), non_neg_integer(), map() | keyword(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def revise_child(ticket, history, proposal_id, child_index, attrs, opts \\ []) do
-    with {:ok, state} <- pending_state(ticket, history, proposal_id),
+    with {:ok, state} <- pending_state(ticket, history, proposal_id, opts),
          {:ok, children} <- replace_child(state.proposal["children"], child_index, attrs),
          proposal <- Map.put(state.proposal, "children", children),
          {:ok, proposal} <- normalize_proposal(proposal, state.policy) do
@@ -57,7 +58,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
   @spec remove_child(map(), [map()], String.t(), non_neg_integer(), keyword()) ::
           {:ok, map()} | {:error, term()}
   def remove_child(ticket, history, proposal_id, child_index, opts \\ []) do
-    with {:ok, state} <- pending_state(ticket, history, proposal_id),
+    with {:ok, state} <- pending_state(ticket, history, proposal_id, opts),
          {:ok, children} <- remove_child_at(state.proposal["children"], child_index),
          proposal <- Map.put(state.proposal, "children", children),
          {:ok, proposal} <- normalize_proposal(proposal, state.policy) do
@@ -81,7 +82,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
 
   @spec approve(map(), [map()], String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def approve(ticket, history, proposal_id, opts \\ []) do
-    with {:ok, state} <- pending_state(ticket, history, proposal_id) do
+    with {:ok, state} <- pending_state(ticket, history, proposal_id, opts) do
       {:ok, proposal_event(ticket, "mayor_proposal_approved", state.proposal, opts)}
     end
   end
@@ -90,7 +91,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
           {:ok, map()} | {:error, term()}
   def reject(ticket, history, proposal_id, feedback, opts \\ []) do
     with {:ok, feedback} <- feedback(feedback),
-         {:ok, state} <- pending_state(ticket, history, proposal_id) do
+         {:ok, state} <- pending_state(ticket, history, proposal_id, opts) do
       event =
         ticket
         |> proposal_event("mayor_proposal_rejected", state.proposal, opts)
@@ -100,11 +101,12 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
     end
   end
 
-  defp pending_state(ticket, history, proposal_id) do
+  defp pending_state(ticket, history, proposal_id, opts) do
     with :ok <- ensure_non_terminal(ticket),
          {:ok, state} <- from_history(ticket, history),
          :ok <- ensure_has_proposal(state),
          :ok <- ensure_proposal_id(state.proposal_id, proposal_id),
+         :ok <- ensure_revision(state, opts),
          :ok <- ensure_pending(state) do
       {:ok, state}
     end
@@ -188,6 +190,23 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
 
   defp ensure_proposal_id(expected, actual),
     do: {:error, {:mayor_proposal_review, {:stale_proposal_id, expected, actual}}}
+
+  defp ensure_revision(state, opts) do
+    case Keyword.get(opts, :proposal_revision) do
+      nil ->
+        :ok
+
+      "" ->
+        :ok
+
+      submitted when submitted == state.revision_token ->
+        :ok
+
+      submitted ->
+        {:error,
+         {:mayor_proposal_review, {:stale_proposal_revision, state.revision_token, submitted}}}
+    end
+  end
 
   defp ensure_pending(%{status: :pending}), do: :ok
 
@@ -319,4 +338,12 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
 
   defp by(opts), do: Keyword.get(opts, :by, "user")
   defp now(opts), do: Keyword.get(opts, :now, DateTime.utc_now(:second) |> DateTime.to_iso8601())
+
+  defp revision_token(event) do
+    event
+    |> Map.take(["event", "proposal_id", "proposal", "ts"])
+    |> :erlang.term_to_binary()
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.url_encode64(padding: false)
+  end
 end

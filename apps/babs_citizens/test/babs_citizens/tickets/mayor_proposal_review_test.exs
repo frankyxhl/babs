@@ -21,6 +21,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReviewTest do
 
     assert pending.status == :pending
     assert pending.proposal_id == "prop_first"
+    assert is_binary(pending.revision_token)
 
     assert Enum.map(pending.proposal["children"], & &1["title"]) == [
              "Build backend",
@@ -136,6 +137,34 @@ defmodule Babs.Citizens.Tickets.MayorProposalReviewTest do
 
     assert {:error, {:mayor_proposal_review, {:stale_proposal_id, "prop_demo", "prop_old"}}} =
              MayorProposalReview.approve(ticket, history, "prop_old")
+
+    assert {:ok, state_before_revision} = MayorProposalReview.from_history(ticket, history)
+
+    revised_history =
+      history ++
+        [
+          revised(proposal("prop_demo", ["Build backend", "Build frontend"]),
+            action: "edit_child",
+            child_index: 0
+          )
+        ]
+
+    assert {:ok, state_after_revision} = MayorProposalReview.from_history(ticket, revised_history)
+
+    assert {:error,
+            {:mayor_proposal_review,
+             {:stale_proposal_revision, current_revision, submitted_revision}}} =
+             MayorProposalReview.revise_child(
+               ticket,
+               revised_history,
+               "prop_demo",
+               0,
+               %{title: "Stale edit"},
+               proposal_revision: state_before_revision.revision_token
+             )
+
+    assert current_revision == state_after_revision.revision_token
+    assert submitted_revision == state_before_revision.revision_token
 
     assert {:error, {:mayor_proposal_review, {:invalid_child_index, 2}}} =
              MayorProposalReview.revise_child(ticket, history, "prop_demo", 2, %{title: "Nope"})

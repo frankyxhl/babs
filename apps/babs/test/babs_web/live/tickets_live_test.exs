@@ -790,6 +790,7 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-testid="ticket-proposal-child-0")
     assert html =~ "Build backend"
     assert html =~ "Build UI"
+    assert html =~ ~s(name="proposal_revision")
     assert html =~ ~s(data-icon="git-branch")
     assert html =~ ~s(data-icon="edit")
     assert html =~ ~s(data-icon="trash")
@@ -876,6 +877,43 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "Needs a smaller slice."
     assert html =~ "rejected"
     refute html =~ ~s(data-testid="ticket-proposal-approve")
+  end
+
+  test "ticket detail rejects stale proposal revision submissions", %{root: root} do
+    ticket =
+      create_ticket!(root, "Mayor stale mission", "Reject stale proposal edits.",
+        type: "mission",
+        metadata: mayor_metadata()
+      )
+
+    proposal = proposal(ticket.id, "prop_stale", ["Build backend", "Build UI"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    assert html =~ ~s(name="proposal_revision")
+
+    assert {:ok, %{event: _revision}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_stale", 0, %{title: "Fresh API"},
+               tickets_root: root
+             )
+
+    view
+    |> form(~s(form[data-testid="ticket-proposal-edit-0"]),
+      child: %{
+        title: "Stale API",
+        body: "This form came from an older browser state.",
+        assignee_role: "developer",
+        priority: "normal",
+        inspector: "user"
+      }
+    )
+    |> render_submit()
+
+    assert render_async(view, 1_000) =~ "Mayor proposal changed; refresh before editing again"
   end
 
   defp create_ticket!(root, title, body, opts \\ []) do
