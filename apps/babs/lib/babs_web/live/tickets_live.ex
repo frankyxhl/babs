@@ -5,20 +5,32 @@ defmodule BabsWeb.TicketsLive do
 
   use Phoenix.LiveView
 
+  alias Babs.Citizens.Federation.PeerClient
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.Watcher
   alias BabsWeb.CitizenPath
   alias BabsWeb.TicketPath
   alias BabsWeb.TicketPresenter
 
+  @remote_refresh_ms 5_000
+
   @impl true
   def mount(_params, session, socket) do
-    if connected?(socket), do: Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, Watcher.topic())
+    if connected?(socket) do
+      Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, Watcher.topic())
+      schedule_remote_refresh()
+    end
 
-    {:ok,
-     socket
-     |> assign(:socket_token, Map.get(session, "socket_token", ""))
-     |> assign_tickets()}
+    socket =
+      socket
+      |> assign(:socket_token, Map.get(session, "socket_token", ""))
+      |> assign(:remote_peer, nil)
+      |> assign(:remote_peer_inflight, false)
+      |> assign_tickets()
+
+    socket = if connected?(socket), do: start_remote_peer_fetch(socket), else: socket
+
+    {:ok, socket}
   end
 
   @impl true
@@ -31,7 +43,25 @@ defmodule BabsWeb.TicketsLive do
     {:noreply, assign_tickets(socket)}
   end
 
+  def handle_info(:refresh_remote_peer, socket) do
+    if connected?(socket) do
+      schedule_remote_refresh()
+      {:noreply, start_remote_peer_fetch(socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_async(:remote_peer, {:ok, peer}, socket) do
+    {:noreply, socket |> assign(:remote_peer_inflight, false) |> assign(:remote_peer, peer)}
+  end
+
+  def handle_async(:remote_peer, {:exit, _reason}, socket) do
+    {:noreply, assign(socket, :remote_peer_inflight, false)}
+  end
 
   @impl true
   def render(assigns) do
@@ -129,6 +159,39 @@ defmodule BabsWeb.TicketsLive do
             </article>
           </div>
         </section>
+
+        <section :if={@remote_peer} class="remote-node" data-testid="remote-peer-tickets">
+          <header class="remote-node-header">
+            <h2 class="remote-node-title">
+              <BabsWeb.Icon.icon name="route" />
+              <span>{remote_node_label(@remote_peer)}</span>
+            </h2>
+            <div class="remote-badges">
+              <span class="remote-badge remote-badge-readonly">Read-only</span>
+              <span class={["remote-badge", remote_status_class(@remote_peer)]}>
+                {remote_status(@remote_peer)}
+              </span>
+            </div>
+          </header>
+
+          <div class="remote-ticket-list" data-testid="remote-ticket-list">
+            <article
+              :for={ticket <- @remote_peer.tickets}
+              class="remote-ticket-row"
+              data-testid={"remote-ticket-#{remote_value(ticket, "id")}"}
+            >
+              <div class="remote-main">
+                <BabsWeb.Icon.icon name="file-text" />
+                <span>{remote_value(ticket, "title") || remote_value(ticket, "id")}</span>
+              </div>
+              <div class="remote-meta">{remote_value(ticket, "id")}</div>
+              <div class="remote-meta">{remote_value(ticket, "state")}</div>
+            </article>
+            <div :if={@remote_peer.tickets == []} class="remote-meta" data-testid="remote-tickets-empty">
+              No remote Tickets.
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -153,6 +216,69 @@ defmodule BabsWeb.TicketsLive do
         |> assign(:counts, %{})
         |> assign(:error, TicketPresenter.error_message(reason))
     end
+  end
+
+  defp start_remote_peer_fetch(socket) do
+    if socket.assigns.remote_peer_inflight do
+      socket
+    else
+      previous_peer = Map.get(socket.assigns, :remote_peer)
+
+      socket
+      |> assign(:remote_peer_inflight, true)
+      |> start_async(:remote_peer, fn -> remote_peer(previous_peer) end)
+    end
+  end
+
+  defp remote_peer(previous_peer) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:remote_peer_provider, &default_remote_peer/1)
+    |> call_remote_peer_provider(previous_peer)
+  end
+
+  defp call_remote_peer_provider(provider, previous_peer) when is_function(provider, 1),
+    do: provider.(previous_peer)
+
+  defp call_remote_peer_provider(provider, _previous_peer) when is_function(provider, 0),
+    do: provider.()
+
+  defp default_remote_peer(previous_peer) do
+    case PeerClient.fetch_first_peer(previous_snapshot: previous_peer) do
+      {:ok, peer} -> peer
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp remote_node_label(peer) do
+    node = Map.get(peer, :node, %{})
+    Map.get(node, "name") || Map.get(peer, :peer_name) || Map.get(peer, :peer_id) || "Remote Babs"
+  end
+
+  defp remote_status(peer), do: peer |> remote_status_key() |> String.replace("_", " ")
+
+  defp remote_status_class(peer), do: "remote-badge-#{remote_status_key(peer)}"
+
+  defp remote_status_key(peer) do
+    case Map.get(peer, :status) do
+      status when is_atom(status) -> Atom.to_string(status)
+      status when is_binary(status) -> status
+      _status -> "unknown"
+    end
+  end
+
+  defp remote_value(map, key) when is_map(map),
+    do: Map.get(map, key) || remote_atom_value(map, key)
+
+  defp remote_value(_map, _key), do: nil
+
+  defp remote_atom_value(map, "id"), do: Map.get(map, :id)
+  defp remote_atom_value(map, "title"), do: Map.get(map, :title)
+  defp remote_atom_value(map, "state"), do: Map.get(map, :state)
+  defp remote_atom_value(_map, _key), do: nil
+
+  defp schedule_remote_refresh do
+    Process.send_after(self(), :refresh_remote_peer, @remote_refresh_ms)
   end
 
   def styles do
@@ -268,15 +394,81 @@ defmodule BabsWeb.TicketsLive do
     .state-pending_approval { color: var(--accent); }
     .state-closed { color: var(--done); }
     .state-cancelled { color: var(--danger); }
+    .remote-node {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 12px;
+    }
+    .remote-node-header, .remote-badges {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-width: 0;
+    }
+    .remote-node-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      margin: 0;
+      font-size: 16px;
+    }
+    .remote-node-title span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .remote-badges { justify-content: flex-end; flex-wrap: wrap; }
+    .remote-badge {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .remote-badge-readonly { color: var(--wait); }
+    .remote-badge-fresh { color: var(--ok); }
+    .remote-badge-stale { color: var(--wait); }
+    .remote-badge-unreachable, .remote-badge-config_error { color: var(--danger); }
+    .remote-ticket-list { display: grid; gap: 8px; }
+    .remote-ticket-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.7fr) minmax(110px, 0.45fr);
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 10px;
+    }
+    .remote-main, .remote-meta {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .remote-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 700;
+    }
+    .remote-meta { color: var(--muted); font-size: 13px; }
     @media (max-width: 900px) {
       .ticket-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .ticket-row, .ticket-row-invalid { grid-template-columns: minmax(0, 1fr); align-items: start; }
+      .ticket-row, .ticket-row-invalid, .remote-ticket-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
       .tickets-header { flex-direction: column; }
-      .tickets-nav { justify-content: flex-start; flex-wrap: wrap; }
+      .tickets-nav, .remote-badges { justify-content: flex-start; flex-wrap: wrap; }
     }
     @media (max-width: 560px) {
       .tickets-page { padding: 18px 10px; }
       .ticket-counts { grid-template-columns: 1fr; }
+      .remote-node-header { align-items: flex-start; flex-direction: column; }
     }
     """
   end

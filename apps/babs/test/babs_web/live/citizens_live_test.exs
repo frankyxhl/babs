@@ -41,6 +41,59 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(href="/citizens/new")
   end
 
+  test "skips remote peer fetch during disconnected render" do
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      remote_peer_provider: fn -> raise "remote peer provider should wait for connected mount" end
+    )
+
+    html = build_conn() |> get("/citizens") |> html_response(200)
+
+    assert html =~ ~s(data-testid="citizens-index")
+    refute html =~ ~s(data-testid="remote-peer-citizens")
+  end
+
+  test "renders one read-only remote peer and refreshes remote citizens" do
+    {:ok, agent} =
+      Agent.start_link(fn ->
+        remote_peer(%{
+          citizens: [
+            %{
+              "slug" => "remote-clare",
+              "display_name" => "Remote Clare",
+              "live_status" => "up"
+            }
+          ]
+        })
+      end)
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      remote_peer_provider: fn -> Agent.get(agent, & &1) end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens")
+    html = render_async(view, 1_000)
+
+    assert html =~ ~s(data-testid="remote-peer-citizens")
+    assert html =~ "Peer Node"
+    assert html =~ "Read-only"
+    assert html =~ "fresh"
+    assert html =~ ~s(data-testid="remote-citizen-remote-clare")
+    assert html =~ "Remote Clare"
+    refute html =~ ~s(data-testid="citizen-open-remote-clare")
+    refute html =~ ~s(data-testid="citizen-full-remote-clare")
+
+    Agent.update(agent, fn peer ->
+      %{peer | citizens: [%{"slug" => "remote-dylan", "display_name" => "Remote Dylan"}]}
+    end)
+
+    send(view.pid, :refresh_remote_peer)
+    html = render_async(view, 1_000)
+
+    assert html =~ ~s(data-testid="remote-citizen-remote-dylan")
+    assert html =~ "Remote Dylan"
+    refute html =~ "Remote Clare"
+  end
+
   test "renders sorted citizens, counts, statuses, labels, and token-preserving links" do
     workspace_root = Path.join(tmp_root!(), "workspaces")
     Application.put_env(:babs_citizens, :workspace_root, workspace_root)
@@ -77,7 +130,7 @@ defmodule BabsWeb.CitizensLiveTest do
       status: "stopped"
     })
 
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "clare", nil)
+    ensure_pane_registered!("clare")
 
     {:ok, _view, html} = live(build_conn(), "/citizens?socket_token=socket-token")
 
@@ -153,7 +206,7 @@ defmodule BabsWeb.CitizensLiveTest do
       }
     })
 
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "imported-one", nil)
+    ensure_pane_registered!("imported-one")
 
     {:ok, _view, html} = live(build_conn(), "/citizens")
 
@@ -241,7 +294,7 @@ defmodule BabsWeb.CitizensLiveTest do
 
   test "stop control invokes lifecycle boundary and refreshes the row" do
     record = insert_configured_citizen!(%{slug: "stop-me", status: "running"})
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+    ensure_pane_registered!(record.slug)
     parent = self()
 
     Application.put_env(:babs, BabsWeb.CitizensLive,
@@ -271,7 +324,7 @@ defmodule BabsWeb.CitizensLiveTest do
 
   test "restart control reports redacted lifecycle errors" do
     insert_configured_citizen!(%{slug: "restart-error", status: "running"})
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "restart-error", nil)
+    ensure_pane_registered!("restart-error")
 
     Application.put_env(:babs, BabsWeb.CitizensLive,
       lifecycle_action: fn :restart, "restart-error" ->
@@ -294,7 +347,7 @@ defmodule BabsWeb.CitizensLiveTest do
 
   test "lifecycle controls disable sibling controls while a request is in flight" do
     record = insert_configured_citizen!(%{slug: "busy-one", status: "running"})
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+    ensure_pane_registered!(record.slug)
     parent = self()
 
     Application.put_env(:babs, BabsWeb.CitizensLive,
@@ -334,7 +387,7 @@ defmodule BabsWeb.CitizensLiveTest do
     {:ok, view, html} = live(build_conn(), "/citizens")
     assert html =~ "reattaching"
 
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, record.slug, nil)
+    ensure_pane_registered!(record.slug)
     send(view.pid, :refresh_citizens)
 
     assert render(view) =~ "up"
@@ -424,6 +477,34 @@ defmodule BabsWeb.CitizensLiveTest do
     |> Enum.map(&(:binary.match(text, &1) |> elem(0)))
     |> Enum.chunk_every(2, 1, :discard)
     |> Enum.all?(fn [left, right] -> left < right end)
+  end
+
+  defp remote_peer(attrs) do
+    Map.merge(
+      %{
+        peer_id: "peer-a",
+        peer_name: "Peer Node",
+        peer_url: "http://babs-peer.example:4000",
+        status: :fresh,
+        read_only?: true,
+        capabilities: ["read"],
+        fetched_at: ~U[2026-05-09 00:00:00Z],
+        node: %{"id" => "peer-a", "name" => "Peer Node"},
+        citizens: [],
+        tickets: [],
+        invalid: %{"count" => 0},
+        events: [],
+        cursor: "cursor"
+      },
+      attrs
+    )
+  end
+
+  defp ensure_pane_registered!(slug) do
+    case Registry.register(Babs.Citizens.PaneRegistry, slug, nil) do
+      {:ok, _value} -> :ok
+      {:error, {:already_registered, _pid}} -> :ok
+    end
   end
 
   defp disabled_button?(html, testid) do

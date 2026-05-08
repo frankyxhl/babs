@@ -6,21 +6,32 @@ defmodule BabsWeb.CitizensLive do
   use Phoenix.LiveView
 
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
+  alias Babs.Citizens.Federation.PeerClient
   alias BabsWeb.CitizenPath
   alias BabsWeb.TicketPath
   alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
+  @remote_refresh_ms 5_000
 
   @impl true
   def mount(_params, session, socket) do
-    if connected?(socket), do: schedule_refresh()
+    if connected?(socket) do
+      schedule_refresh()
+      schedule_remote_refresh()
+    end
 
-    {:ok,
-     socket
-     |> assign(:socket_token, Map.get(session, "socket_token", ""))
-     |> assign(:lifecycle_inflight, %{})
-     |> assign_snapshots()}
+    socket =
+      socket
+      |> assign(:socket_token, Map.get(session, "socket_token", ""))
+      |> assign(:lifecycle_inflight, %{})
+      |> assign(:remote_peer, nil)
+      |> assign(:remote_peer_inflight, false)
+      |> assign_snapshots()
+
+    socket = if connected?(socket), do: start_remote_peer_fetch(socket), else: socket
+
+    {:ok, socket}
   end
 
   @impl true
@@ -28,6 +39,15 @@ defmodule BabsWeb.CitizensLive do
     if connected?(socket), do: schedule_refresh()
 
     {:noreply, assign_snapshots(socket)}
+  end
+
+  def handle_info(:refresh_remote_peer, socket) do
+    if connected?(socket) do
+      schedule_remote_refresh()
+      {:noreply, start_remote_peer_fetch(socket)}
+    else
+      {:noreply, socket}
+    end
   end
 
   @impl true
@@ -60,6 +80,14 @@ defmodule BabsWeb.CitizensLive do
       |> assign_snapshots()
 
     {:noreply, socket}
+  end
+
+  def handle_async(:remote_peer, {:ok, peer}, socket) do
+    {:noreply, socket |> assign(:remote_peer_inflight, false) |> assign(:remote_peer, peer)}
+  end
+
+  def handle_async(:remote_peer, {:exit, _reason}, socket) do
+    {:noreply, assign(socket, :remote_peer_inflight, false)}
   end
 
   @impl true
@@ -356,13 +384,98 @@ defmodule BabsWeb.CitizensLive do
         color: var(--muted);
       }
 
+      .remote-node {
+        display: grid;
+        gap: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 12px;
+      }
+
+      .remote-node-header,
+      .remote-badges {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .remote-node-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .remote-node-title span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .remote-badges {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .remote-badge {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 3px 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .remote-badge-readonly { color: var(--wait); }
+      .remote-badge-fresh { color: var(--ok); }
+      .remote-badge-stale { color: var(--wait); }
+      .remote-badge-unreachable, .remote-badge-config_error { color: var(--danger); }
+
+      .remote-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .remote-row {
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.45fr) minmax(120px, 0.55fr);
+        gap: 10px;
+        align-items: center;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel-2);
+        padding: 10px;
+      }
+
+      .remote-main,
+      .remote-meta {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .remote-main {
+        font-weight: 700;
+      }
+
+      .remote-meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
       @media (max-width: 900px) {
         .citizens-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        .citizen-row {
+        .citizen-row, .remote-row {
           grid-template-columns: minmax(0, 1fr);
           align-items: start;
         }
-        .citizen-actions { justify-content: flex-start; }
+        .citizen-actions, .remote-badges { justify-content: flex-start; }
       }
 
       @media (max-width: 560px) {
@@ -371,6 +484,7 @@ defmodule BabsWeb.CitizensLive do
         .citizens-nav { justify-content: flex-start; flex-wrap: wrap; }
         .citizens-counts { grid-template-columns: 1fr; }
         .citizen-actions { flex-wrap: wrap; }
+        .remote-node-header { align-items: flex-start; flex-direction: column; }
       }
     </style>
 
@@ -560,6 +674,36 @@ defmodule BabsWeb.CitizensLive do
             </div>
           </article>
         </section>
+
+        <section :if={@remote_peer} class="remote-node" data-testid="remote-peer-citizens">
+          <header class="remote-node-header">
+            <h2 class="remote-node-title">
+              <BabsWeb.Icon.icon name="route" />
+              <span>{remote_node_label(@remote_peer)}</span>
+            </h2>
+            <div class="remote-badges">
+              <span class="remote-badge remote-badge-readonly">Read-only</span>
+              <span class={["remote-badge", remote_status_class(@remote_peer)]}>
+                {remote_status(@remote_peer)}
+              </span>
+            </div>
+          </header>
+
+          <div class="remote-list" data-testid="remote-citizen-list">
+            <article
+              :for={citizen <- @remote_peer.citizens}
+              class="remote-row"
+              data-testid={"remote-citizen-#{remote_value(citizen, "slug")}"}
+            >
+              <div class="remote-main">{remote_value(citizen, "display_name") || remote_value(citizen, "slug")}</div>
+              <div class="remote-meta">{remote_value(citizen, "slug")}</div>
+              <div class="remote-meta">{remote_value(citizen, "live_status")}</div>
+            </article>
+            <div :if={@remote_peer.citizens == []} class="remote-meta" data-testid="remote-citizens-empty">
+              No remote Citizens.
+            </div>
+          </div>
+        </section>
       </main>
     </div>
 
@@ -574,6 +718,18 @@ defmodule BabsWeb.CitizensLive do
     socket
     |> assign(:snapshots, snapshots)
     |> assign(:counts, counts(snapshots))
+  end
+
+  defp start_remote_peer_fetch(socket) do
+    if socket.assigns.remote_peer_inflight do
+      socket
+    else
+      previous_peer = Map.get(socket.assigns, :remote_peer)
+
+      socket
+      |> assign(:remote_peer_inflight, true)
+      |> start_async(:remote_peer, fn -> remote_peer(previous_peer) end)
+    end
   end
 
   defp counts(snapshots) do
@@ -650,6 +806,53 @@ defmodule BabsWeb.CitizensLive do
     |> then(fn handler -> handler.(action, slug) end)
   end
 
+  defp remote_peer(previous_peer) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:remote_peer_provider, &default_remote_peer/1)
+    |> call_remote_peer_provider(previous_peer)
+  end
+
+  defp call_remote_peer_provider(provider, previous_peer) when is_function(provider, 1),
+    do: provider.(previous_peer)
+
+  defp call_remote_peer_provider(provider, _previous_peer) when is_function(provider, 0),
+    do: provider.()
+
+  defp default_remote_peer(previous_peer) do
+    case PeerClient.fetch_first_peer(previous_snapshot: previous_peer) do
+      {:ok, peer} -> peer
+      {:error, _reason} -> nil
+    end
+  end
+
+  defp remote_node_label(peer) do
+    node = Map.get(peer, :node, %{})
+    Map.get(node, "name") || Map.get(peer, :peer_name) || Map.get(peer, :peer_id) || "Remote Babs"
+  end
+
+  defp remote_status(peer), do: peer |> remote_status_key() |> String.replace("_", " ")
+
+  defp remote_status_class(peer), do: "remote-badge-#{remote_status_key(peer)}"
+
+  defp remote_status_key(peer) do
+    case Map.get(peer, :status) do
+      status when is_atom(status) -> Atom.to_string(status)
+      status when is_binary(status) -> status
+      _status -> "unknown"
+    end
+  end
+
+  defp remote_value(map, key) when is_map(map),
+    do: Map.get(map, key) || remote_atom_value(map, key)
+
+  defp remote_value(_map, _key), do: nil
+
+  defp remote_atom_value(map, "slug"), do: Map.get(map, :slug)
+  defp remote_atom_value(map, "display_name"), do: Map.get(map, :display_name)
+  defp remote_atom_value(map, "live_status"), do: Map.get(map, :live_status)
+  defp remote_atom_value(_map, _key), do: nil
+
   defp default_lifecycle_action(:start, slug), do: Lifecycle.start_registered_citizen(slug)
   defp default_lifecycle_action(:stop, slug), do: Lifecycle.stop_citizen(slug)
   defp default_lifecycle_action(:restart, slug), do: Lifecycle.restart_registered_citizen(slug)
@@ -677,5 +880,9 @@ defmodule BabsWeb.CitizensLive do
 
   defp schedule_refresh do
     Process.send_after(self(), :refresh_citizens, @refresh_ms)
+  end
+
+  defp schedule_remote_refresh do
+    Process.send_after(self(), :refresh_remote_peer, @remote_refresh_ms)
   end
 end

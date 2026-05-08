@@ -16,6 +16,7 @@ defmodule BabsWeb.TicketsLiveTest do
     root = tmp_root!()
     previous_root = Application.get_env(:babs_citizens, :tickets_root)
     previous_runtime_opts = Application.get_env(:babs_citizens, :ticket_runtime_opts)
+    previous_live = Application.get_env(:babs, BabsWeb.TicketsLive)
     Application.put_env(:babs_citizens, :tickets_root, root)
     Babs.Citizens.RepoCase.ensure_repo!()
     Repo.delete_all(CitizenRecord)
@@ -34,6 +35,12 @@ defmodule BabsWeb.TicketsLiveTest do
         Application.put_env(:babs_citizens, :ticket_runtime_opts, previous_runtime_opts)
       else
         Application.delete_env(:babs_citizens, :ticket_runtime_opts)
+      end
+
+      if previous_live do
+        Application.put_env(:babs, BabsWeb.TicketsLive, previous_live)
+      else
+        Application.delete_env(:babs, BabsWeb.TicketsLive)
       end
     end)
 
@@ -101,6 +108,58 @@ defmodule BabsWeb.TicketsLiveTest do
 
     assert html =~ ~s(data-testid="tickets-empty-state")
     assert html =~ "No tickets yet."
+  end
+
+  test "skips remote peer fetch during disconnected render" do
+    Application.put_env(:babs, BabsWeb.TicketsLive,
+      remote_peer_provider: fn -> raise "remote peer provider should wait for connected mount" end
+    )
+
+    html = build_conn() |> get("/tickets") |> html_response(200)
+
+    assert html =~ ~s(data-testid="tickets-index")
+    refute html =~ ~s(data-testid="remote-peer-tickets")
+  end
+
+  test "renders one read-only remote peer and refreshes remote tickets" do
+    {:ok, agent} =
+      Agent.start_link(fn ->
+        remote_peer(%{
+          tickets: [
+            %{
+              "id" => "T-2026-05-09-101",
+              "title" => "Remote ticket one",
+              "state" => "open"
+            }
+          ]
+        })
+      end)
+
+    Application.put_env(:babs, BabsWeb.TicketsLive,
+      remote_peer_provider: fn -> Agent.get(agent, & &1) end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/tickets")
+    html = render_async(view, 1_000)
+
+    assert html =~ ~s(data-testid="remote-peer-tickets")
+    assert html =~ "Peer Node"
+    assert html =~ "Read-only"
+    assert html =~ "fresh"
+    assert html =~ ~s(data-testid="remote-ticket-T-2026-05-09-101")
+    assert html =~ "Remote ticket one"
+    refute html =~ ~s(href="/tickets/T-2026-05-09-101")
+
+    Agent.update(agent, fn peer ->
+      %{peer | tickets: [%{"id" => "T-2026-05-09-102", "title" => "Remote ticket two"}]}
+    end)
+
+    send(view.pid, :refresh_remote_peer)
+    html = render_async(view, 1_000)
+
+    assert html =~ ~s(data-testid="remote-ticket-T-2026-05-09-102")
+    assert html =~ "Remote ticket two"
+    refute html =~ "Remote ticket one"
   end
 
   test "GET /tickets/new routes to NewTicketLive before the ticket detail route" do
@@ -1030,5 +1089,26 @@ defmodule BabsWeb.TicketsLiveTest do
       "proposal_id" => proposal["proposal_id"],
       "proposal" => proposal
     }
+  end
+
+  defp remote_peer(attrs) do
+    Map.merge(
+      %{
+        peer_id: "peer-a",
+        peer_name: "Peer Node",
+        peer_url: "http://babs-peer.example:4000",
+        status: :fresh,
+        read_only?: true,
+        capabilities: ["read"],
+        fetched_at: ~U[2026-05-09 00:00:00Z],
+        node: %{"id" => "peer-a", "name" => "Peer Node"},
+        citizens: [],
+        tickets: [],
+        invalid: %{"count" => 0},
+        events: [],
+        cursor: "cursor"
+      },
+      attrs
+    )
   end
 end

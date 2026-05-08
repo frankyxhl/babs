@@ -303,12 +303,12 @@ Config errors continue to use `config_error`.
 ## Validation Commands
 
 ```bash
-mise exec -- mix test apps/babs_citizens/test/babs_citizens/federation_event_feed_test.exs apps/babs_citizens/test/babs_citizens/federation/peer_client_test.exs apps/babs/test/babs_web/controllers/api_v1_events_controller_test.exs apps/babs/test/babs_web/live/remote_peer_live_test.exs
+mise exec -- mix test apps/babs/test/babs_web/controllers/api_v1_read_controller_test.exs apps/babs/test/babs_web/controllers/api_v1_events_controller_test.exs apps/babs_citizens/test/babs_citizens/federation/peer_client_test.exs apps/babs/test/babs_web/live/citizens_live_test.exs apps/babs/test/babs_web/live/tickets_live_test.exs --seed 1
 mise exec -- mix format --check-formatted
 mise exec -- mix compile --warnings-as-errors
 mise exec -- mix test
 npm run test:js
-npm run test:bdd
+BABS_BDD_SCENARIO='federation events feed' npm run test:bdd
 af validate --root .
 git diff --check
 git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|/Users/[^[:space:]]+|api_token|secret|token)' || true
@@ -328,6 +328,71 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     blockers. Folded advisories for single-peer UI selection, stateless
     `occurred_at` semantics, cursor chain stability, freshness boundary tests,
     and malformed peer response handling. Marked CHG Approved.
+- Implementation:
+  - Added `GET /api/v1/events` through `BabsWeb.Api.V1.EventsController` and
+    `BabsWeb.Api.V1.EventFeed`.
+  - Refactored Phase 17.1 read projections into
+    `BabsWeb.Api.V1.Presenter` so `/api/v1/*` read endpoints and event
+    snapshots share the same path-safe allowlist.
+  - Added a test-injectable `Babs.Citizens.Federation.PeerClient` with a small
+    `:httpc` adapter boundary, `:inets` runtime dependency, and previous
+    snapshot fallback for stale remote read display after a failed refresh.
+  - Mounted one read-only remote peer section in Citizens and Tickets LiveViews,
+    refreshed by server-side `send_after` ticks and fakeable provider hooks.
+    Remote HTTP reads are skipped during disconnected static renders and start
+    only after the LiveView websocket is connected.
+  - Added focused LiveView and browser-harness BDD coverage for remote read
+    freshness/cursor behavior.
+- Validation on 2026-05-09:
+  - `mise exec -- mix test apps/babs/test/babs_web/controllers/api_v1_read_controller_test.exs apps/babs/test/babs_web/controllers/api_v1_events_controller_test.exs apps/babs_citizens/test/babs_citizens/federation/peer_client_test.exs apps/babs/test/babs_web/live/citizens_live_test.exs apps/babs/test/babs_web/live/tickets_live_test.exs --seed 1` PASS.
+  - `mise exec -- mix format --check-formatted` PASS.
+  - `mise exec -- mix compile --warnings-as-errors` PASS.
+  - `mise exec -- mix test` PASS: 614 tests, 0 failures.
+  - `mise exec -- mix test --max-cases 1` PASS after Codex P2 fixes: 618 tests,
+    0 failures.
+  - `npm run test:js` PASS: 15 tests, 0 failures.
+  - `BABS_BDD_SCENARIO='federation events feed' npm run test:bdd` PASS.
+  - `af validate --root .` PASS: 174 documents checked, 0 issues found.
+  - `git diff --check` PASS.
+  - Privacy grep PASS after inspection: only false-positive code identifiers
+    for `socket_token` in LiveView session assignment matched the generic
+    `token` pattern.
+- Implementation review:
+  - Trinity fast-review implementation R1 on 2026-05-09:
+    - GLM raw review flagged a generated `app.css` artifact as a blocker.
+      Regenerated assets after BDD/dev-server watcher activity and kept
+      `app.css` clean.
+    - DeepSeek raw review reported a CitizensLive test env-cleanup blocker, but
+      inspection showed the setup already restores `BabsWeb.CitizensLive` app
+      env on exit. Folded actionable advisories instead.
+    - Added previous-snapshot stale fallback coverage, removed redundant
+      `:inets.start()`, and kept remote reads out of disconnected static
+      renders.
+  - Trinity fast-review implementation R2 on 2026-05-09:
+    - GLM PASS with advisories.
+    - DeepSeek provider returned an API socket error before producing review
+      content.
+  - Trinity DeepSeek-only redispatch on 2026-05-09: PASS. Folded advisory to
+    skip `:refresh_remote_peer` work while disconnected and hardened remote
+    status/label helpers against missing status keys.
+- PR review loop:
+  - GitHub Codex R1 on PR #57 found P2: `PeerClient` did not reuse
+    `previous_snapshot.cursor` when LiveViews refreshed peers. Fixed by deriving
+    the event cursor from either explicit `:cursor` opts or the previous
+    snapshot cursor, with a focused regression test.
+  - GitHub Codex R2 on PR #57 found P2: a rejected cached cursor would keep
+    failing and preserve the stale cursor forever. Fixed by retrying the event
+    feed once without a cursor when `/api/v1/events` returns 400
+    `invalid_cursor`, with a focused regression test.
+  - GitHub Codex R3 on PR #57 found P2s: malformed 2xx peer responses could be
+    hidden as empty fresh state, and `/api/v1/events` did not reuse ticket-root
+    readability validation. Fixed by validating required peer response keys
+    before marking a peer fresh, and by applying ticket-root validation in the
+    event feed path. Added focused regression tests for both.
+  - GitHub Codex R4 on PR #57 found P2: remote peer fetches could block the
+    LiveView process for slow/unreachable peers. Fixed by moving peer fetches to
+    LiveView `start_async` and assigning results only after the async task
+    completes.
 
 ---
 
@@ -338,3 +403,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-09 | Initial Phase 17.2 real-time remote reads CHG | Codex |
 | 2026-05-09 | Fold Trinity R1 plan review blockers and advisories | Codex |
 | 2026-05-09 | Mark Approved after Trinity R2 PASS/PASS and fold advisories | Codex |
+| 2026-05-09 | Record implementation scope and validation results | Codex |
