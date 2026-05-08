@@ -8,7 +8,7 @@ defmodule Babs.Citizens.StatusSnapshot do
   state because this snapshot tracks lifecycle presence, not output activity.
   """
 
-  alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Lifecycle, TicketBackend}
+  alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Lifecycle, Roles, TicketBackend}
   alias Babs.Citizens.ProviderRuntime.Inventory
 
   @known_cli_labels ~w(claude codex copilot droid pi)
@@ -41,6 +41,7 @@ defmodule Babs.Citizens.StatusSnapshot do
       slug: record.slug,
       display_name: record.display_name,
       cli_label: cli_label(record.cli, record.cli_args || []),
+      roles: roles(record),
       ticket_backend: record.ticket_backend || "hardline",
       ticket_backend_label: TicketBackend.label(record.ticket_backend || "hardline"),
       cwd: record.cwd,
@@ -128,6 +129,17 @@ defmodule Babs.Citizens.StatusSnapshot do
         "detach_authority" => false
       }
     }
+  end
+
+  defp roles(%CitizenRecord{} = record) do
+    record
+    |> Catalog.to_config()
+    |> Map.get(:roles, [])
+    |> Roles.normalize()
+    |> case do
+      {:ok, roles} -> roles
+      {:error, _reason} -> []
+    end
   end
 
   defp capability?(capabilities, key), do: Map.get(capabilities, key) == true

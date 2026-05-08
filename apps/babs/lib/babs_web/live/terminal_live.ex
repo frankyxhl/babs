@@ -188,6 +188,45 @@ defmodule BabsWeb.TerminalLive do
         gap: 6px;
       }
 
+      .terminal-roles {
+        min-width: 0;
+        max-width: min(260px, 24vw);
+        display: flex;
+        gap: 5px;
+        overflow-x: auto;
+        scrollbar-width: thin;
+      }
+
+      .terminal-role-chip {
+        min-width: 0;
+        max-width: 150px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--accent);
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 8px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .terminal-role-chip .icon {
+        width: 13px;
+        height: 13px;
+        flex: 0 0 auto;
+      }
+
+      .terminal-role-name,
+      .terminal-role-skills {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .terminal-role-skills {
+        color: var(--muted);
+      }
+
       .terminal-flash {
         color: var(--muted);
         font-size: 12px;
@@ -288,6 +327,9 @@ defmodule BabsWeb.TerminalLive do
           grid-row: 2;
           order: 3;
         }
+        .terminal-roles {
+          max-width: 100%;
+        }
       }
     </style>
     <div class="terminal-page" data-mode={if @full?, do: "full", else: "tabs"}>
@@ -304,6 +346,24 @@ defmodule BabsWeb.TerminalLive do
             <span class="terminal-tab-label">{citizen.slug}</span>
           </a>
          </div>
+        <div
+          :if={active_roles(active_tab(@tabs, @slug)) != []}
+          class="terminal-roles"
+          data-testid={"terminal-roles-#{@slug}"}
+        >
+          <span
+            :for={{role, index} <- Enum.with_index(active_roles(active_tab(@tabs, @slug)))}
+            class="terminal-role-chip"
+            data-testid={"terminal-role-#{@slug}-#{index}"}
+            title={role_title(role)}
+          >
+            <BabsWeb.Icon.icon name="tag" />
+            <span class="terminal-role-name">{role_name(role)}</span>
+            <span :if={role_skills(role) != []} class="terminal-role-skills">
+              {Enum.join(role_skills(role), ", ")}
+            </span>
+          </span>
+        </div>
         <span
           :if={ownership_badge(active_tab(@tabs, @slug))}
           class="ownership-badge"
@@ -448,7 +508,8 @@ defmodule BabsWeb.TerminalLive do
       kill_authority?: true,
       detach_authority?: true,
       ownership_badge: nil,
-      lifecycle_reminder: nil
+      lifecycle_reminder: nil,
+      roles: []
     }
   end
 
@@ -467,6 +528,21 @@ defmodule BabsWeb.TerminalLive do
 
   defp ownership_badge(citizen), do: Map.get(citizen, :ownership_badge)
   defp lifecycle_reminder(citizen), do: Map.get(citizen, :lifecycle_reminder)
+
+  defp active_roles(citizen), do: Map.get(citizen, :roles, []) || []
+
+  defp role_name(%{"name" => name}) when is_binary(name), do: name
+  defp role_name(_role), do: ""
+
+  defp role_skills(%{"skills" => skills}) when is_list(skills), do: skills
+  defp role_skills(_role), do: []
+
+  defp role_title(role) do
+    case role_skills(role) do
+      [] -> role_name(role)
+      skills -> "#{role_name(role)}: #{Enum.join(skills, ", ")}"
+    end
+  end
 
   defp button_label(citizen, :start), do: if(detach_only?(citizen), do: "Attach", else: "Start")
   defp button_label(citizen, :stop), do: if(detach_only?(citizen), do: "Detach", else: "Stop")

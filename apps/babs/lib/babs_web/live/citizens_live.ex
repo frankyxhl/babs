@@ -271,7 +271,8 @@ defmodule BabsWeb.CitizensLive do
       }
 
       .ownership-badge,
-      .lifecycle-reminder {
+      .lifecycle-reminder,
+      .role-chip {
         display: inline-flex;
         align-items: center;
         width: fit-content;
@@ -286,6 +287,37 @@ defmodule BabsWeb.CitizensLive do
 
       .lifecycle-reminder {
         margin-top: 0;
+        color: var(--muted);
+      }
+
+      .role-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 7px;
+        min-width: 0;
+      }
+
+      .role-chip {
+        gap: 5px;
+        max-width: 100%;
+        margin-top: 0;
+        color: var(--accent);
+        overflow: hidden;
+      }
+
+      .role-chip .icon {
+        width: 13px;
+        height: 13px;
+      }
+
+      .role-name,
+      .role-skills {
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .role-skills {
         color: var(--muted);
       }
 
@@ -406,6 +438,24 @@ defmodule BabsWeb.CitizensLive do
             <div class="citizen-main">
               <span class="citizen-name">{citizen.display_name}</span>
               <span class="citizen-slug">{citizen.slug}</span>
+              <div
+                :if={role_count(citizen) > 0}
+                class="role-list"
+                data-testid={"citizen-roles-#{citizen.slug}"}
+              >
+                <span
+                  :for={{role, index} <- Enum.with_index(citizen.roles)}
+                  class="role-chip"
+                  data-testid={"citizen-role-#{citizen.slug}-#{index}"}
+                  title={role_title(role)}
+                >
+                  <BabsWeb.Icon.icon name="tag" />
+                  <span class="role-name">{role_name(role)}</span>
+                  <span :if={role_skills(role) != []} class="role-skills">
+                    {Enum.join(role_skills(role), ", ")}
+                  </span>
+                </span>
+              </div>
               <span
                 :if={citizen.ownership_badge}
                 class="ownership-badge"
@@ -535,6 +585,21 @@ defmodule BabsWeb.CitizensLive do
   end
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
+
+  defp role_count(citizen), do: length(Map.get(citizen, :roles, []) || [])
+
+  defp role_name(%{"name" => name}) when is_binary(name), do: name
+  defp role_name(_role), do: ""
+
+  defp role_skills(%{"skills" => skills}) when is_list(skills), do: skills
+  defp role_skills(_role), do: []
+
+  defp role_title(role) do
+    case role_skills(role) do
+      [] -> role_name(role)
+      skills -> "#{role_name(role)}: #{Enum.join(skills, ", ")}"
+    end
+  end
 
   defp button_label(citizen, :start), do: if(detach_only?(citizen), do: "Attach", else: "Start")
   defp button_label(citizen, :stop), do: if(detach_only?(citizen), do: "Detach", else: "Stop")

@@ -209,6 +209,84 @@ defmodule Babs.Citizens.SpawnerTest do
     assert toml =~ ~s(ticket_backend = "direct_cli")
   end
 
+  test "creates citizen with browser role labels" do
+    root = tmp_root!()
+    parent = self()
+
+    assert {:ok, record} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "role-ok",
+                 "display_name" => "Role OK",
+                 "cli_preset" => "shell",
+                 "roles" => "Developer\nInspector"
+               },
+               root: root,
+               lifecycle_start: fn config ->
+                 send(parent, {:lifecycle_started, config})
+                 {:ok, self()}
+               end
+             )
+
+    assert record.role == "developer"
+
+    assert record.roles == [
+             %{"name" => "developer", "skills" => []},
+             %{"name" => "inspector", "skills" => []}
+           ]
+
+    toml = File.read!(Path.join(root, "citizens/citizen-role-ok.toml"))
+    assert toml =~ ~s(role = "developer")
+    assert toml =~ "[[roles]]"
+    assert toml =~ ~s(name = "developer")
+    assert toml =~ ~s(name = "inspector")
+
+    assert_receive {:lifecycle_started, config}
+    assert config.roles == record.roles
+    assert config.role == "developer"
+  end
+
+  test "accepts atom-keyed pre-split role params" do
+    root = tmp_root!()
+
+    assert {:ok, record} =
+             Spawner.create_and_start(
+               %{
+                 slug: "role-list",
+                 display_name: "Role List",
+                 cli_preset: "shell",
+                 roles: ["Developer", "Inspector"]
+               },
+               root: root,
+               lifecycle_start: fn _config -> {:ok, self()} end
+             )
+
+    assert record.roles == [
+             %{"name" => "developer", "skills" => []},
+             %{"name" => "inspector", "skills" => []}
+           ]
+  end
+
+  test "rejects invalid role labels before creating artifacts" do
+    root = tmp_root!()
+
+    assert {:error, {:validation_failed, errors}} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "bad-role",
+                 "display_name" => "Bad Role",
+                 "cli_preset" => "shell",
+                 "roles" => "developer\nbad/role"
+               },
+               root: root,
+               lifecycle_start: unexpected_lifecycle()
+             )
+
+    assert errors.roles == "must be valid role labels"
+    refute File.exists?(Path.join(root, "citizens/citizen-bad-role.toml"))
+    assert Catalog.get_by_slug("bad-role") == nil
+  end
+
   test "rejects lazy_tmux from browser creation" do
     root = tmp_root!()
 

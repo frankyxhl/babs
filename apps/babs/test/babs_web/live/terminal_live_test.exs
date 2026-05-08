@@ -144,6 +144,47 @@ defmodule BabsWeb.TerminalLiveTest do
     refute html =~ ">Restart</button>"
   end
 
+  test "default mode renders active citizen role badges and full mode hides role chrome" do
+    role_tab =
+      tab("clare", :up)
+      |> Map.put(:roles, [
+        %{"name" => "developer", "skills" => ["elixir"]},
+        %{"name" => "inspector", "skills" => []}
+      ])
+
+    default_html =
+      %{
+        slug: "clare",
+        socket_token: "",
+        full?: false,
+        tabs: [role_tab],
+        lifecycle_inflight: %{}
+      }
+      |> BabsWeb.TerminalLive.render()
+      |> rendered_to_string()
+
+    assert default_html =~ ~s(data-testid="terminal-roles-clare")
+    assert default_html =~ ~s(data-testid="terminal-role-clare-0")
+    assert default_html =~ "developer"
+    assert default_html =~ "elixir"
+    assert default_html =~ ~s(data-testid="terminal-role-clare-1")
+    assert default_html =~ "inspector"
+
+    full_html =
+      %{
+        slug: "clare",
+        socket_token: "",
+        full?: true,
+        tabs: [role_tab],
+        lifecycle_inflight: %{}
+      }
+      |> BabsWeb.TerminalLive.render()
+      |> rendered_to_string()
+
+    refute full_html =~ ~s(data-testid="terminal-roles-clare")
+    refute full_html =~ ~s(data-testid="terminal-role-clare-0")
+  end
+
   test "default mode can label detach-only controls from capability fields" do
     html =
       %{
@@ -356,7 +397,8 @@ defmodule BabsWeb.TerminalLiveTest do
       actions: actions(live_status),
       cli_label: "shell",
       cwd_label: "workspaces/#{slug}",
-      last_error: nil
+      last_error: nil,
+      roles: []
     }
   end
 

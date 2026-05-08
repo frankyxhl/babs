@@ -102,6 +102,12 @@ defmodule BabsWeb.Icon do
 
   defp paths("square"), do: ["M5 5h14v14H5z"]
 
+  defp paths("tag"),
+    do: [
+      "M20.59 13.41 13.41 20.59a2 2 0 0 1-2.82 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82",
+      "M7 7h.01"
+    ]
+
   defp paths("triangle-alert"),
     do: [
       "m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",
