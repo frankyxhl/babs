@@ -360,6 +360,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_direct_cli_backend_ui_creation_and_assignment,
         ),
         Scenario(
+            name="role routed ticket flow",
+            given="a multi-role Direct CLI Citizen exists",
+            when="the operator creates a role Ticket and routes it by role",
+            then="the Ticket is assigned by role and the direct reply appears in chat",
+            run=scenario_role_routed_ticket_flow,
+        ),
+        Scenario(
             name="direct cli compact prompt",
             given="a Direct CLI Citizen has an active provider session",
             when="the operator sends multiple Ticket comments",
@@ -1167,6 +1174,102 @@ def scenario_direct_cli_backend_ui_creation_and_assignment(context: BabsBddConte
         cleanup_spawned_citizen(slug)
 
 
+def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-role")
+    title = f"BDD Role Routed Ticket {int(time.time() * 1000)}"
+    body = f"BDD role-routed body for {slug}."
+    reply = os.environ.get("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
+    ticket_id = None
+
+    try:
+        context.direct_prompts_path.unlink(missing_ok=True)
+
+        context.open_path("/citizens/new")
+        assert_element_visible('[data-testid="new-citizen-form"]', "new citizen form")
+        wait_until(
+            "LiveView socket to connect",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        submit_new_citizen_form(
+            slug,
+            f"BDD {slug}",
+            "copilot-cli",
+            slug,
+            "direct_cli",
+            roles="Developer\nInspector",
+        )
+        wait_until(
+            "browser to redirect to /citizens after role Citizen creation",
+            lambda: js("window.location.pathname") == "/citizens",
+            timeout=15,
+        )
+        wait_for_index_status(slug, "stopped")
+        assert_element_visible(f'[data-testid="citizen-role-{slug}-0"]', f"first role for {slug}")
+        assert "developer" in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
+        assert "inspector" in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
+
+        context.open_path("/tickets")
+        assert_element_visible('[data-testid="tickets-new"]', "new Ticket button")
+        click_selector('[data-testid="tickets-new"]')
+        wait_until(
+            "browser to open new role Ticket form",
+            lambda: js("window.location.pathname") == "/tickets/new",
+            timeout=10,
+        )
+        wait_until(
+            "LiveView socket to connect on role Ticket form",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible('[data-testid="ticket-assignee-role"]', "Ticket assignee role select")
+        submit_new_ticket_form(title, "normal", body, assignee_role="developer")
+        wait_until(
+            "browser to redirect to created role Ticket detail",
+            lambda: str(js("window.location.pathname") or "").startswith("/tickets/T-"),
+            timeout=20,
+        )
+        ticket_id = str(js("window.location.pathname")).split("/")[-1]
+
+        assert_element_visible("[data-testid='ticket-detail']", "role-routed Ticket detail")
+        assert_element_visible('[data-testid="ticket-assign-role-developer"]', "developer role route button")
+        click_selector('[data-testid="ticket-assign-role-developer"]')
+
+        wait_until(
+            "role-routed direct CLI reply to appear in Ticket chat",
+            lambda: reply in js("document.body.innerText"),
+            timeout=20,
+        )
+        wait_until(
+            "role-routed assignment to record direct turn",
+            lambda: history_has_event(
+                context.tickets_root,
+                ticket_id,
+                lambda event: event.get("event") == "turn_execution_started"
+                and event.get("backend") == "direct_cli"
+                and event.get("to") == slug,
+            ),
+            timeout=20,
+        )
+
+        assert f"ticket-unassign-{slug}" in js("document.body.innerHTML")
+        assert f"assigned to {slug} via role developer" in js("document.body.innerText")
+        assert not tmux_session_alive(f"babs-{slug}")
+        assert any(body in event.get("prompt", "") for event in direct_prompt_events(context.direct_prompts_path))
+
+        events = ticket_history_events(context.tickets_root, ticket_id)
+        assert any(
+            event.get("event") == "assigned"
+            and event.get("to") == [slug]
+            and event.get("via_role") == "developer"
+            for event in events
+        )
+    finally:
+        if ticket_id is not None:
+            cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
 def scenario_direct_cli_compact_prompt(context: BabsBddContext) -> None:
     slug = unique_slug("bdd-compact")
     ticket_id = allocate_ticket_id(context.tickets_root)
@@ -1532,8 +1635,10 @@ def submit_ticket_comment(comment: str) -> None:
         js("delete window.__babsBddTicketComment")
 
 
-def submit_new_ticket_form(title: str, priority: str, body: str) -> None:
-    values = json.dumps({"title": title, "priority": priority, "body": body})
+def submit_new_ticket_form(title: str, priority: str, body: str, assignee_role: str = "") -> None:
+    values = json.dumps(
+        {"title": title, "priority": priority, "body": body, "assignee_role": assignee_role}
+    )
     js(f"window.__babsBddTicketValues = {values}")
     script = """
         (() => {
@@ -1547,6 +1652,7 @@ def submit_new_ticket_form(title: str, priority: str, body: str) -> None:
         };
         setValue('[data-testid="ticket-title"]', values.title);
         setValue('[data-testid="ticket-priority"]', values.priority);
+        setValue('[data-testid="ticket-assignee-role"]', values.assignee_role || "");
         setValue('[data-testid="ticket-body"]', values.body);
         const form = document.querySelector('[data-testid="new-ticket-form"]');
         if (!form) throw new Error("missing new Ticket form");
@@ -1842,6 +1948,7 @@ def submit_new_citizen_form(
     preset: str,
     cwd: str,
     ticket_backend: str = "hardline",
+    roles: str = "",
 ) -> None:
     values = json.dumps(
         {
@@ -1850,6 +1957,7 @@ def submit_new_citizen_form(
             "preset": preset,
             "cwd": cwd,
             "ticket_backend": ticket_backend,
+            "roles": roles,
         }
     )
     js(f"window.__babsBddFormValues = {values}")
@@ -1867,6 +1975,7 @@ def submit_new_citizen_form(
         setValue('[data-testid="citizen-cli-preset"]', values.preset);
         setValue('[data-testid="citizen-ticket-backend"]', values.ticket_backend);
         setValue('[data-testid="citizen-cwd"]', values.cwd);
+        setValue('[data-testid="citizen-roles"]', values.roles || "");
         const description = document.querySelector('[data-testid="citizen-description"]');
         if (description) description.value = "";
         const form = document.querySelector('[data-testid="new-citizen-form"]');

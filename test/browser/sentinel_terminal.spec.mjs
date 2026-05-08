@@ -36,7 +36,7 @@ async function connectSentinel(page) {
   await connectCitizen(page, "sentinel");
 }
 
-async function createShellCitizen(page, slug) {
+async function createShellCitizen(page, slug, opts = {}) {
   await page.goto("/citizens/new");
   await expect(page.getByTestId("new-citizen-form")).toBeVisible();
   await expectLiveViewConnected(page);
@@ -46,6 +46,7 @@ async function createShellCitizen(page, slug) {
   await page.getByTestId("citizen-cli-preset").selectOption("shell");
   await page.getByTestId("citizen-cwd").fill(slug);
   await page.getByTestId("citizen-description").fill("");
+  await page.getByTestId("citizen-roles").fill(opts.roles || "");
   await page.getByTestId("create-citizen-button").click();
 
   await expect(page).toHaveURL(new RegExp(`/citizens/${slug}(\\?.*)?$`));
@@ -493,6 +494,58 @@ test("ticket index creates a ticket and opens chat-ready detail", async ({ page 
     await expect(page.locator('[data-testid="ticket-comment"] [data-icon="send"]')).toBeVisible();
   } finally {
     if (id) cleanupTicket(id);
+  }
+});
+
+test("ticket role routing can be set and triggered from the browser", async ({ page }) => {
+  test.setTimeout(60_000);
+
+  const slug = `bdd-e2e-role-${Date.now()}`;
+  const title = `E2E Role Routed Ticket ${Date.now()}`;
+  const body = `E2E role-routed body for ${slug}.`;
+  let id;
+
+  try {
+    await createShellCitizen(page, slug, { roles: "Developer\nInspector" });
+
+    await page.goto("/citizens");
+    await expectLiveViewConnected(page);
+    await expect(page.getByTestId(`citizen-row-${slug}`)).toContainText("developer");
+    await expect(page.getByTestId(`citizen-row-${slug}`)).toContainText("inspector");
+
+    await page.goto("/tickets");
+    await expect(page.getByTestId("tickets-index")).toBeVisible();
+    await page.getByTestId("tickets-new").click();
+    await expect(page).toHaveURL(/\/tickets\/new$/);
+    await expect(page.getByTestId("new-ticket-form")).toBeVisible();
+    await expectLiveViewConnected(page);
+
+    await page.getByTestId("ticket-title").fill(title);
+    await page.getByTestId("ticket-priority").selectOption("normal");
+    await page.getByTestId("ticket-assignee-role").selectOption("developer");
+    await page.getByTestId("ticket-body").fill(body);
+    await page.getByTestId("create-ticket-button").click();
+
+    await expect(page).toHaveURL(/\/tickets\/T-\d{4}-\d{2}-\d{2}-\d{3}(\?.*)?$/);
+    id = new URL(page.url()).pathname.split("/").pop();
+
+    await expect(page.getByTestId("ticket-detail")).toBeVisible();
+    await expect(page.getByTestId("ticket-detail")).toContainText(title);
+    await expect(page.getByTestId("ticket-assign-role-developer")).toBeVisible();
+    await expect(page.locator('[data-testid="ticket-assign-role-developer"] [data-icon="route"]')).toBeVisible();
+
+    await page.getByTestId("ticket-assign-role-developer").click();
+
+    await expect(page.getByTestId("ticket-flash-info")).toContainText(
+      "Assigned by role developer"
+    );
+    await expect(page.getByTestId(`ticket-unassign-${slug}`)).toBeVisible();
+    await expect(page.getByTestId("ticket-detail")).toContainText(
+      `assigned to ${slug} via role developer`
+    );
+  } finally {
+    if (id) cleanupTicket(id);
+    cleanupSpawnedCitizen(slug);
   }
 });
 
