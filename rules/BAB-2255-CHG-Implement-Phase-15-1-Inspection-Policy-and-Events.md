@@ -278,6 +278,14 @@ PR.
     `mix test` with 397 `:babs_citizens` tests and 88 `:babs` tests, exported
     coverage at `:babs_citizens` 84.52% and `:babs` 89.27%, `af validate`,
     `git diff --check`, and added-line privacy scan.
+- 2026-05-08 GitHub CI after R2:
+  - Fixed CI-only test isolation failure in `ReattachScannerTest` by moving it
+    onto `RepoCase`, so tests that exercise `Catalog`/Repo initialize and clean
+    the SQLite schema even when CI runs `mix test --max-cases 1` from an empty
+    database.
+  - Validation passed: focused `ReattachScannerTest`, CI-equivalent
+    `mix test --max-cases 1`, default full `mix test`, exported coverage,
+    `af validate`, `git diff --check`, and added-line privacy scan.
 
 ## Change History
 
@@ -291,3 +299,4 @@ PR.
 | 2026-05-08 | Trinity implementation R2 passed GLM and DeepSeek | Codex |
 | 2026-05-08 | Fixed GitHub Codex R1 P2 for redacted inspection failure reasons | Codex |
 | 2026-05-08 | Fixed GitHub Codex R2 P3 for non-UTC inspection id timestamps | Codex |
+| 2026-05-08 | Fixed GitHub CI test isolation for ReattachScannerTest under max-cases 1 | Codex |

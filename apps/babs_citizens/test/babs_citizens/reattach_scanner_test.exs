@@ -1,5 +1,5 @@
 defmodule Babs.Citizens.ReattachScannerTest do
-  use ExUnit.Case, async: false
+  use Babs.Citizens.RepoCase
 
   alias Babs.Citizens.{CitizenConfig, ReattachScanner}
 
