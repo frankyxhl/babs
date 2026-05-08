@@ -204,6 +204,119 @@ git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)
     `InspectionQuorum` naming, documentation scope, existing state-machine
     usage, early reject/needs_changes termination, duplicate/late reply
     idempotency, `needs_changes` result mapping, and explicit REFACTOR passes.
+- 2026-05-08 implementation:
+  - Added `Babs.Citizens.Tickets.InspectionDecisionParser` for fenced JSON and
+    whole-body JSON inspector replies.
+  - Added `Babs.Citizens.Tickets.InspectionQuorum` for `all_pass` reduction,
+    active prompt matching, completion detection, and duplicate terminal-event
+    detection.
+  - Extended `inspection_decision` and `inspection_failed` events with optional
+    `turn_id` and `attempt_id`.
+  - Integrated matching inspector replies into the per-ticket Writer comment
+    path for approve, reject, needs_changes, unparseable, and pending council
+    outcomes.
+  - Automatic approve/reject uses existing state-machine transitions and keeps
+    human approve/reject override behavior unchanged.
+- 2026-05-08 Trinity implementation review:
+  - Trinity fast-review packet:
+    `.trinity/reviews/20260508-155635-Phase-15.3-decision-capture-implementation-diff`.
+  - GLM PASS and DeepSeek PASS; no blocking findings.
+  - Folded advisories by adding a reducer guard for empty inspector lists,
+    accepting indented JSON closing fences, and adding Writer integration
+    coverage for `needs_changes` and duplicate matching replies.
+- 2026-05-08 final Trinity implementation review:
+  - Trinity fast-review packet:
+    `.trinity/reviews/20260508-160906-Phase-15.3-decision-capture-final-diff`.
+  - GLM PASS and DeepSeek PASS; no blocking findings.
+- 2026-05-08 GitHub Codex review round 1:
+  - Reviewed commit `2ad8bbb11e`.
+  - Fixed P2 "Ignore replies to superseded inspection requests" by requiring
+    matched prompts to belong to the latest unresolved `inspection_requested`
+    event before parsing/reducing a reply.
+  - Added reducer and Writer regression coverage for superseded inspection
+    requests.
+- 2026-05-08 GitHub Codex review round 2:
+  - Reviewed commit `462ec39ee7`.
+  - Fixed P2 "Attach inspection_id to automatic transition events" by tagging
+    inspection-driven `approved`, `rejected`, and `state_change` history events
+    with the related `inspection_id`.
+  - Hardened the active-request model by rejecting a second
+    `request_inspection` call while the latest inspection is still unresolved.
+  - Added regression coverage for overlapping inspection requests and
+    inspection-linked transition auditability.
+- 2026-05-08 PR round 2 validation:
+  - Focused quorum/Writer/request tests passed: 19 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: 432 `:babs_citizens` tests
+    and 88 `:babs` tests.
+  - `mise exec -- mix test` passed: 432 `:babs_citizens` tests and 88 `:babs`
+    tests.
+  - `mise exec -- mix test --cover --export-coverage phase15_3 && mise exec -- mix cmd mix test.coverage`
+    passed: `:babs_citizens` 85.64%, `:babs` 89.27%.
+  - `af validate --root .` passed: 166 documents checked, 0 issues found.
+  - `git diff --check` passed.
+  - Added-line privacy scan found no private hostnames, private IPs, local
+    checkout paths, tokens, or secrets.
+- 2026-05-08 GitHub Codex review round 3:
+  - Reviewed commit `ba6973b737`.
+  - Fixed P2 "Clear stale inspections after human overrides" by treating
+    human `pending_approval -> closed/in_progress/cancelled` override
+    transitions as resolving the previously active inspection request.
+  - Added reducer coverage for human override resolution and Writer/API
+    coverage proving a human rejection can be followed by a fresh inspection
+    request after the Ticket returns to `pending_approval`.
+- 2026-05-08 PR round 3 validation:
+  - Focused quorum/Writer/request tests passed: 21 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: 434 `:babs_citizens` tests
+    and 88 `:babs` tests.
+  - `mise exec -- mix test` passed: 434 `:babs_citizens` tests and 88 `:babs`
+    tests.
+  - `mise exec -- mix test --cover --export-coverage phase15_3 && mise exec -- mix cmd mix test.coverage`
+    passed: `:babs_citizens` 85.62%, `:babs` 89.27%.
+  - `af validate --root .` passed: 166 documents checked, 0 issues found.
+  - `git diff --check` passed.
+  - Added-line privacy scan found no private hostnames, private IPs, local
+    checkout paths, tokens, or secrets.
+- 2026-05-08 GitHub Codex review round 4:
+  - Reviewed commit `57426d7a5e`.
+  - Fixed P2 "Keep superseded inspections from becoming active again" by
+    making `active_request/1` consider only the latest
+    `inspection_requested`; if that latest request is resolved, no older
+    request can become active again.
+  - Added reducer coverage for overlapping requests where the latest request
+    completes as `requires_human`.
+- 2026-05-08 PR round 4 validation:
+  - Focused quorum/Writer/request tests passed: 22 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: 435 `:babs_citizens` tests
+    and 88 `:babs` tests.
+  - `mise exec -- mix test` passed: 435 `:babs_citizens` tests and 88 `:babs`
+    tests.
+  - `mise exec -- mix test --cover --export-coverage phase15_3 && mise exec -- mix cmd mix test.coverage`
+    passed: `:babs_citizens` 85.66%, `:babs` 89.27%.
+  - `af validate --root .` passed: 166 documents checked, 0 issues found.
+  - `git diff --check` passed.
+  - Added-line privacy scan found no private hostnames, private IPs, local
+    checkout paths, tokens, or secrets.
+- 2026-05-08 local validation:
+  - Focused Phase 15.3 parser/quorum/Writer tests passed: 23 tests.
+  - Focused existing Writer/API/inspection-event tests passed: 58 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: 432 `:babs_citizens` tests
+    and 88 `:babs` tests.
+  - `mise exec -- mix test` passed: 432 `:babs_citizens` tests and 88 `:babs`
+    tests.
+  - `mise exec -- mix test --cover --export-coverage phase15_3 && mise exec -- mix cmd mix test.coverage`
+    passed: `:babs_citizens` 85.71%, `:babs` 89.27%.
+  - `af validate --root .` passed: 166 documents checked, 0 issues found.
+  - `git diff --check` passed.
+  - Added-line privacy scan found no private hostnames, private IPs, local
+    checkout paths, tokens, or secrets.
 
 ## Change History
 
@@ -211,3 +324,7 @@ git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)
 |------|--------|----|
 | 2026-05-08 | Initial Phase 15.3 decision capture and quorum CHG | Codex |
 | 2026-05-08 | Mark Approved after Trinity fast-review PASS/PASS and fold advisories | Codex |
+| 2026-05-08 | Implement decision parser, quorum reducer, Writer capture integration, and local validation | Codex |
+| 2026-05-08 | Record Trinity implementation review and folded advisory coverage | Codex |
+| 2026-05-08 | Record final Trinity implementation review PASS/PASS | Codex |
+| 2026-05-08 | Record Codex R1 superseded-inspection fix and regression coverage | Codex |

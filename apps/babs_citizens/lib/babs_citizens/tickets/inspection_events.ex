@@ -77,6 +77,8 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
           "summary" => summary,
           "findings" => findings
         })
+        |> put_optional("turn_id", Keyword.get(opts, :turn_id))
+        |> put_optional("attempt_id", Keyword.get(opts, :attempt_id))
 
       appendable(ticket_id, event)
     end
@@ -96,6 +98,8 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
           "to" => to,
           "error" => inspection_error_text(reason)
         })
+        |> put_optional("turn_id", Keyword.get(opts, :turn_id))
+        |> put_optional("attempt_id", Keyword.get(opts, :attempt_id))
 
       appendable(ticket_id, event)
     end
@@ -186,6 +190,10 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
     do: "Inspection failed: unparseable decision"
 
   defp inspection_error_text(_reason), do: "Inspection failed"
+
+  defp put_optional(event, _key, nil), do: event
+  defp put_optional(event, _key, ""), do: event
+  defp put_optional(event, key, value), do: Map.put(event, key, value)
 
   defp stamp!(%DateTime{} = timestamp), do: format_datetime(timestamp)
 
