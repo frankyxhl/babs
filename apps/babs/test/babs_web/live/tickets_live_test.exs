@@ -650,6 +650,8 @@ defmodule BabsWeb.TicketsLiveTest do
       )
 
     {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+    assert html =~ ~s(data-testid="ticket-inspection-panel")
+    assert html =~ "Human approval"
     assert html =~ ~s(data-testid="ticket-approve")
     assert html =~ ~s(data-testid="ticket-reject-form")
 
@@ -665,10 +667,93 @@ defmodule BabsWeb.TicketsLiveTest do
     refute html =~ ~s(data-testid="ticket-comment-form")
   end
 
+  test "ticket detail renders inspection council status and keeps human override controls", %{
+    root: root
+  } do
+    ticket =
+      create_ticket!(root, "Council inspection", "Show inspector verdicts.",
+        state: "pending_approval",
+        assignees: ["clare"],
+        metadata: %{
+          "inspection" => %{
+            "mode" => "auto",
+            "strategy" => "council",
+            "roles" => ["inspector"],
+            "citizens" => ["dylan", "elena"],
+            "quorum" => "all_pass",
+            "max_inspectors" => 2,
+            "allow_self_inspection" => false
+          }
+        }
+      )
+
+    :ok =
+      Api.append_ticket_events(
+        ticket.id,
+        [
+          %{
+            "ts" => "2026-05-06T00:01:00Z",
+            "event" => "inspection_requested",
+            "by" => "system",
+            "ticket_id" => ticket.id,
+            "inspection_id" => "insp_20260506000100_1",
+            "policy" => %{"mode" => "auto", "strategy" => "council", "quorum" => "all_pass"},
+            "inspectors" => ["dylan", "elena"]
+          },
+          %{
+            "ts" => "2026-05-06T00:02:00Z",
+            "event" => "inspection_decision",
+            "by" => "dylan",
+            "ticket_id" => ticket.id,
+            "inspection_id" => "insp_20260506000100_1",
+            "decision" => "approve",
+            "summary" => "Dylan approves.",
+            "findings" => []
+          },
+          %{
+            "ts" => "2026-05-06T00:03:00Z",
+            "event" => "inspection_decision",
+            "by" => "elena",
+            "ticket_id" => ticket.id,
+            "inspection_id" => "insp_20260506000100_1",
+            "decision" => "needs_changes",
+            "summary" => "Add release notes.",
+            "findings" => [%{"path" => "README.md", "line" => 12}]
+          },
+          %{
+            "ts" => "2026-05-06T00:04:00Z",
+            "event" => "inspection_completed",
+            "by" => "system",
+            "ticket_id" => ticket.id,
+            "inspection_id" => "insp_20260506000100_1",
+            "result" => "rejected",
+            "quorum" => "all_pass"
+          }
+        ],
+        tickets_root: root
+      )
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-inspection-panel")
+    assert html =~ ~s(data-testid="ticket-inspection-mode")
+    assert html =~ "Auto council"
+    assert html =~ "all_pass"
+    assert html =~ "rejected"
+    assert html =~ ~s(data-testid="ticket-inspector-dylan")
+    assert html =~ "Dylan approves."
+    assert html =~ ~s(data-testid="ticket-inspector-elena")
+    assert html =~ "Needs changes"
+    assert html =~ "Add release notes."
+    assert html =~ "README.md:12"
+    assert html =~ ~s(data-testid="ticket-approve")
+    assert html =~ ~s(data-testid="ticket-reject-form")
+  end
+
   defp create_ticket!(root, title, body, opts \\ []) do
     attrs =
       opts
-      |> Keyword.take([:state, :assignees, :priority, :assignee_role])
+      |> Keyword.take([:state, :assignees, :priority, :assignee_role, :metadata])
       |> Enum.into(%{title: title, body: body})
 
     api_opts =

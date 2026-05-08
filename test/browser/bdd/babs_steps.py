@@ -172,7 +172,7 @@ class BabsBddContext:
 
     def _server_ready(self) -> bool:
         try:
-            status, _body = http_get_status(f"{self.base_url}/citizens/sentinel", timeout=2)
+            status, _body = http_get_status(f"{self.base_url}/tickets", timeout=2)
             return status == 200
         except Exception:
             return False
@@ -337,6 +337,27 @@ def scenarios() -> list[Scenario]:
             when="a Citizen reply is appended to the Ticket history JSONL",
             then="the chat view refreshes with the Citizen message",
             run=scenario_ticket_chat_shows_captured_citizen_reply,
+        ),
+        Scenario(
+            name="ticket inspection panel shows auto approval",
+            given="a Ticket was auto-approved by an inspector",
+            when="the operator opens the Ticket detail page",
+            then="the inspection panel shows the inspector approval and approved result",
+            run=scenario_ticket_inspection_panel_shows_auto_approval,
+        ),
+        Scenario(
+            name="ticket inspection panel shows rejected decision",
+            given="a Ticket was rejected by an inspector",
+            when="the operator opens the Ticket detail page",
+            then="the inspection panel shows the needs-changes decision and rejected result",
+            run=scenario_ticket_inspection_panel_shows_rejected_decision,
+        ),
+        Scenario(
+            name="ticket inspection panel shows council status",
+            given="a two-inspector council is pending",
+            when="the operator opens the Ticket detail page",
+            then="the inspection panel shows both inspector rows and human override controls",
+            run=scenario_ticket_inspection_panel_shows_council_status,
         ),
         Scenario(
             name="ticket new form captures Elena Copilot JSONL reply",
@@ -1022,6 +1043,96 @@ def scenario_ticket_chat_shows_captured_citizen_reply(context: BabsBddContext) -
             event.get("event") == "comment" and event.get("by") == "clare" and event.get("body") == reply
             for event in events
         )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_inspection_panel_shows_auto_approval(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(
+            context.tickets_root,
+            ticket_id,
+            "BDD Auto Approved Ticket",
+            "Inspection panel should show approval.",
+            state="closed",
+            assignees=["clare"],
+            metadata=auto_inspection_metadata(["dylan"], "single"),
+        )
+        append_inspection_history(context.tickets_root, ticket_id, ["dylan"], [decision("dylan", "approve", "Dylan approves.")], "approved")
+
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-inspection-panel']", "inspection panel")
+        assert "Auto single" in js("document.body.innerText")
+        assert "Dylan approves." in js("document.body.innerText")
+        assert "approved" in js("document.body.innerText")
+        assert_element_visible("[data-testid='ticket-inspector-dylan']", "dylan inspection row")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_inspection_panel_shows_rejected_decision(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(
+            context.tickets_root,
+            ticket_id,
+            "BDD Needs Changes Ticket",
+            "Inspection panel should show rejection feedback.",
+            state="in_progress",
+            assignees=["clare"],
+            metadata=auto_inspection_metadata(["dylan"], "single"),
+        )
+        append_inspection_history(
+            context.tickets_root,
+            ticket_id,
+            ["dylan"],
+            [decision("dylan", "needs_changes", "Add tests.", findings=[{"path": "README.md", "line": 12}])],
+            "rejected",
+        )
+
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-inspection-panel']", "inspection panel")
+        assert "Auto single" in js("document.body.innerText")
+        assert "Needs changes" in js("document.body.innerText")
+        assert "Add tests." in js("document.body.innerText")
+        assert "README.md:12" in js("document.body.innerText")
+        assert "rejected" in js("document.body.innerText")
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_ticket_inspection_panel_shows_council_status(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(
+            context.tickets_root,
+            ticket_id,
+            "BDD Council Ticket",
+            "Inspection panel should show council rows.",
+            state="pending_approval",
+            assignees=["clare"],
+            metadata=auto_inspection_metadata(["dylan", "elena"], "council"),
+        )
+        append_inspection_history(
+            context.tickets_root,
+            ticket_id,
+            ["dylan", "elena"],
+            [decision("dylan", "approve", "Dylan approves.")],
+            None,
+        )
+
+        context.open_path(f"/tickets/{ticket_id}")
+        assert_element_visible("[data-testid='ticket-inspection-panel']", "inspection panel")
+        assert "Auto council" in js("document.body.innerText")
+        assert_element_visible("[data-testid='ticket-inspector-dylan']", "dylan inspection row")
+        assert_element_visible("[data-testid='ticket-inspector-elena']", "elena inspection row")
+        assert "Prompt delivered" in js("document.body.innerText")
+        assert_element_visible("[data-testid='ticket-approve']", "human approve override")
+        assert_element_visible("[data-testid='ticket-reject-form']", "human reject override")
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
 
@@ -2144,24 +2255,35 @@ def allocate_ticket_id(root: Path) -> str:
     raise AssertionError("could not allocate BDD Ticket id")
 
 
-def write_ticket(root: Path, ticket_id: str, title: str, body: str) -> None:
+def write_ticket(
+    root: Path,
+    ticket_id: str,
+    title: str,
+    body: str,
+    *,
+    state: str = "open",
+    assignees: list[str] | None = None,
+    metadata: dict | None = None,
+) -> None:
     root.mkdir(parents=True, exist_ok=True)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    assignees = assignees or []
+    metadata = metadata or {"source": "browser-harness"}
 
     ticket_markdown_path(root, ticket_id).write_text(
         f"""---
 id: "{ticket_id}"
 type: "assignment"
-state: "open"
+state: "{state}"
 assigner: "bdd"
-assignees: []
+assignees: {json.dumps(assignees)}
 assignee_role: null
 inspector: "user"
 priority: "normal"
 parent_ticket: null
 created_at: "{now}"
 updated_at: "{now}"
-metadata: {{"source": "browser-harness"}}
+metadata: {json.dumps(metadata, separators=(",", ":"))}
 ---
 
 # {title}
@@ -2178,6 +2300,93 @@ metadata: {{"source": "browser-harness"}}
 def append_ticket_history_event(root: Path, ticket_id: str, event: dict) -> None:
     with ticket_history_path(root, ticket_id).open("a") as history_file:
         history_file.write(json.dumps(event, separators=(",", ":")) + "\n")
+
+
+def auto_inspection_metadata(citizens: list[str], strategy: str) -> dict:
+    return {
+        "source": "browser-harness",
+        "inspection": {
+            "mode": "auto",
+            "strategy": strategy,
+            "roles": [],
+            "citizens": citizens,
+            "quorum": "all_pass",
+            "max_inspectors": len(citizens),
+            "allow_self_inspection": False,
+        },
+    }
+
+
+def append_inspection_history(
+    root: Path,
+    ticket_id: str,
+    inspectors: list[str],
+    decisions: list[dict],
+    result: str | None,
+) -> None:
+    inspection_id = "insp_20260508120000_1"
+    append_ticket_history_event(
+        root,
+        ticket_id,
+        {
+            "ts": "2026-05-08T12:00:00Z",
+            "event": "inspection_requested",
+            "by": "system",
+            "ticket_id": ticket_id,
+            "inspection_id": inspection_id,
+            "policy": {
+                "mode": "auto",
+                "strategy": "council" if len(inspectors) > 1 else "single",
+                "quorum": "all_pass",
+            },
+            "inspectors": inspectors,
+        },
+    )
+
+    for index, inspector in enumerate(inspectors, 1):
+        append_ticket_history_event(
+            root,
+            ticket_id,
+            {
+                "ts": f"2026-05-08T12:0{index}:00Z",
+                "event": "inspection_prompt_delivered",
+                "by": "system",
+                "ticket_id": ticket_id,
+                "inspection_id": inspection_id,
+                "to": inspector,
+                "turn_id": f"turn_20260508120{index}00_bddinspect",
+                "attempt_id": f"attempt_20260508120{index}00_bddinspect",
+            },
+        )
+
+    for event in decisions:
+        append_ticket_history_event(root, ticket_id, {"inspection_id": inspection_id, "ticket_id": ticket_id, **event})
+
+    if result:
+        append_ticket_history_event(
+            root,
+            ticket_id,
+            {
+                "ts": "2026-05-08T12:09:00Z",
+                "event": "inspection_completed",
+                "by": "system",
+                "ticket_id": ticket_id,
+                "inspection_id": inspection_id,
+                "result": result,
+                "quorum": "all_pass",
+            },
+        )
+
+
+def decision(slug: str, verdict: str, summary: str, *, findings: list[dict] | None = None) -> dict:
+    return {
+        "ts": "2026-05-08T12:04:00Z",
+        "event": "inspection_decision",
+        "by": slug,
+        "decision": verdict,
+        "summary": summary,
+        "findings": findings or [],
+    }
 
 
 def write_copilot_events(copilot_home: Path, ticket_id: str, started_at: str, reply: str) -> Path:

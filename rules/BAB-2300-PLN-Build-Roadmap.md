@@ -333,7 +333,8 @@ Citizens still import and route correctly.
 DeepSeek PASS. Phase 15.1 execution CHG `BAB-2255` merged the inspection
 policy and event-foundation slice. Phase 15.2 execution CHG `BAB-2256` merged
 inspector selection and redacted prompt assembly. Phase 15.3 execution CHG
-`BAB-2257` is approved for decision capture and `all_pass` quorum reduction.
+`BAB-2257` merged decision capture and `all_pass` quorum reduction. Phase 15.4
+execution CHG `BAB-2258` is drafted for inspection UI, BDD, and E2E coverage.
 **Scope**: Replace the earlier single-inspector plan with Ticket-level
 inspection policy and an Inspector Council. The human operator remains the
 default inspector; Tickets can explicitly opt into automatic inspection by one

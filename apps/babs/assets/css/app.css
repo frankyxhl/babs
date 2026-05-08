@@ -384,6 +384,70 @@
     font-weight: 750;
   }
 
+  .stat-list.compact {
+    gap: 6px;
+  }
+
+  .inspection-panel {
+    gap: 10px;
+  }
+
+  .inspection-mode,
+  .inspection-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .inspection-mode {
+    justify-content: flex-start;
+    color: var(--ks-text);
+    font-weight: 750;
+  }
+
+  .inspection-mode .icon {
+    width: 16px;
+    height: 16px;
+    color: var(--ks-accent);
+  }
+
+  .inspection-list,
+  .inspection-findings {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .inspection-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .inspection-list > li {
+    display: grid;
+    gap: 6px;
+    border: 1px solid var(--ks-line);
+    border-radius: 8px;
+    background: var(--ks-panel-2);
+    padding: 8px;
+  }
+
+  .inspection-summary,
+  .inspection-findings li {
+    margin: 0;
+    color: var(--ks-muted);
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .inspection-findings {
+    display: grid;
+    gap: 4px;
+  }
+
   .chat-card {
     display: grid;
     gap: 14px;
