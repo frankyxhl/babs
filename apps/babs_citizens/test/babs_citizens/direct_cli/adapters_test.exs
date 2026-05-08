@@ -107,6 +107,7 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert {:ok, result} = Claude.parse_result(%{stdout: stdout, stderr: ""})
     assert result.provider_session_id == "session-1"
     assert result.text == "done at [REDACTED_PATH]"
+    assert_normalized_direct_result(result, "claude", "done at [REDACTED_PATH]", "session-1")
     assert result.capabilities["resume"]
   end
 
@@ -135,6 +136,7 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert {:ok, result} = Codex.parse_result(%{stdout: stdout, stderr: ""})
     assert result.provider_session_id == "codex-thread"
     assert result.text == "codex reply"
+    assert_normalized_direct_result(result, "codex", "codex reply", "codex-thread")
 
     assert {:ok, resumed} = Codex.resume_command(cfg, "codex-thread", "again")
 
@@ -262,6 +264,7 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert {:ok, result} = Copilot.parse_result(%{stdout: stdout, stderr: ""})
     assert result.provider_session_id == "copilot-session"
     assert result.text == "copilot reply"
+    assert_normalized_direct_result(result, "copilot", "copilot reply", "copilot-session")
   end
 
   test "fake adapter is deterministic for BDD fixtures" do
@@ -273,6 +276,19 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert {:ok, result} = Fake.parse_result(%{stdout: stdout, stderr: ""})
     assert result.text == "fake reply"
     assert result.provider_session_id == "fake-session"
+    assert_normalized_direct_result(result, "fake", "fake reply", "fake-session")
+  end
+
+  defp assert_normalized_direct_result(result, provider, reply, provider_session_id) do
+    assert result.status == :ok
+    assert result.provider == provider
+    assert result.backend == "direct_cli"
+    assert result.reply == reply
+    assert result.text == reply
+    assert result.provider_session_id == provider_session_id
+    assert result.diagnostics == %{redacted: true, summary: nil}
+    assert result.raw_artifact_refs == []
+    assert result.capabilities["direct"]
   end
 
   defp config(cli) do

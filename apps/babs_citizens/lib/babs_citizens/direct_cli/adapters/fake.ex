@@ -6,6 +6,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Fake do
   @behaviour Babs.Citizens.DirectCli.Adapter
 
   alias Babs.Citizens.DirectCli.Adapters.Common
+  alias Babs.Citizens.ProviderRuntime.Result
 
   @impl true
   def provider, do: "fake"
@@ -47,11 +48,9 @@ defmodule Babs.Citizens.DirectCli.Adapters.Fake do
     session_id = Common.find_session_id(values) || artifacts[:provider_session_id]
 
     {:ok,
-     %{
-       provider: provider(),
-       text: Common.clean_text(text, opts),
+     Result.direct_success(provider(), Common.clean_text(text, opts),
        provider_session_id: session_id,
        capabilities: %{"direct" => true, "resume" => is_binary(session_id)}
-     }}
+     )}
   end
 end

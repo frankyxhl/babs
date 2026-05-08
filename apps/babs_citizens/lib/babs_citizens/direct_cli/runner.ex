@@ -248,7 +248,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
     Api.comment_ticket(
       turn.ticket_id,
       %{
-        body: result.text,
+        body: Map.get(result, :reply) || result.text,
         by: turn.slug,
         turn_id: turn.turn_id,
         attempt_id: turn.attempt_id

@@ -6,6 +6,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   @behaviour Babs.Citizens.DirectCli.Adapter
 
   alias Babs.Citizens.DirectCli.Adapters.Common
+  alias Babs.Citizens.ProviderRuntime.Result
 
   @impl true
   def provider, do: "copilot"
@@ -45,13 +46,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
         {:error, :no_assistant_reply}
 
       true ->
-        {:ok,
-         %{
-           provider: provider(),
-           text: Common.clean_text(text, opts),
-           provider_session_id: session_id,
-           capabilities: %{"direct" => true, "resume" => is_binary(session_id)}
-         }}
+        {:ok, direct_success(text, session_id, opts)}
     end
   end
 
@@ -76,5 +71,12 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
       "-C",
       cwd
     ] ++ extra
+  end
+
+  defp direct_success(text, session_id, opts) do
+    Result.direct_success(provider(), Common.clean_text(text, opts),
+      provider_session_id: session_id,
+      capabilities: %{"direct" => true, "resume" => is_binary(session_id)}
+    )
   end
 end
