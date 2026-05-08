@@ -9,6 +9,7 @@ import sqlite3
 import subprocess
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from dataclasses import dataclass
@@ -435,6 +436,13 @@ def scenarios() -> list[Scenario]:
             when="the operator submits a Ticket comment from /tickets/<id>",
             then="the comment appears in history and is injected into the assignee terminal",
             run=scenario_ticket_comment_notifies_assigned_citizen,
+        ),
+        Scenario(
+            name="federation events feed returns cursor snapshots",
+            given="the Phase 17 read API is available",
+            when="a remote peer reads /api/v1/events and repeats the returned cursor",
+            then="the first read returns snapshots and the unchanged cursor returns no events",
+            run=scenario_federation_events_feed_returns_cursor_snapshots,
         ),
     ]
 
@@ -1742,6 +1750,37 @@ def scenario_ticket_comment_notifies_assigned_citizen(context: BabsBddContext) -
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)
+
+
+def scenario_federation_events_feed_returns_cursor_snapshots(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Remote Events Ticket", "Expose through events.")
+
+        status, body = http_get_status(f"{context.base_url}/api/v1/events", timeout=5)
+        assert status == 200
+        first = json.loads(body)
+
+        assert isinstance(first.get("cursor"), str)
+        assert [event["type"] for event in first["events"]] == [
+            "node.snapshot",
+            "citizens.snapshot",
+            "tickets.snapshot",
+        ]
+
+        tickets_event = next(event for event in first["events"] if event["type"] == "tickets.snapshot")
+        assert any(ticket["id"] == ticket_id for ticket in tickets_event["payload"]["tickets"])
+
+        encoded_cursor = urllib.parse.quote(first["cursor"], safe="")
+        status, body = http_get_status(f"{context.base_url}/api/v1/events?cursor={encoded_cursor}", timeout=5)
+        assert status == 200
+        second = json.loads(body)
+
+        assert second["cursor"] == first["cursor"]
+        assert second["events"] == []
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
 
 
 def assert_element_visible(selector: str, label: str) -> None:

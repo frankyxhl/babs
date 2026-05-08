@@ -37,6 +37,7 @@ defmodule BabsWeb.Router do
     pipe_through(:api)
 
     get("/node", ReadController, :node)
+    get("/events", EventsController, :index)
     get("/citizens", ReadController, :citizens)
     get("/citizens/:slug/transcript", ReadController, :citizen_transcript)
     get("/citizens/:slug", ReadController, :citizen)

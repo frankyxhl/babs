@@ -25,7 +25,7 @@ defmodule Babs.Citizens.MixProject do
   def application do
     [
       mod: {Babs.Citizens.Application, []},
-      extra_applications: [:logger, :erlexec, :ecto_sql]
+      extra_applications: [:logger, :erlexec, :ecto_sql, :inets]
     ]
   end
 
