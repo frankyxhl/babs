@@ -18,6 +18,7 @@ end
 socket_auth_token = non_empty_env.("BABS_SOCKET_TOKEN")
 workspace_root = non_empty_env.("BABS_WORKSPACE_ROOT")
 tickets_root = non_empty_env.("BABS_TICKETS_ROOT")
+federation_config_path = non_empty_env.("BABS_FEDERATION_CONFIG")
 
 citizens_db_path =
   case non_empty_env.("BABS_CITIZENS_DB_PATH") do
@@ -79,6 +80,17 @@ citizens_config =
 citizens_config =
   if tickets_root do
     Keyword.put(citizens_config, :tickets_root, Path.expand(tickets_root, babs_root))
+  else
+    citizens_config
+  end
+
+citizens_config =
+  if federation_config_path do
+    Keyword.put(
+      citizens_config,
+      :federation_config_path,
+      Path.expand(federation_config_path, babs_root)
+    )
   else
     citizens_config
   end
