@@ -339,6 +339,11 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     a transient root-history append failure.
   - Recovery now requires valid child history, repairing a missing child
     `created` event before treating a materialized child as recoverable.
+  - Once child materialization has started, proposal edit/remove/reject actions
+    are blocked; approval remains available to repair a missing approval/root
+    marker.
+  - Recovered children must match the current planned child fields, preventing
+    stale child Tickets from being recorded for a later edited proposal.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children.
   - Ticket detail renders created child Ticket links, role/inspector badges,
@@ -361,6 +366,10 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - GitHub Codex Review R3 found one additional child audit-trail issue in the
     recovery path. Fixed by requiring or repairing child `created` history
     before recording recovered children in the root marker.
+  - GitHub Codex Review R4 found two additional edge cases: edits/rejections
+    after materialization had started, and stale recovered children after
+    proposal edits. Both were fixed with regression coverage before the fifth
+    and final GitHub review request.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -404,6 +413,15 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Post-Codex-R3 `af validate --root .`: PASS, 171 documents checked.
   - Post-Codex-R3 `git diff --check`: PASS.
   - Post-Codex-R3 added-line privacy scan: PASS, no matches.
+  - Post-Codex-R4 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 56 tests.
+  - Post-Codex-R4 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R4 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R4 `mise exec -- mix test`: PASS, 583 tests.
+  - Post-Codex-R4 `npm run test:js`: PASS, 15 tests.
+  - Post-Codex-R4 `af validate --root .`: PASS, 171 documents checked.
+  - Post-Codex-R4 `git diff --check`: PASS.
+  - Post-Codex-R4 added-line privacy scan: PASS, no matches.
 
 ---
 
@@ -417,3 +435,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Fix GitHub Codex R1 root-event preflight and multiline child-title findings | Codex |
 | 2026-05-08 | Fix GitHub Codex R2 missing-root-marker retry recovery finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R3 child-history recovery audit finding | Codex |
+| 2026-05-08 | Fix GitHub Codex R4 materialization edit lock and stale recovery findings | Codex |

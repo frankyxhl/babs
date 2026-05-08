@@ -1591,8 +1591,8 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:ok, nil} ->
           {:cont, {:ok, acc}}
 
-        {:ok, ticket} ->
-          {:cont, {:ok, Map.put(acc, materialized_child_index(ticket), ticket)}}
+        {:ok, {index, ticket}} ->
+          {:cont, {:ok, Map.put(acc, index, ticket)}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
@@ -1601,14 +1601,24 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp existing_mayor_child(root, id, plan, opts) do
-    with {:ok, ticket} <- Store.read_ticket(root, id, opts),
-         true <- materialized_child?(ticket, plan),
-         :ok <- ensure_materialized_child_history(root, ticket) do
-      {:ok, ticket}
-    else
-      false ->
-        {:ok, nil}
+    with {:ok, ticket} <- Store.read_ticket(root, id, opts) do
+      case materialized_child_status(ticket, plan) do
+        :unrelated ->
+          {:ok, nil}
 
+        {:ok, index} ->
+          case ensure_materialized_child_history(root, ticket) do
+            :ok ->
+              {:ok, {index, ticket}}
+
+            {:error, reason} ->
+              {:error, {:mayor_child_tickets, {:unrecoverable_child_history, id, reason}}}
+          end
+
+        {:stale, _index} ->
+          {:error, {:mayor_child_tickets, {:stale_materialized_child, id}}}
+      end
+    else
       {:error, {:not_found, _id}} ->
         {:ok, nil}
 
@@ -1617,24 +1627,43 @@ defmodule Babs.Citizens.Tickets.Writer do
     end
   end
 
-  defp materialized_child?(%Ticket{} = ticket, plan) do
+  defp materialized_child_status(%Ticket{} = ticket, plan) do
     materialization = metadata_value(ticket.metadata, "mayor_materialization")
 
     with true <- ticket.parent_ticket == plan.root_ticket_id,
          %{} <- materialization,
          true <- metadata_value(materialization, "proposal_id") == plan.proposal_id,
          index when is_integer(index) <- metadata_value(materialization, "child_index"),
-         true <- Enum.any?(plan.children, &(&1.child_index == index)) do
-      true
+         {:ok, child} <- planned_child(plan, index) do
+      if materialized_child_matches_plan?(ticket, child) do
+        {:ok, index}
+      else
+        {:stale, index}
+      end
     else
-      _not_match -> false
+      _not_match -> :unrelated
     end
   end
 
-  defp materialized_child_index(%Ticket{} = ticket) do
-    ticket.metadata
-    |> metadata_value("mayor_materialization")
-    |> metadata_value("child_index")
+  defp planned_child(plan, index) do
+    case Enum.find(plan.children, &(&1.child_index == index)) do
+      nil -> :error
+      child -> {:ok, child}
+    end
+  end
+
+  defp materialized_child_matches_plan?(%Ticket{} = ticket, child) do
+    attrs = child.attrs
+
+    ticket.assigner == attrs.assigner and
+      ticket.assignee_role == attrs.assignee_role and
+      ticket.body == attrs.body and
+      ticket.inspector == attrs.inspector and
+      ticket.metadata == attrs.metadata and
+      ticket.parent_ticket == attrs.parent_ticket and
+      ticket.priority == attrs.priority and
+      ticket.title == attrs.title and
+      ticket.type == attrs.type
   end
 
   defp ensure_materialized_child_history(root, %Ticket{} = ticket) do

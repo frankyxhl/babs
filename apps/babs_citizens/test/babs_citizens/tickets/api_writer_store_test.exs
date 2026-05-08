@@ -430,6 +430,71 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            ]
   end
 
+  test "mayor proposal approval rejects stale recovered child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_stale_recover", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    history_path = TicketMarkdown.history_path(root, ticket.id)
+    File.chmod!(history_path, 0o444)
+
+    try do
+      assert {:error, {:redacted_io_error, {:append_history, _reason}}} =
+               Api.approve_mayor_proposal(ticket.id, "prop_stale_recover",
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:02:00Z"
+               )
+    after
+      File.chmod!(history_path, 0o644)
+    end
+
+    child_id =
+      root
+      |> Path.join("T-2026-05-08-*.md")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".md"))
+      |> Enum.reject(&(&1 == ticket.id))
+      |> List.first()
+
+    child_path = TicketMarkdown.path(root, child_id)
+
+    child_path
+    |> File.read!()
+    |> String.replace("# Build backend", "# Build stale backend")
+    |> then(&File.write!(child_path, &1))
+
+    assert {:error, {:mayor_child_tickets, {:stale_materialized_child, ^child_id}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_stale_recover",
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 2
+  end
+
   test "mayor proposal approval rejects multiline child titles before creating child tickets" do
     root = tmp_root()
 
@@ -510,6 +575,18 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              )
 
     revision = proposal_revision(root, ticket.id)
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_created}}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_repair", 0, %{title: "Changed"},
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_created}}} =
+             Api.reject_mayor_proposal(ticket.id, "prop_repair", "Stop.",
+               tickets_root: root,
+               proposal_revision: revision
+             )
 
     assert {:ok,
             %{

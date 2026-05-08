@@ -46,6 +46,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
           {:ok, map()} | {:error, term()}
   def revise_child(ticket, history, proposal_id, child_index, attrs, opts \\ []) do
     with {:ok, state} <- pending_state(ticket, history, proposal_id, opts),
+         :ok <- ensure_not_materialized(state),
          {:ok, children} <- replace_child(state.proposal["children"], child_index, attrs),
          proposal <- Map.put(state.proposal, "children", children),
          {:ok, proposal} <- normalize_proposal(proposal, state.policy) do
@@ -64,6 +65,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
           {:ok, map()} | {:error, term()}
   def remove_child(ticket, history, proposal_id, child_index, opts \\ []) do
     with {:ok, state} <- pending_state(ticket, history, proposal_id, opts),
+         :ok <- ensure_not_materialized(state),
          {:ok, children} <- remove_child_at(state.proposal["children"], child_index),
          proposal <- Map.put(state.proposal, "children", children),
          {:ok, proposal} <- normalize_proposal(proposal, state.policy) do
@@ -96,7 +98,8 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
           {:ok, map()} | {:error, term()}
   def reject(ticket, history, proposal_id, feedback, opts \\ []) do
     with {:ok, feedback} <- feedback(feedback),
-         {:ok, state} <- pending_state(ticket, history, proposal_id, opts) do
+         {:ok, state} <- pending_state(ticket, history, proposal_id, opts),
+         :ok <- ensure_not_materialized(state) do
       event =
         ticket
         |> proposal_event("mayor_proposal_rejected", state.proposal, opts)
@@ -226,6 +229,12 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
 
   defp ensure_pending(%{status: status}),
     do: {:error, {:mayor_proposal_review, {:already_decided, status}}}
+
+  defp ensure_not_materialized(%{children_created: children_created})
+       when is_map(children_created),
+       do: {:error, {:mayor_proposal_review, {:already_materialized, :children_created}}}
+
+  defp ensure_not_materialized(_state), do: :ok
 
   defp replace_child(children, index, attrs) do
     with :ok <- ensure_child_index(children, index),

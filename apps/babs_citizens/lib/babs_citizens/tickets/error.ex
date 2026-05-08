@@ -89,6 +89,9 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:mayor_proposal_review, {:already_decided, status}}),
     do: "Mayor proposal is already #{status}"
 
+  def message({:mayor_proposal_review, {:already_materialized, :children_created}}),
+    do: "Mayor proposal children already exist; approve again to repair the root marker"
+
   def message({:mayor_proposal_review, {:terminal_ticket, id, state}}),
     do: "Ticket #{id} is #{state} and cannot review Mayor proposals"
 
@@ -102,6 +105,9 @@ defmodule Babs.Citizens.Tickets.Error do
 
   def message({:mayor_child_tickets, {:unrecoverable_child_history, id, _reason}}),
     do: "Mayor proposal child Ticket #{id} has invalid history and cannot be recovered"
+
+  def message({:mayor_child_tickets, {:stale_materialized_child, id}}),
+    do: "Mayor proposal child Ticket #{id} no longer matches the current proposal"
 
   def message({:terminal_ticket, id, state}),
     do: "Ticket #{id} is #{state} and cannot be commented on"
