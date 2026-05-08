@@ -290,7 +290,8 @@ reply capture, restart, and imported tmux validations still pass.
 
 **Planning doc**: `BAB-2241` PRP
 **Current status**: Approved PRP after Trinity fast-review with GLM and
-DeepSeek PASS.
+DeepSeek PASS. Phase 13f.1 implementation CHG is `BAB-2246`; the public
+provider inventory reference is `BAB-2247`.
 **Scope**: Formalize the provider runtime contract before Phase 14-17 automation
 depends on provider-specific launch, resume, parsing, and capability behavior.
 The OpenClaw wrapping research is used as architecture inspiration only; Babs
@@ -444,6 +445,7 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Add `BAB-2247` Provider Runtime Inventory reference for Phase 13f.1 | Codex |
 | 2026-05-03 | Full rewrite from earlier 5-phase plan; new 17-phase (with 6.5) Bootstrap → Flywheel structure; incorporates Trinity review (`BAB-1006`); β + γ (`BAB-1110`); ticket-everything (`BAB-1111`); multi-CLI (`BAB-1112`); v0.1 scope narrowing (`BAB-1109`) | Claude Code |
 | 2026-05-03 | Sync Phase 0 output with amended `BAB-1502`; validation now records CHG entries on `BAB-1103`, `BAB-1106`, and `BAB-1110` | Codex |
 | 2026-05-04 | Phase 1 cleanup: switch seed names to Clare/Dylan plus Sentinel, move configs to `citizens/citizen-<slug>.toml`, use `Babs.DevReloader`, move transcripts to `<cwd>/transcript.jsonl`, and defer SQLite as Phase 3 authority | Codex |
@@ -492,3 +494,4 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Add `BAB-2243` Phase 15 PRP and update Phase 15 from a single inspector role to Inspector Council auto-approval | Codex |
 | 2026-05-07 | Add `BAB-2244` Phase 16 PRP and update Mayor scope to human-gated rule-guided proposal planning | Codex |
 | 2026-05-07 | Add `BAB-2245` Phase 17 PRP and update federation scope from read-only PWA polish to mobile plus explicitly configured remote control | Codex |
+| 2026-05-08 | Add `BAB-2246` Phase 13f.1 implementation CHG for Provider Runtime Contract and inventory | Codex |
