@@ -18,7 +18,8 @@ function isLocalBaseURL(url) {
 
   try {
     const { hostname } = new URL(url);
-    return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(hostname);
+    const normalizedHostname = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(normalizedHostname);
   } catch {
     return true;
   }

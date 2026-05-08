@@ -501,16 +501,17 @@ test("ticket role routing can be set and triggered from the browser", async ({ p
   test.setTimeout(60_000);
 
   const slug = `bdd-e2e-role-${Date.now()}`;
+  const role = slug;
   const title = `E2E Role Routed Ticket ${Date.now()}`;
   const body = `E2E role-routed body for ${slug}.`;
   let id;
 
   try {
-    await createShellCitizen(page, slug, { roles: "Developer\nInspector" });
+    await createShellCitizen(page, slug, { roles: `${role}\nInspector` });
 
     await page.goto("/citizens");
     await expectLiveViewConnected(page);
-    await expect(page.getByTestId(`citizen-row-${slug}`)).toContainText("developer");
+    await expect(page.getByTestId(`citizen-row-${slug}`)).toContainText(role);
     await expect(page.getByTestId(`citizen-row-${slug}`)).toContainText("inspector");
 
     await page.goto("/tickets");
@@ -522,7 +523,7 @@ test("ticket role routing can be set and triggered from the browser", async ({ p
 
     await page.getByTestId("ticket-title").fill(title);
     await page.getByTestId("ticket-priority").selectOption("normal");
-    await page.getByTestId("ticket-assignee-role").selectOption("developer");
+    await page.getByTestId("ticket-assignee-role").selectOption(role);
     await page.getByTestId("ticket-body").fill(body);
     await page.getByTestId("create-ticket-button").click();
 
@@ -531,14 +532,14 @@ test("ticket role routing can be set and triggered from the browser", async ({ p
 
     await expect(page.getByTestId("ticket-detail")).toBeVisible();
     await expect(page.getByTestId("ticket-detail")).toContainText(title);
-    await expect(page.getByTestId("ticket-assign-role-developer")).toBeVisible();
-    await expect(page.locator('[data-testid="ticket-assign-role-developer"] [data-icon="route"]')).toBeVisible();
+    await expect(page.getByTestId(`ticket-assign-role-${role}`)).toBeVisible();
+    await expect(page.locator(`[data-testid="ticket-assign-role-${role}"] [data-icon="route"]`)).toBeVisible();
 
-    await page.getByTestId("ticket-assign-role-developer").click();
+    await page.getByTestId(`ticket-assign-role-${role}`).click();
 
     await expect(page.getByTestId(`ticket-unassign-${slug}`)).toBeVisible();
     await expect(page.getByTestId("ticket-detail")).toContainText(
-      `assigned to ${slug} via role developer`
+      `assigned to ${slug} via role ${role}`
     );
   } finally {
     if (id) cleanupTicket(id);

@@ -1176,6 +1176,7 @@ def scenario_direct_cli_backend_ui_creation_and_assignment(context: BabsBddConte
 
 def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
     slug = unique_slug("bdd-role")
+    role = slug
     title = f"BDD Role Routed Ticket {int(time.time() * 1000)}"
     body = f"BDD role-routed body for {slug}."
     reply = os.environ.get("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
@@ -1197,7 +1198,7 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
             "copilot-cli",
             slug,
             "direct_cli",
-            roles="Developer\nInspector",
+            roles=f"{role}\nInspector",
         )
         wait_until(
             "browser to redirect to /citizens after role Citizen creation",
@@ -1206,7 +1207,7 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
         )
         wait_for_index_status(slug, "stopped")
         assert_element_visible(f'[data-testid="citizen-role-{slug}-0"]', f"first role for {slug}")
-        assert "developer" in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
+        assert role in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
         assert "inspector" in js(f"document.querySelector('[data-testid=\"citizen-row-{slug}\"]')?.innerText || ''")
 
         context.open_path("/tickets")
@@ -1223,7 +1224,7 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
             timeout=10,
         )
         assert_element_visible('[data-testid="ticket-assignee-role"]', "Ticket assignee role select")
-        submit_new_ticket_form(title, "normal", body, assignee_role="developer")
+        submit_new_ticket_form(title, "normal", body, assignee_role=role)
         wait_until(
             "browser to redirect to created role Ticket detail",
             lambda: str(js("window.location.pathname") or "").startswith("/tickets/T-"),
@@ -1232,8 +1233,8 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
         ticket_id = str(js("window.location.pathname")).split("/")[-1]
 
         assert_element_visible("[data-testid='ticket-detail']", "role-routed Ticket detail")
-        assert_element_visible('[data-testid="ticket-assign-role-developer"]', "developer role route button")
-        click_selector('[data-testid="ticket-assign-role-developer"]')
+        assert_element_visible(f'[data-testid="ticket-assign-role-{role}"]', "role route button")
+        click_selector(f'[data-testid="ticket-assign-role-{role}"]')
 
         wait_until(
             "role-routed direct CLI reply to appear in Ticket chat",
@@ -1253,7 +1254,7 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
         )
 
         assert f"ticket-unassign-{slug}" in js("document.body.innerHTML")
-        assert f"assigned to {slug} via role developer" in js("document.body.innerText")
+        assert f"assigned to {slug} via role {role}" in js("document.body.innerText")
         assert not tmux_session_alive(f"babs-{slug}")
         assert any(body in event.get("prompt", "") for event in direct_prompt_events(context.direct_prompts_path))
 
@@ -1261,7 +1262,7 @@ def scenario_role_routed_ticket_flow(context: BabsBddContext) -> None:
         assert any(
             event.get("event") == "assigned"
             and event.get("to") == [slug]
-            and event.get("via_role") == "developer"
+            and event.get("via_role") == role
             for event in events
         )
     finally:

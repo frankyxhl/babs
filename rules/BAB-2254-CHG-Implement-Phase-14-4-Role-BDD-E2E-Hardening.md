@@ -217,6 +217,14 @@ scenario command as the primary local reproduction.
   - Verified explicit external base URL config does not define a local
     `webServer`.
   - Focused E2E passed again with only local `BABS_E2E_BASE_URL` set.
+- 2026-05-08 GitHub Codex review R3:
+  - Fixed P2 Playwright config bug: bracketed IPv6 loopback hostnames such as
+    `[::1]` are now normalized before local URL detection.
+  - Stabilized role-routing BDD/E2E fixtures to use unique per-test role labels
+    instead of shared `developer`, so router assertions cannot be stolen by
+    another eligible Citizen in the test registry.
+  - Focused role BDD passed again with a unique per-test role.
+  - Focused role E2E passed again with a unique per-test role.
 
 ## Change History
 
@@ -228,3 +236,5 @@ scenario command as the primary local reproduction.
 | 2026-05-08 | Trinity implementation fast-review passed GLM and DeepSeek | Codex |
 | 2026-05-08 | Fixed GitHub Codex R1 P2 around `BABS_E2E_BASE_URL` port synchronization | Codex |
 | 2026-05-08 | Fixed GitHub Codex R2 P2 around explicit external E2E base URLs | Codex |
+| 2026-05-08 | Fixed GitHub Codex R3 P2 around IPv6 loopback base URL detection | Codex |
+| 2026-05-08 | Stabilized role-flow tests with unique per-test role labels | Codex |
