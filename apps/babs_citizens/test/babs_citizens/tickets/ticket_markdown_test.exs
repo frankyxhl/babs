@@ -102,6 +102,74 @@ defmodule Babs.Citizens.Tickets.TicketMarkdownTest do
              TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
   end
 
+  test "normalizes mayor metadata during parse and render" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        source: test
+        mayor:
+          mode: propose
+          mayor: null
+          rules_refs: [BAB-1503, COR-1616, BAB-1503]
+          max_children: 5
+          allowed_roles: [Developer, inspector, Developer]
+          require_human_approval: true
+      """)
+      |> String.replace("type: assignment", "type: mission")
+
+    assert {:ok, ticket} = TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+
+    assert ticket.type == "mission"
+
+    assert ticket.metadata["mayor"] == %{
+             "mode" => "propose",
+             "mayor" => nil,
+             "rules_refs" => ["BAB-1503", "COR-1616"],
+             "max_children" => 5,
+             "allowed_roles" => ["developer", "inspector"],
+             "require_human_approval" => true
+           }
+
+    assert {:ok, reparsed} = ticket |> TicketMarkdown.render() |> TicketMarkdown.parse()
+    assert reparsed.metadata == ticket.metadata
+  end
+
+  test "rejects invalid mayor metadata with nested frontmatter error" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        mayor:
+          mode: propose
+          require_human_approval: false
+      """)
+      |> String.replace("type: assignment", "type: mission")
+
+    assert {:error, {:invalid_frontmatter, {:mayor_policy, {:human_approval_required, false}}}} =
+             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+  end
+
+  test "rejects mayor metadata on non-mission tickets" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        mayor:
+          mode: propose
+          rules_refs: [BAB-1503]
+          max_children: 3
+          allowed_roles: [developer]
+          require_human_approval: true
+      """)
+
+    assert {:error, {:invalid_frontmatter, {:mayor_policy, {:invalid_ticket_type, "assignment"}}}} =
+             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+  end
+
   test "rejects unknown top-level frontmatter keys" do
     content =
       String.replace(sample_markdown(), "metadata: {source: test}", "metadata: {}\nextra: nope")

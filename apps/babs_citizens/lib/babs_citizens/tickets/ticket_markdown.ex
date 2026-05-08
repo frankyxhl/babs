@@ -6,6 +6,7 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
   alias Babs.Citizens.Tickets.Ticket
   alias Babs.Citizens.Tickets.TicketId
   alias Babs.Citizens.Tickets.InspectionPolicy
+  alias Babs.Citizens.Tickets.MayorPolicy
 
   @keys ~w(
     id
@@ -144,6 +145,7 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
          {:ok, created_at} <- iso8601_string(raw, "created_at"),
          {:ok, updated_at} <- iso8601_string(raw, "updated_at"),
          {:ok, metadata} <- metadata(raw),
+         :ok <- validate_mayor_ticket_type(type, metadata),
          :ok <- validate_billboard_state(assignees, state) do
       {:ok,
        %Ticket{
@@ -245,12 +247,15 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
   defp metadata(raw) do
     case raw["metadata"] do
       value when is_map(value) ->
-        case InspectionPolicy.normalize_metadata(value) do
-          {:ok, metadata} ->
-            {:ok, metadata}
-
+        with {:ok, metadata} <- InspectionPolicy.normalize_metadata(value),
+             {:ok, metadata} <- MayorPolicy.normalize_metadata(metadata) do
+          {:ok, metadata}
+        else
           {:error, {:inspection_policy, reason}} ->
             {:error, {:invalid_frontmatter, {:inspection_policy, reason}}}
+
+          {:error, {:mayor_policy, reason}} ->
+            {:error, {:invalid_frontmatter, {:mayor_policy, reason}}}
         end
 
       value ->
@@ -263,6 +268,21 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
   end
 
   defp validate_billboard_state(_assignees, _state), do: :ok
+
+  defp validate_mayor_ticket_type("mission", _metadata), do: :ok
+
+  defp validate_mayor_ticket_type(type, metadata) do
+    case MayorPolicy.from_metadata(metadata) do
+      :missing ->
+        :ok
+
+      {:ok, _policy} ->
+        {:error, {:invalid_frontmatter, {:mayor_policy, {:invalid_ticket_type, type}}}}
+
+      {:error, {:mayor_policy, reason}} ->
+        {:error, {:invalid_frontmatter, {:mayor_policy, reason}}}
+    end
+  end
 
   defp unknown_assignee_warnings(_assignees, nil), do: []
 

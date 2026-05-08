@@ -351,7 +351,8 @@ when both inspectors approve; human override remains available.
 
 **Planning doc**: `BAB-2244` PRP
 **Current status**: Approved PRP after Trinity fast-review with GLM and
-DeepSeek PASS.
+DeepSeek PASS. Phase 16.1 has `BAB-2259` as the implementation CHG for Mayor
+policy and proposal schema.
 **Scope**: Add a Mayor Citizen that creates human-reviewed proposal artifacts
 for mission Tickets on the Billboard. Root Tickets opt into proposal mode
 through metadata, including opaque Alfred/Babs rule references. Babs does not
@@ -508,5 +509,6 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-07 | Add `BAB-2242` Phase 14 PRP and update Phase 14 from single-role to multi-role Citizen routing | Codex |
 | 2026-05-07 | Add `BAB-2243` Phase 15 PRP and update Phase 15 from a single inspector role to Inspector Council auto-approval | Codex |
 | 2026-05-07 | Add `BAB-2244` Phase 16 PRP and update Mayor scope to human-gated rule-guided proposal planning | Codex |
+| 2026-05-08 | Add `BAB-2259` Phase 16.1 Mayor policy and proposal schema implementation CHG | Codex |
 | 2026-05-07 | Add `BAB-2245` Phase 17 PRP and update federation scope from read-only PWA polish to mobile plus explicitly configured remote control | Codex |
 | 2026-05-08 | Add `BAB-2246` Phase 13f.1 implementation CHG for Provider Runtime Contract and inventory | Codex |
