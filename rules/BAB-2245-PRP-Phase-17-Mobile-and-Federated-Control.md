@@ -1,9 +1,9 @@
 # PRP-2245: Phase 17 Mobile and Federated Control
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
-**Last reviewed:** 2026-05-07
-**Status:** Approved
+**Last updated:** 2026-05-09
+**Last reviewed:** 2026-05-09
+**Status:** Implemented
 **Date:** 2026-05-07
 **Requested by:** Operator
 **Priority:** High
@@ -333,6 +333,22 @@ None for the PRP. Implementation CHGs still need to pick the concrete event
 stream transport and the exact config file location after reading current
 runtime config patterns.
 
+## Implementation Results
+
+Phase 17 was delivered through the approved small-PR sequence:
+
+- 17.1 `BAB-2263`: node identity and read API.
+- 17.2 `BAB-2264`: real-time remote reads.
+- 17.3 `BAB-2265`: mobile/PWA shell.
+- 17.4 `BAB-2266`: remote write/control capability gate.
+- 17.5 `BAB-2267`: remote operation BDD/E2E hardening.
+
+The v0.1 acceptance scope is implemented: a phone-sized UI can operate the
+local node, configured peers can be mounted with live remote reads, remote
+write/control actions are explicitly capability-gated and audited on the
+receiving node, and BDD/E2E coverage proves allowed and denied remote operation
+flows without publishing operator-specific network details.
+
 ## Change History
 
 | Date | Change | By |
@@ -340,3 +356,4 @@ runtime config patterns.
 | 2026-05-07 | Initial Phase 17 PRP for mobile and federated control | Codex |
 | 2026-05-07 | Trinity R1 found roadmap blocker for stale M4/anti-goal read-only federation wording; folded blocker plus advisories for capability examples, public_url semantics, peer unreachable UI, and explicit BAB-1109 write/control gate | Codex |
 | 2026-05-07 | Trinity R2 passed GLM and DeepSeek; folded implementation advisories for auditable peer identity, opaque cursor semantics, URL-safe remote namespaces, and imported tmux ownership dependency | Codex |
+| 2026-05-09 | Mark Phase 17 implemented through the approved 17.1-17.5 slice sequence | Codex |
