@@ -101,6 +101,7 @@
 | 2261 | CHG | Implement Phase 16.3 Proposal Review UI |
 | 2262 | CHG | Implement Phase 16.4 Child Ticket Creation and Routing |
 | 2263 | CHG | Implement Phase 17.1 Node Identity and Read API |
+| 2264 | CHG | Implement Phase 17.2 Real Time Remote Reads |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
