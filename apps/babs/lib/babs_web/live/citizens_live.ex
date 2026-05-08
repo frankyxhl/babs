@@ -61,6 +61,24 @@ defmodule BabsWeb.CitizensLive do
     end
   end
 
+  def handle_event("remote_citizen_lifecycle", %{"action" => "restart", "slug" => slug}, socket) do
+    if remote_citizen_control_allowed?(socket.assigns.remote_peer, slug) do
+      case remote_citizen_action(:restart, socket.assigns.remote_peer, slug) do
+        {:ok, _result} ->
+          {:noreply, put_flash(socket, :info, "Remote restart sent")}
+
+        {:error, _reason} ->
+          {:noreply, put_flash(socket, :error, "Remote restart failed")}
+      end
+    else
+      {:noreply, put_flash(socket, :error, "Remote citizen is read-only")}
+    end
+  end
+
+  def handle_event("remote_citizen_lifecycle", _params, socket) do
+    {:noreply, put_flash(socket, :error, "Unknown remote lifecycle action")}
+  end
+
   @impl true
   def handle_async({:lifecycle, slug, action}, {:ok, result}, socket) do
     socket =
@@ -439,6 +457,8 @@ defmodule BabsWeb.CitizensLive do
       }
 
       .remote-badge-readonly { color: var(--wait); }
+      .remote-badge-write { color: var(--accent); }
+      .remote-badge-control { color: var(--ok); }
       .remote-badge-fresh { color: var(--ok); }
       .remote-badge-stale { color: var(--wait); }
       .remote-badge-unreachable, .remote-badge-config_error { color: var(--danger); }
@@ -450,7 +470,7 @@ defmodule BabsWeb.CitizensLive do
 
       .remote-row {
         display: grid;
-        grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.45fr) minmax(120px, 0.55fr);
+        grid-template-columns: minmax(180px, 1fr) minmax(110px, 0.45fr) minmax(120px, 0.55fr) auto;
         gap: 10px;
         align-items: center;
         min-width: 0;
@@ -477,13 +497,18 @@ defmodule BabsWeb.CitizensLive do
         font-size: 13px;
       }
 
+      .remote-actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
       @media (max-width: 900px) {
         .citizens-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .citizen-row, .remote-row {
           grid-template-columns: minmax(0, 1fr);
           align-items: start;
         }
-        .citizen-actions, .remote-badges { justify-content: flex-start; }
+        .citizen-actions, .remote-badges, .remote-actions { justify-content: flex-start; }
       }
 
       @media (max-width: 560px) {
@@ -690,7 +715,9 @@ defmodule BabsWeb.CitizensLive do
               <span>{remote_node_label(@remote_peer)}</span>
             </h2>
             <div class="remote-badges">
-              <span class="remote-badge remote-badge-readonly">Read-only</span>
+              <span class={["remote-badge", remote_capability_class(@remote_peer)]}>
+                {remote_capability_label(@remote_peer)}
+              </span>
               <span class={["remote-badge", remote_status_class(@remote_peer)]}>
                 {remote_status(@remote_peer)}
               </span>
@@ -706,6 +733,23 @@ defmodule BabsWeb.CitizensLive do
               <div class="remote-main">{remote_value(citizen, "display_name") || remote_value(citizen, "slug")}</div>
               <div class="remote-meta">{remote_value(citizen, "slug")}</div>
               <div class="remote-meta">{remote_value(citizen, "live_status")}</div>
+              <div class="remote-actions">
+                <button
+                  type="button"
+                  class={[
+                    "button",
+                    !remote_citizen_control_allowed?(@remote_peer, remote_value(citizen, "slug")) &&
+                      "button-disabled"
+                  ]}
+                  phx-click="remote_citizen_lifecycle"
+                  phx-value-action="restart"
+                  phx-value-slug={remote_value(citizen, "slug")}
+                  disabled={!remote_citizen_control_allowed?(@remote_peer, remote_value(citizen, "slug"))}
+                  data-testid={"remote-citizen-restart-#{remote_value(citizen, "slug")}"}
+                >
+                  <BabsWeb.Icon.icon name="rotate-cw" /> Restart
+                </button>
+              </div>
             </article>
             <div :if={@remote_peer.citizens == []} class="remote-meta" data-testid="remote-citizens-empty">
               No remote Citizens.
@@ -833,6 +877,56 @@ defmodule BabsWeb.CitizensLive do
       {:error, _reason} -> nil
     end
   end
+
+  defp remote_citizen_action(action, peer, slug) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:remote_citizen_action, &default_remote_citizen_action/3)
+    |> then(fn handler -> handler.(action, peer, slug) end)
+  end
+
+  defp default_remote_citizen_action(:restart, peer, slug),
+    do: PeerClient.lifecycle_citizen(peer, slug, "restart")
+
+  defp remote_citizen_control_allowed?(peer, slug) when is_binary(slug) do
+    remote_capability?(peer, "control") and remote_citizen_capability?(peer, slug, "control")
+  end
+
+  defp remote_citizen_control_allowed?(_peer, _slug), do: false
+
+  defp remote_citizen_capability?(peer, slug, capability) when is_map(peer) do
+    overrides =
+      Map.get(peer, :citizen_capabilities) || Map.get(peer, "citizen_capabilities") || %{}
+
+    case Map.get(overrides, slug) || Map.get(overrides, to_string(slug)) do
+      nil -> true
+      capabilities -> capability in capabilities
+    end
+  end
+
+  defp remote_citizen_capability?(_peer, _slug, _capability), do: false
+
+  defp remote_capability_label(peer) do
+    cond do
+      remote_capability?(peer, "control") -> "Control-enabled"
+      remote_capability?(peer, "write") -> "Writable"
+      true -> "Read-only"
+    end
+  end
+
+  defp remote_capability_class(peer) do
+    cond do
+      remote_capability?(peer, "control") -> "remote-badge-control"
+      remote_capability?(peer, "write") -> "remote-badge-write"
+      true -> "remote-badge-readonly"
+    end
+  end
+
+  defp remote_capability?(peer, capability) when is_map(peer) do
+    capability in (Map.get(peer, :capabilities) || Map.get(peer, "capabilities") || [])
+  end
+
+  defp remote_capability?(_peer, _capability), do: false
 
   defp remote_node_label(peer) do
     node = Map.get(peer, :node, %{})

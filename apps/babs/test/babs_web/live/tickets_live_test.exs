@@ -149,6 +149,8 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ "fresh"
     assert html =~ ~s(data-testid="remote-ticket-T-2026-05-09-101")
     assert html =~ "Remote ticket one"
+    refute html =~ ~s(data-testid="remote-ticket-comment-form-T-2026-05-09-101")
+    refute html =~ ~s(data-testid="remote-ticket-transition-T-2026-05-09-101")
     refute html =~ ~s(href="/tickets/T-2026-05-09-101")
 
     Agent.update(agent, fn peer ->
@@ -161,6 +163,77 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-testid="remote-ticket-T-2026-05-09-102")
     assert html =~ "Remote ticket two"
     refute html =~ "Remote ticket one"
+  end
+
+  test "writable remote peer can comment and transition remote tickets" do
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.TicketsLive,
+      remote_peer_provider: fn ->
+        remote_peer(%{
+          read_only?: false,
+          capabilities: ["read", "write"],
+          tickets: [
+            %{
+              "id" => "T-2026-05-09-201",
+              "title" => "Remote writable ticket",
+              "state" => "in_progress"
+            }
+          ]
+        })
+      end,
+      remote_ticket_action: fn action, peer, ticket_id, value ->
+        send(parent, {:remote_ticket_action, action, peer.peer_id, ticket_id, value})
+        {:ok, %{"ok" => true}}
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/tickets")
+    html = render_async(view, 1_000)
+
+    assert html =~ "Writable"
+    assert html =~ ~s(data-testid="remote-ticket-comment-form-T-2026-05-09-201")
+    assert html =~ ~s(data-testid="remote-ticket-transition-T-2026-05-09-201")
+
+    view
+    |> form(~s([data-testid="remote-ticket-comment-form-T-2026-05-09-201"]),
+      ticket_id: "T-2026-05-09-201",
+      body: "Remote browser comment"
+    )
+    |> render_submit()
+
+    assert_receive {:remote_ticket_action, :comment, "peer-a", "T-2026-05-09-201",
+                    "Remote browser comment"}
+
+    assert render(view) =~ "Remote comment sent"
+
+    view
+    |> form(~s([data-testid="remote-ticket-transition-form-T-2026-05-09-201"]),
+      ticket_id: "T-2026-05-09-201",
+      to: "pending_approval"
+    )
+    |> render_submit()
+
+    assert_receive {:remote_ticket_action, :transition, "peer-a", "T-2026-05-09-201",
+                    "pending_approval"}
+
+    assert render(view) =~ "Remote transition sent"
+
+    view
+    |> form(~s([data-testid="remote-ticket-comment-form-T-2026-05-09-201"]),
+      ticket_id: "T-2026-05-09-201",
+      body: "   "
+    )
+    |> render_submit()
+
+    assert render(view) =~ "Remote comment cannot be blank"
+
+    render_submit(view, "remote_ticket_transition", %{
+      "ticket_id" => "T-2026-05-09-201",
+      "to" => "closed"
+    })
+
+    assert render(view) =~ "Remote transition is not available"
   end
 
   test "GET /tickets/new routes to NewTicketLive before the ticket detail route" do
@@ -1101,6 +1174,7 @@ defmodule BabsWeb.TicketsLiveTest do
         status: :fresh,
         read_only?: true,
         capabilities: ["read"],
+        citizen_capabilities: %{},
         fetched_at: ~U[2026-05-09 00:00:00Z],
         node: %{"id" => "peer-a", "name" => "Peer Node"},
         citizens: [],

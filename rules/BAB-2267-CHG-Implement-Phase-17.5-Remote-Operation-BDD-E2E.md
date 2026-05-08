@@ -201,8 +201,46 @@ convention; Mix writes app-local `.coverdata` export files from that basename.
     badges, BDD step/scenario naming, transition legality, audit coverage scope,
     test fixture strategy, and coverage-export convention.
 - Implementation: Pending.
-- Validation: Pending.
-- Implementation review: Pending.
+- Implementation:
+  - Added capability-derived remote badges in Tickets and Citizens:
+    `Read-only`, `Writable`, and `Control-enabled`.
+  - Added remote Ticket comment and conservative `pending_approval` transition
+    controls in `TicketsLive`, routed through `PeerClient.comment_ticket/4` and
+    `PeerClient.transition_ticket/4`.
+  - Added remote Citizen restart controls in `CitizensLive`, with disabled UI
+    for read-only peers and per-Citizen read-only overrides.
+  - Extended `PeerClient` snapshots with per-Citizen capability overrides and
+    allowed mutating helpers to use snapshot-shaped peers.
+  - Added `remote operation bdd e2e ticket and citizen controls` to the
+    browser-harness suite. The scenario exercises loopback HTTP control for
+    remote comment, transition, restart, and mobile overflow checks.
+- Validation:
+  - `mise exec -- mix test apps/babs/test/babs_web/live/tickets_live_test.exs apps/babs/test/babs_web/live/citizens_live_test.exs apps/babs_citizens/test/babs_citizens/federation/peer_client_test.exs --seed 1`: pass; 53 tests, 0 failures.
+  - `BABS_HTTP_PORT=4025 BABS_BROWSER_BASE_URL=http://127.0.0.1:4025 BABS_BDD_SCENARIO="remote operation bdd e2e" npm run test:bdd`: pass.
+  - `mise exec -- mix compile --warnings-as-errors`: pass.
+  - `mise exec -- mix test`: pass; `:babs_citizens` 507 tests, `:babs` 137 tests, 0 failures.
+  - `mise exec -- mix test --cover --export-coverage phase17_5`: pass; coverage exports written for both apps.
+  - `npm run test:js`: pass; 19 tests, 0 failures.
+  - `npm run test:bdd` with a canonical temporary runtime root and copied seed Citizens: pass; one expected skip for unset `BABS_WORKSPACE_ROOT`.
+  - `mise exec -- mix format --check-formatted`: pass.
+  - `af validate --root .`: pass; 177 documents checked, 0 issues found.
+  - `git diff --check`: pass.
+  - Privacy diff scan for private IP ranges, local paths, and credentials: pass.
+- Implementation review:
+  - Trinity fast-review R1:
+    `.trinity/reviews/20260509-061506-phase17_5_remote_operation_implementation`.
+    GLM PASS and DeepSeek PASS with no blockers. Folded test advisories for
+    remote restart failure feedback, remote Ticket validation branches, and
+    snapshot-shaped PeerClient mutating helpers.
+  - Trinity post-advisory review:
+    `.trinity/reviews/20260509-062543-phase17_5_remote_operation_post_advisory_fixes`.
+    GLM PASS with no blockers.
+  - DeepSeek scoped post-advisory reviews:
+    `.trinity/reviews/20260509-063320-apps-babs-test-babs_web-live-citizens_live_test.exs`,
+    `.trinity/reviews/20260509-063557-apps-babs-test-babs_web-live-tickets_live_test.exs`,
+    and
+    `.trinity/reviews/20260509-064229-apps-babs_citizens-test-babs_citizens-federation-peer_client_test.exs`.
+    All PASS with no blockers.
 - PR review loop: Pending.
 
 ---
