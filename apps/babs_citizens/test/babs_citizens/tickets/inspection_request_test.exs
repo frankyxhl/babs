@@ -79,6 +79,78 @@ defmodule Babs.Citizens.Tickets.InspectionRequestTest do
     assert Enum.at(history, 2)["inspection_id"] == "insp_20260508100100_42"
   end
 
+  test "request_inspection allows a fresh request after human rejection override", ctx do
+    write_citizen_toml!(ctx.config_root, "dylan")
+    insert_citizen!(%{slug: "dylan", roles: ["inspector"]})
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Needs another approval pass",
+                 body: "Human rejection should clear the old inspection.",
+                 state: "pending_approval",
+                 assignees: ["clare"],
+                 metadata: %{
+                   "inspection" => %{
+                     "mode" => "auto",
+                     "citizens" => ["dylan"],
+                     "roles" => [],
+                     "max_inspectors" => 1
+                   }
+                 }
+               },
+               tickets_root: ctx.tickets_root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T10:00:00Z"
+             )
+
+    assert {:ok, _first} =
+             Api.request_inspection(ticket.id,
+               root: ctx.config_root,
+               tickets_root: ctx.tickets_root,
+               now: "2026-05-08T10:01:00Z",
+               inspection_id: "insp_20260508100100_1"
+             )
+
+    assert {:ok, %{ticket: rejected}} =
+             Api.reject_ticket(ticket.id, "Needs one more fix.",
+               tickets_root: ctx.tickets_root,
+               now: "2026-05-08T10:02:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", _prompt -> :ok end
+             )
+
+    assert rejected.state == "in_progress"
+
+    assert {:ok, %{ticket: pending}} =
+             Api.transition_ticket(ticket.id, "pending_approval", nil,
+               tickets_root: ctx.tickets_root,
+               now: "2026-05-08T10:03:00Z"
+             )
+
+    assert pending.state == "pending_approval"
+
+    assert {:ok, second} =
+             Api.request_inspection(ticket.id,
+               root: ctx.config_root,
+               tickets_root: ctx.tickets_root,
+               now: "2026-05-08T10:04:00Z",
+               inspection_id: "insp_20260508100400_2"
+             )
+
+    assert second.inspection_id == "insp_20260508100400_2"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: ctx.tickets_root)
+
+    inspection_ids =
+      history
+      |> Enum.filter(&(&1["event"] == "inspection_requested"))
+      |> Enum.map(& &1["inspection_id"])
+
+    assert inspection_ids == ["insp_20260508100100_1", "insp_20260508100400_2"]
+  end
+
   test "request_inspection keeps human policy on the human approval path", ctx do
     assert {:ok, ticket} =
              Api.create_ticket(

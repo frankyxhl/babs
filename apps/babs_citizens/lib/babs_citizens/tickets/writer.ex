@@ -15,7 +15,9 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.InspectionDecisionParser
   alias Babs.Citizens.Tickets.InspectionEvents
+  alias Babs.Citizens.Tickets.InspectionQuorum
   alias Babs.Citizens.Tickets.InspectorSelector
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
@@ -115,15 +117,13 @@ defmodule Babs.Citizens.Tickets.Writer do
            updated = %{ticket | updated_at: now},
            notify? <- Keyword.get(opts, :notify_assignees, true),
            turn <- comment_turn(ticket, attrs, now, by, notify?),
-           events <- comment_events(ticket, body, now, by, notify?, turn, opts),
-           :ok <- validate_events(id, events),
-           :ok <- write_markdown(state.root, id, TicketMarkdown.render(updated)),
-           :ok <- append_events(state.root, id, events) do
-        if notify? do
-          inject_comment(state.root, updated, body, now, by, turn, opts)
-        else
-          {:ok, %{ticket: updated, delivery: :comment_stored}}
-        end
+           history <- read_history_for_prompt(state.root, id),
+           {:ok, comment} <-
+             comment_with_inspection(ticket, updated, history, body, now, by, notify?, turn, opts),
+           :ok <- validate_events(id, comment.events),
+           :ok <- write_markdown(state.root, id, TicketMarkdown.render(comment.ticket)),
+           :ok <- append_events(state.root, id, comment.events) do
+        after_comment_append(state.root, comment, body, now, by, notify?, turn, opts)
       end
 
     {:reply, result, state}
@@ -346,6 +346,222 @@ defmodule Babs.Citizens.Tickets.Writer do
     events
     |> maybe_add_notification_attempts(ticket, now, by, notify?, turn, opts)
     |> maybe_add_captured_reply_event(ticket, now, by, notify?, turn)
+  end
+
+  defp comment_with_inspection(ticket, updated, history, body, now, by, notify?, turn, opts) do
+    base_events = comment_events(ticket, body, now, by, notify?, turn, opts)
+
+    case inspection_reply_effect(ticket, updated, history, base_events, body, now, by, turn) do
+      {:ok, :none} ->
+        {:ok, %{ticket: updated, events: base_events, after_append: :comment}}
+
+      {:ok, effect} ->
+        {:ok,
+         %{
+           ticket: effect.ticket,
+           events: base_events ++ effect.events,
+           after_append: effect.after_append
+         }}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp inspection_reply_effect(
+         %{state: "pending_approval"} = ticket,
+         updated,
+         history,
+         base_events,
+         body,
+         now,
+         by,
+         %{turn_id: turn_id, captured_attempt_id: attempt_id}
+       )
+       when is_binary(turn_id) and is_binary(attempt_id) do
+    with {:ok, prompt} <- InspectionQuorum.match_prompt(history, by, turn_id, attempt_id),
+         inspection_id <- prompt["inspection_id"],
+         true <- InspectionQuorum.active_inspection?(history, inspection_id),
+         false <- InspectionQuorum.completed?(history, inspection_id),
+         false <-
+           InspectionQuorum.terminal_recorded?(history, inspection_id, by, turn_id, attempt_id),
+         {:ok, terminal_event} <-
+           inspection_terminal_event(ticket.id, inspection_id, by, body, now, turn_id, attempt_id) do
+      history_for_quorum = history ++ base_events ++ [terminal_event]
+
+      with {:ok, reduction} <- InspectionQuorum.reduce(history_for_quorum, inspection_id) do
+        apply_inspection_reduction(updated, terminal_event, reduction, now)
+      end
+    else
+      :error -> {:ok, :none}
+      true -> {:ok, :none}
+      false -> {:ok, :none}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp inspection_reply_effect(_ticket, _updated, _history, _events, _body, _now, _by, _turn),
+    do: {:ok, :none}
+
+  defp inspection_terminal_event(ticket_id, inspection_id, by, body, now, turn_id, attempt_id) do
+    case InspectionDecisionParser.parse(body) do
+      {:ok, decision} ->
+        InspectionEvents.decision(
+          ticket_id,
+          inspection_id,
+          by,
+          decision.decision,
+          decision.summary,
+          decision.findings,
+          now: now,
+          turn_id: turn_id,
+          attempt_id: attempt_id
+        )
+
+      {:error, reason} ->
+        InspectionEvents.failed(ticket_id, inspection_id, by, {:unparseable, reason},
+          now: now,
+          turn_id: turn_id,
+          attempt_id: attempt_id
+        )
+    end
+  end
+
+  defp apply_inspection_reduction(ticket, terminal_event, :pending, _now) do
+    {:ok,
+     %{
+       ticket: ticket,
+       events: [terminal_event],
+       after_append: :inspection_recorded
+     }}
+  end
+
+  defp apply_inspection_reduction(ticket, terminal_event, :completed, _now) do
+    {:ok,
+     %{
+       ticket: ticket,
+       events: [terminal_event],
+       after_append: :inspection_recorded
+     }}
+  end
+
+  defp apply_inspection_reduction(ticket, terminal_event, {:approved, result}, now) do
+    with {:ok, completed} <-
+           InspectionEvents.completed(ticket.id, result.inspection_id, "approved", "all_pass",
+             now: now
+           ),
+         {:ok, closed, "approved"} <- StateMachine.transition(ticket, "closed", "approved") do
+      closed = %{closed | updated_at: now}
+
+      {:ok,
+       %{
+         ticket: closed,
+         events:
+           [terminal_event, completed] ++
+             inspection_transition_events(
+               approval_events(ticket, closed, now, "system"),
+               result.inspection_id
+             ),
+         after_append: {:inspection_completed, "approved"}
+       }}
+    end
+  end
+
+  defp apply_inspection_reduction(ticket, terminal_event, {:rejected, result}, now) do
+    with {:ok, completed} <-
+           InspectionEvents.completed(ticket.id, result.inspection_id, "rejected", "all_pass",
+             now: now
+           ),
+         {:ok, in_progress, "rejected"} <-
+           StateMachine.transition(ticket, "in_progress", "rejected") do
+      in_progress = %{in_progress | updated_at: now}
+
+      {:ok,
+       %{
+         ticket: in_progress,
+         events:
+           [terminal_event, completed] ++
+             inspection_transition_events(
+               rejection_events(ticket, in_progress, result.feedback, now, "system"),
+               result.inspection_id
+             ),
+         after_append: {:feedback, result.feedback}
+       }}
+    end
+  end
+
+  defp apply_inspection_reduction(ticket, terminal_event, {:requires_human, result}, now) do
+    with {:ok, completed} <-
+           InspectionEvents.completed(
+             ticket.id,
+             result.inspection_id,
+             "requires_human",
+             "all_pass",
+             now: now
+           ) do
+      {:ok,
+       %{
+         ticket: ticket,
+         events: [terminal_event, completed],
+         after_append: {:inspection_completed, "requires_human"}
+       }}
+    end
+  end
+
+  defp after_comment_append(
+         root,
+         %{after_append: :comment, ticket: ticket},
+         body,
+         now,
+         by,
+         notify?,
+         turn,
+         opts
+       ) do
+    if notify? do
+      inject_comment(root, ticket, body, now, by, turn, opts)
+    else
+      {:ok, %{ticket: ticket, delivery: :comment_stored}}
+    end
+  end
+
+  defp after_comment_append(
+         root,
+         %{after_append: {:feedback, feedback}, ticket: ticket},
+         _body,
+         now,
+         _by,
+         _notify?,
+         _turn,
+         opts
+       ) do
+    inject_feedback(root, ticket, feedback, now, "system", opts)
+  end
+
+  defp after_comment_append(
+         _root,
+         %{after_append: {:inspection_completed, result}, ticket: ticket},
+         _body,
+         _now,
+         _by,
+         _notify?,
+         _turn,
+         _opts
+       ) do
+    {:ok, %{ticket: ticket, delivery: {:inspection_completed, result}}}
+  end
+
+  defp after_comment_append(
+         _root,
+         %{after_append: :inspection_recorded, ticket: ticket},
+         _body,
+         _now,
+         _by,
+         _notify?,
+         _turn,
+         _opts
+       ) do
+    {:ok, %{ticket: ticket, delivery: :inspection_recorded}}
   end
 
   defp persist_assignment(root, path, original, assigned, slug, opts, backend) do
@@ -1128,11 +1344,12 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp request_inspection_once(root, id, opts) do
     with {:ok, ticket} <- Store.read_ticket(root, id, opts),
          :ok <- ensure_pending_approval(ticket),
+         history <- read_history_for_prompt(root, id),
+         :ok <- ensure_no_active_inspection(history),
          {:ok, selection} <-
            InspectorSelector.select(ticket, Keyword.put(opts, :tickets_root, root)),
          now <- now(opts),
          inspection_id <- Keyword.get(opts, :inspection_id) || InspectionEvents.new_id(now),
-         history <- read_history_for_prompt(root, id),
          {:ok, request} <-
            inspection_request(ticket, selection, history, inspection_id, now, opts),
          :ok <- validate_events(id, request.events),
@@ -1285,6 +1502,26 @@ defmodule Babs.Citizens.Tickets.Writer do
           {:error, _reason} -> "hardline"
         end
     end
+  end
+
+  defp ensure_no_active_inspection(history) do
+    case InspectionQuorum.active_request(history) do
+      nil ->
+        :ok
+
+      %{"inspection_id" => inspection_id} ->
+        {:error, {:inspection_already_pending, inspection_id}}
+    end
+  end
+
+  defp inspection_transition_events(events, inspection_id) do
+    Enum.map(events, fn
+      %{"event" => event} = transition when event in ["approved", "rejected", "state_change"] ->
+        Map.put(transition, "inspection_id", inspection_id)
+
+      event ->
+        event
+    end)
   end
 
   defp direct_config(slug, opts), do: fetch_citizen_config(slug, opts)
