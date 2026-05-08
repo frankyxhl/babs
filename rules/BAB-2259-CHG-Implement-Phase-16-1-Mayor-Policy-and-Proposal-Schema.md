@@ -188,10 +188,48 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Folded advisories for concrete list/size bounds, compact child `inspector`
     derivation/conflict behavior, and stricter `proposal_id`, `risks`, and
     `questions` validation.
+- 2026-05-08 implementation:
+  - Added `Babs.Citizens.Tickets.MayorPolicy` for `metadata.mayor`
+    normalization and validation.
+  - Added `Babs.Citizens.Tickets.MayorProposal` for whole-body and fenced JSON
+    proposal parsing, child validation, role limits, inspection metadata
+    normalization, and compact inspector derivation/conflict checks.
+  - Integrated Mayor metadata normalization into `TicketMarkdown` after
+    inspection metadata normalization.
+  - Enforced Mayor metadata on `mission` Tickets only.
+  - Folded GLM implementation-review advisories for compact inspector edge
+    tests and mission-only Mayor metadata.
+  - Folded DeepSeek implementation-review advisory so invalid
+    `allowed_roles` parser options fail instead of silently disabling role
+    gating.
+  - Added focused tests for Mayor policy, Mayor proposal payloads, and Ticket
+    markdown Mayor metadata round trips/errors.
+- 2026-05-08 validation:
+  - Focused Mayor policy/proposal/Ticket markdown suite passed: 21 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: `babs_citizens` 447 tests,
+    `babs` 97 tests.
+  - `mise exec -- mix test` passed: `babs_citizens` 447 tests, `babs` 97 tests.
+  - Coverage passed: `babs_citizens` 85.50%, `babs` 88.92%.
+  - `af validate --root .` passed: 168 documents checked, 0 issues.
+  - `git diff --check` passed.
+  - Added-line privacy scan passed for private IPs, local checkout paths,
+    tokens, and secrets.
+- 2026-05-08 Trinity implementation review:
+  - Final Trinity packet:
+    `.trinity/reviews/20260508-193844-Phase-16.1-mayor-policy-proposal-schema-final-post-advisory-diff`.
+  - GLM PASS and DeepSeek PASS with no blocking findings.
+  - Remaining advisories are minor follow-ups: duplicated private helpers,
+    cosmetic error wording, and defensive fallback branches without direct
+    tests.
 
 ## Change History
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Record final GLM and DeepSeek implementation PASS/PASS | Codex |
+| 2026-05-08 | Fold DeepSeek parser-option advisory and update final validation | Codex |
+| 2026-05-08 | Implement Mayor policy/proposal schema and record validation | Codex |
 | 2026-05-08 | Mark Approved after GLM CHG review PASS and fold advisories | Codex |
 | 2026-05-08 | Initial Phase 16.1 Mayor policy and proposal schema CHG | Codex |
