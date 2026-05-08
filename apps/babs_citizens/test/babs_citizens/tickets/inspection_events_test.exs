@@ -135,6 +135,21 @@ defmodule Babs.Citizens.Tickets.InspectionEventsTest do
     assert :ok = History.validate_appendable(@id, event)
   end
 
+  test "redacts unknown inspection failure reasons" do
+    assert {:ok, event} =
+             InspectionEvents.failed(
+               @id,
+               @inspection_id,
+               "dylan",
+               {:provider_error, %{output: "raw-sensitive-marker"}},
+               now: @now
+             )
+
+    assert event["error"] == "Inspection failed"
+    refute event["error"] =~ "raw-sensitive-marker"
+    assert :ok = History.validate_appendable(@id, event)
+  end
+
   test "builds appendable completed events for allowed results" do
     for result <- ["approved", "rejected", "requires_human"] do
       assert {:ok, event} =

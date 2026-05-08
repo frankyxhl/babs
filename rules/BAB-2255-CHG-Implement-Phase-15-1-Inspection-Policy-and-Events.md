@@ -240,10 +240,10 @@ PR.
     with 64 tests after post-review validation hardening.
   - `mise exec -- mix format --check-formatted` passed.
   - `mise exec -- mix compile --warnings-as-errors` passed.
-  - `mise exec -- mix test` passed: 395 `:babs_citizens` tests and 88 `:babs`
+  - `mise exec -- mix test` passed: 396 `:babs_citizens` tests and 88 `:babs`
     tests.
   - `mise exec -- mix test --cover --export-coverage phase15_1 && mise exec -- mix cmd mix test.coverage`
-    passed: `:babs_citizens` 84.55%, `:babs` 89.27%.
+    passed: `:babs_citizens` 84.50%, `:babs` 89.27%.
   - Browser BDD/E2E gates were not run because this slice has no UI or browser
     behavior changes.
 - 2026-05-08 implementation review R1:
@@ -258,6 +258,15 @@ PR.
     `.trinity/reviews/20260508-140903-Phase-15.1-inspection-policy-events-implementation-diff`.
   - GLM PASS and DeepSeek PASS; no blocking findings.
   - Remaining notes are non-blocking implementation guidance for later phases.
+- 2026-05-08 GitHub Codex review R1:
+  - Fixed P2 privacy bug: `inspection_failed` no longer stores
+    `Error.message/1` fallback output for unknown provider failures. Unknown
+    reasons are normalized to `Inspection failed`; known timeout/unparseable
+    classes use short redacted strings.
+  - Added regression coverage proving raw provider-shaped data is not persisted
+    in `inspection_failed.error`.
+  - Focused event/API tests passed with 53 tests.
+  - Full ExUnit and stable exported coverage gates passed after the fix.
 
 ## Change History
 
@@ -269,3 +278,4 @@ PR.
 | 2026-05-08 | Implement inspection policy/events foundation and record local validation | Codex |
 | 2026-05-08 | Fold Trinity implementation R1 advisories and rerun focused/full validation | Codex |
 | 2026-05-08 | Trinity implementation R2 passed GLM and DeepSeek | Codex |
+| 2026-05-08 | Fixed GitHub Codex R1 P2 for redacted inspection failure reasons | Codex |

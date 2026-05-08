@@ -3,7 +3,6 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
   Constructors for Phase 15 inspection history events.
   """
 
-  alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.TicketId
 
@@ -95,7 +94,7 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
         |> Map.merge(%{
           "inspection_id" => inspection_id,
           "to" => to,
-          "error" => Error.message(reason)
+          "error" => inspection_error_text(reason)
         })
 
       appendable(ticket_id, event)
@@ -171,6 +170,15 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
 
   defp validate_quorum("all_pass"), do: :ok
   defp validate_quorum(value), do: {:error, {:unsupported_quorum, value}}
+
+  defp inspection_error_text(:timeout), do: "Inspection failed: timeout"
+  defp inspection_error_text({:timeout, _detail}), do: "Inspection failed: timeout"
+  defp inspection_error_text(:unparseable), do: "Inspection failed: unparseable decision"
+
+  defp inspection_error_text({:unparseable, _detail}),
+    do: "Inspection failed: unparseable decision"
+
+  defp inspection_error_text(_reason), do: "Inspection failed"
 
   defp stamp!(%DateTime{} = timestamp), do: format_datetime(timestamp)
 
