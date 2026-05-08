@@ -120,6 +120,8 @@ defmodule BabsWeb.TerminalLiveTest do
           tab("imported-one", :up)
           |> Map.merge(%{
             imported?: true,
+            kill_authority?: false,
+            detach_authority?: true,
             ownership_badge: "Imported · External-owned",
             lifecycle_reminder: "Detach only · tmux stays running",
             target_label: "operator:0.0"
@@ -134,6 +136,35 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ "Imported · External-owned"
     assert html =~ ~s(data-testid="terminal-lifecycle-reminder")
     assert html =~ "Detach only · tmux stays running"
+    assert html =~ ~s(data-testid="terminal-stop")
+    assert html =~ "Detach"
+    assert html =~ ~s(data-testid="terminal-restart")
+    assert html =~ "Reattach"
+    refute html =~ ">Stop</button>"
+    refute html =~ ">Restart</button>"
+  end
+
+  test "default mode can label detach-only controls from capability fields" do
+    html =
+      %{
+        slug: "imported-capability",
+        socket_token: "",
+        full?: false,
+        tabs: [
+          tab("imported-capability", :up)
+          |> Map.merge(%{
+            imported?: false,
+            kill_authority?: false,
+            detach_authority?: true,
+            ownership_badge: "Imported · External-owned",
+            lifecycle_reminder: "Detach only · tmux stays running"
+          })
+        ],
+        lifecycle_inflight: %{}
+      }
+      |> BabsWeb.TerminalLive.render()
+      |> rendered_to_string()
+
     assert html =~ ~s(data-testid="terminal-stop")
     assert html =~ "Detach"
     assert html =~ ~s(data-testid="terminal-restart")

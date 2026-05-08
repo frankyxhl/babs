@@ -56,6 +56,26 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     assert snapshots["failed-one"] == [:start]
   end
 
+  test "exposes Babs-owned Hardline provider runtime capabilities" do
+    insert_citizen!(%{slug: "hardline-one", ticket_backend: "hardline", status: "running"})
+
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
+
+    assert snapshot.provider_runtime == %{
+             provider: "ai_cli",
+             backend: "hardline",
+             ownership: "babs",
+             status: "supported"
+           }
+
+    assert snapshot.provider_runtime_capabilities["interactive_attach"]
+    assert snapshot.provider_runtime_capabilities["kill_authority"]
+    assert snapshot.provider_runtime_capabilities["detach_authority"]
+    assert snapshot.interactive_attach?
+    assert snapshot.kill_authority?
+    assert snapshot.detach_authority?
+  end
+
   test "exposes imported external ownership labels" do
     insert_citizen!(%{
       slug: "imported-one",
@@ -81,6 +101,66 @@ defmodule Babs.Citizens.StatusSnapshotTest do
     assert snapshot.ownership_badge == "Imported · External-owned"
     assert snapshot.lifecycle_reminder == "Detach only · tmux stays running"
     assert snapshot.target_label == "operator-work:0.0"
+
+    assert snapshot.provider_runtime == %{
+             provider: "ai_cli",
+             backend: "hardline",
+             ownership: "external",
+             status: "supported"
+           }
+
+    assert snapshot.interactive_attach?
+    refute snapshot.kill_authority?
+    assert snapshot.detach_authority?
+  end
+
+  test "exposes Direct CLI provider runtime capabilities without terminal authority" do
+    insert_citizen!(%{
+      slug: "direct-one",
+      cli: "codex",
+      cli_args: [],
+      ticket_backend: "direct_cli"
+    })
+
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
+
+    assert snapshot.provider_runtime == %{
+             provider: "codex",
+             backend: "direct_cli",
+             ownership: "babs",
+             status: "supported"
+           }
+
+    assert snapshot.provider_runtime_capabilities["direct_turn"]
+    refute snapshot.interactive_attach?
+    refute snapshot.kill_authority?
+    refute snapshot.detach_authority?
+  end
+
+  test "uses a safe no-authority provider runtime fallback when lookup fails" do
+    insert_citizen!(%{
+      slug: "unsupported-direct",
+      cli: "/bin/zsh",
+      cli_args: ["-f"],
+      ticket_backend: "direct_cli"
+    })
+
+    [snapshot] = StatusSnapshot.list(include_stale?: true)
+
+    assert snapshot.provider_runtime == %{
+             provider: nil,
+             backend: "direct_cli",
+             ownership: "babs",
+             status: "unsupported"
+           }
+
+    refute snapshot.provider_runtime_capabilities["interactive_attach"]
+    refute snapshot.provider_runtime_capabilities["kill_authority"]
+    refute snapshot.provider_runtime_capabilities["detach_authority"]
+    refute snapshot.interactive_attach?
+    refute snapshot.kill_authority?
+    refute snapshot.detach_authority?
+    refute inspect(snapshot) =~ "SECRET_TOKEN"
   end
 
   test "does not expose env values in display snapshots" do
