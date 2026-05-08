@@ -17,6 +17,10 @@ defmodule Babs.Citizens.CitizenRecordTest do
         ticket_backend: "direct_cli",
         env: %{"ANTHROPIC_API_KEY" => "secret"},
         role: %{"name" => "developer", "skills" => ["elixir", "phoenix"]},
+        roles: [
+          %{"name" => "developer", "skills" => ["elixir", "phoenix"]},
+          %{"name" => "inspector", "skills" => []}
+        ],
         status: "running",
         metadata: %{"seed" => true},
         is_mayor: false
@@ -30,6 +34,12 @@ defmodule Babs.Citizens.CitizenRecordTest do
     assert record.ticket_backend == "direct_cli"
     assert record.env == %{"ANTHROPIC_API_KEY" => "secret"}
     assert record.role == %{"name" => "developer", "skills" => ["elixir", "phoenix"]}
+
+    assert record.roles == [
+             %{"name" => "developer", "skills" => ["elixir", "phoenix"]},
+             %{"name" => "inspector", "skills" => []}
+           ]
+
     assert record.metadata == %{"seed" => true}
   end
 
@@ -40,6 +50,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
     assert record.launch_profile == "safe_interactive"
     assert record.ticket_backend == "hardline"
     assert record.env == %{}
+    assert record.roles == []
     assert record.metadata == %{}
     refute record.is_mayor
   end
@@ -55,6 +66,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
     refute_valid(%{attrs | env: ["TOKEN"]})
     refute_valid(%{attrs | metadata: ["seed"]})
     refute_valid(%{attrs | role: %{"name" => "developer", "skills" => ["ok", 1]}})
+    refute_valid(%{attrs | roles: [%{"name" => "bad/role", "skills" => []}]})
   end
 
   test "accepts nil, string, and BAB-1112 map role values" do
@@ -62,6 +74,40 @@ defmodule Babs.Citizens.CitizenRecordTest do
     assert_valid_role("copilot-tester")
     assert_valid_role(%{"name" => "developer"})
     assert_valid_role(%{"name" => "developer", "skills" => ["elixir"]})
+  end
+
+  test "accepts canonical roles values" do
+    assert CitizenRecord.changeset(%CitizenRecord{}, %{
+             valid_attrs()
+             | roles: [
+                 %{"name" => "developer", "skills" => ["elixir"]},
+                 %{"name" => "inspector", "skills" => []}
+               ]
+           }).valid?
+  end
+
+  test "keeps legacy role and canonical roles synchronized" do
+    roles = [%{"name" => "inspector", "skills" => ["code-review"]}]
+
+    changeset =
+      CitizenRecord.changeset(%CitizenRecord{}, %{valid_attrs() | role: "developer", roles: roles})
+
+    assert changeset.valid?
+    record = Ecto.Changeset.apply_changes(changeset)
+    assert record.roles == roles
+    assert record.role == %{"name" => "inspector", "skills" => ["code-review"]}
+
+    changeset = CitizenRecord.changeset(%CitizenRecord{}, %{valid_attrs() | role: "Developer"})
+    assert changeset.valid?
+    record = Ecto.Changeset.apply_changes(changeset)
+    assert record.role == "developer"
+    assert record.roles == [%{"name" => "developer", "skills" => []}]
+  end
+
+  test "does not revalidate persisted roles on unrelated updates" do
+    record = struct(CitizenRecord, %{valid_attrs() | roles: ["bad/role"]})
+
+    assert CitizenRecord.changeset(record, %{display_name: "Updated"}).valid?
   end
 
   test "generates string ids compatible with the BAB-CIT namespace" do
@@ -89,6 +135,7 @@ defmodule Babs.Citizens.CitizenRecordTest do
       ticket_backend: "hardline",
       env: %{},
       role: nil,
+      roles: [],
       status: "running",
       metadata: %{},
       is_mayor: false

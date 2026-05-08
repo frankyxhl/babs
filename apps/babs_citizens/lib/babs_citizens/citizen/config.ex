@@ -5,7 +5,7 @@ defmodule Babs.Citizens.Citizen.Config do
 
   require Logger
 
-  alias Babs.Citizens.CitizenConfig
+  alias Babs.Citizens.{CitizenConfig, Roles}
 
   @slug_regex ~r/^[a-z][a-z0-9-]{0,47}$/
   @required ~w(id slug display_name cli cwd)
@@ -34,6 +34,7 @@ defmodule Babs.Citizens.Citizen.Config do
          {:ok, launch_profile} <- validate_launch_profile(Map.get(raw, "launch_profile")),
          {:ok, ticket_backend} <- validate_ticket_backend(Map.get(raw, "ticket_backend")),
          {:ok, env} <- resolve_env(Map.get(raw, "env", %{})),
+         {:ok, roles} <- resolve_roles(raw),
          {:ok, cwd} <- resolve_cwd(workspace_root, raw["cwd"], create_cwd) do
       {:ok,
        %CitizenConfig{
@@ -47,7 +48,8 @@ defmodule Babs.Citizens.Citizen.Config do
          cwd: cwd,
          description: Map.get(raw, "description"),
          env: env,
-         role: Map.get(raw, "role"),
+         role: Roles.legacy_first_role(roles),
+         roles: roles,
          path: path
        }}
     end
@@ -209,4 +211,15 @@ defmodule Babs.Citizens.Citizen.Config do
     do: {:ok, to_string(value)}
 
   defp resolve_env_value(value), do: {:error, {:invalid_env_value, value}}
+
+  defp resolve_roles(raw) do
+    source =
+      if Map.has_key?(raw, "roles") do
+        Map.get(raw, "roles")
+      else
+        Map.get(raw, "role")
+      end
+
+    Roles.normalize(source)
+  end
 end

@@ -7,7 +7,7 @@ defmodule Babs.Citizens.CitizenRecord do
 
   import Ecto.Changeset
 
-  alias Babs.Citizens.SqliteJson
+  alias Babs.Citizens.{Roles, SqliteJson}
 
   @primary_key {:id, :string, autogenerate: false}
   @statuses ~w(running stopped failed)
@@ -28,6 +28,7 @@ defmodule Babs.Citizens.CitizenRecord do
     :status,
     :metadata,
     :role,
+    :roles,
     :is_mayor,
     :last_error
   ]
@@ -46,6 +47,7 @@ defmodule Babs.Citizens.CitizenRecord do
     field(:status, :string, default: "running")
     field(:metadata, SqliteJson, default: %{})
     field(:role, SqliteJson)
+    field(:roles, SqliteJson, default: [])
     field(:is_mayor, :boolean, default: false)
     field(:last_error, :string)
 
@@ -65,7 +67,9 @@ defmodule Babs.Citizens.CitizenRecord do
     |> validate_cli_args()
     |> validate_map(:env)
     |> validate_map(:metadata)
-    |> validate_role()
+    |> normalize_role()
+    |> normalize_roles()
+    |> sync_role_fields()
     |> unique_constraint(:slug)
     |> check_constraint(:status, name: :citizens_status_check)
   end
@@ -86,22 +90,52 @@ defmodule Babs.Citizens.CitizenRecord do
     end)
   end
 
-  defp validate_role(changeset) do
-    validate_change(changeset, :role, fn :role, value ->
-      if valid_role?(value), do: [], else: [role: "must be nil, a string, or a role map"]
-    end)
-  end
+  defp normalize_role(changeset) do
+    case fetch_change(changeset, :role) do
+      {:ok, nil} ->
+        changeset
 
-  defp valid_role?(nil), do: true
-  defp valid_role?(value) when is_binary(value), do: true
+      {:ok, value} ->
+        case Roles.normalize(value) do
+          {:ok, roles} -> put_change(changeset, :role, Roles.legacy_first_role(roles))
+          {:error, _reason} -> add_error(changeset, :role, "must be nil, a string, or a role map")
+        end
 
-  defp valid_role?(%{"name" => name} = role) when is_binary(name) do
-    case Map.fetch(role, "skills") do
-      :error -> true
-      {:ok, skills} when is_list(skills) -> Enum.all?(skills, &is_binary/1)
-      {:ok, _skills} -> false
+      :error ->
+        changeset
     end
   end
 
-  defp valid_role?(_value), do: false
+  defp normalize_roles(changeset) do
+    case fetch_change(changeset, :roles) do
+      {:ok, value} ->
+        case Roles.normalize(value || []) do
+          {:ok, roles} ->
+            put_change(changeset, :roles, roles)
+
+          {:error, _reason} ->
+            add_error(changeset, :roles, "must be a list of role labels or maps")
+        end
+
+      :error ->
+        changeset
+    end
+  end
+
+  defp sync_role_fields(changeset) do
+    cond do
+      match?({:ok, _roles}, fetch_change(changeset, :roles)) ->
+        roles = get_change(changeset, :roles) || []
+        put_change(changeset, :role, Roles.legacy_first_role(roles))
+
+      match?({:ok, _role}, fetch_change(changeset, :role)) ->
+        case Roles.normalize(get_change(changeset, :role)) do
+          {:ok, roles} -> put_change(changeset, :roles, roles)
+          {:error, _reason} -> changeset
+        end
+
+      true ->
+        changeset
+    end
+  end
 end

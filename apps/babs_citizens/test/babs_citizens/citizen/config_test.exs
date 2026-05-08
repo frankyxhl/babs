@@ -83,6 +83,113 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
     assert config.ticket_backend == "direct_cli"
   end
 
+  test "loads legacy string and table role forms into canonical roles" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    string_role = Path.join(root, "citizens/citizen-string-role.toml")
+
+    File.write!(string_role, """
+    id = "BAB-CIT-STRING-ROLE"
+    slug = "string-role"
+    display_name = "String Role"
+    cli = "/bin/zsh"
+    cwd = "string-role"
+    role = "Developer"
+    """)
+
+    assert {:ok, config} = Config.load_file(string_role, root: root)
+    assert config.role == "developer"
+    assert config.roles == [%{"name" => "developer", "skills" => []}]
+
+    table_role = Path.join(root, "citizens/citizen-table-role.toml")
+
+    File.write!(table_role, """
+    id = "BAB-CIT-TABLE-ROLE"
+    slug = "table-role"
+    display_name = "Table Role"
+    cli = "/bin/zsh"
+    cwd = "table-role"
+
+    [role]
+    name = "Inspector"
+    skills = ["Code Review"]
+    """)
+
+    assert {:ok, config} = Config.load_file(table_role, root: root)
+    assert config.role == %{"name" => "inspector", "skills" => ["code-review"]}
+    assert config.roles == [%{"name" => "inspector", "skills" => ["code-review"]}]
+  end
+
+  test "loads canonical roles arrays and array-of-tables" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    array_roles = Path.join(root, "citizens/citizen-array-roles.toml")
+
+    File.write!(array_roles, """
+    id = "BAB-CIT-ARRAY-ROLES"
+    slug = "array-roles"
+    display_name = "Array Roles"
+    cli = "/bin/zsh"
+    cwd = "array-roles"
+    roles = ["Developer", "Inspector"]
+    """)
+
+    assert {:ok, config} = Config.load_file(array_roles, root: root)
+    assert config.role == "developer"
+
+    assert config.roles == [
+             %{"name" => "developer", "skills" => []},
+             %{"name" => "inspector", "skills" => []}
+           ]
+
+    table_roles = Path.join(root, "citizens/citizen-table-roles.toml")
+
+    File.write!(table_roles, """
+    id = "BAB-CIT-TABLE-ROLES"
+    slug = "table-roles"
+    display_name = "Table Roles"
+    cli = "/bin/zsh"
+    cwd = "table-roles"
+
+    [[roles]]
+    name = "Developer"
+    skills = ["Elixir"]
+
+    [[roles]]
+    name = "Inspector"
+    """)
+
+    assert {:ok, config} = Config.load_file(table_roles, root: root)
+    assert config.role == %{"name" => "developer", "skills" => ["elixir"]}
+
+    assert config.roles == [
+             %{"name" => "developer", "skills" => ["elixir"]},
+             %{"name" => "inspector", "skills" => []}
+           ]
+  end
+
+  test "canonical roles win over legacy role when both are present" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+    path = Path.join(root, "citizens/citizen-both-roles.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-BOTH-ROLES"
+    slug = "both-roles"
+    display_name = "Both Roles"
+    cli = "/bin/zsh"
+    cwd = "both-roles"
+    role = "legacy"
+    roles = ["Developer"]
+    """)
+
+    assert {:ok, config} = Config.load_file(path, root: root)
+    assert config.role == "developer"
+    assert config.roles == [%{"name" => "developer", "skills" => []}]
+  end
+
   test "custom workspace_root resolves relative cwd outside the application root" do
     root = tmp_root()
     workspace_root = Path.join(System.tmp_dir!(), "babs-workspace-root-#{unique()}")
@@ -363,6 +470,24 @@ defmodule Babs.Citizens.Citizen.ConfigTest do
 
     assert {:error, {:invalid_cli_args, ["-f", 1]}} =
              Config.load_file(mixed_args, root: root)
+  end
+
+  test "rejects invalid role values before runner construction" do
+    root = tmp_root()
+    File.mkdir_p!(Path.join(root, "citizens"))
+
+    path = Path.join(root, "citizens/citizen-bad-role.toml")
+
+    File.write!(path, """
+    id = "BAB-CIT-BAD-ROLE"
+    slug = "bad-role"
+    display_name = "Bad Role"
+    cli = "/bin/zsh"
+    cwd = "bad-role"
+    roles = ["bad/role"]
+    """)
+
+    assert {:error, {:invalid_role_name, "bad/role"}} = Config.load_file(path, root: root)
   end
 
   test "rejects unsupported launch profiles before runner construction" do

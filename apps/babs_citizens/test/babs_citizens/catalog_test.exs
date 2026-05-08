@@ -49,7 +49,8 @@ defmodule Babs.Citizens.CatalogTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       env: %{"OPENAI_API_KEY" => "old"},
-      role: %{"name" => "coder"}
+      role: %{"name" => "coder"},
+      roles: [%{"name" => "coder", "skills" => []}]
     })
 
     assert %{records: [initial], warnings: [], errors: []} =
@@ -66,7 +67,11 @@ defmodule Babs.Citizens.CatalogTest do
       launch_profile: "trusted_autonomous",
       cwd: "new-dylan",
       env: %{"OPENAI_API_KEY" => "new"},
-      role: %{"name" => "reviewer", "skills" => ["elixir"]}
+      role: %{"name" => "reviewer", "skills" => ["elixir"]},
+      roles: [
+        %{"name" => "reviewer", "skills" => ["elixir"]},
+        %{"name" => "inspector", "skills" => []}
+      ]
     })
 
     assert %{
@@ -85,6 +90,12 @@ defmodule Babs.Citizens.CatalogTest do
     assert updated.display_name == "Dylan Updated"
     assert updated.description == "Updated metadata"
     assert updated.role == %{"name" => "reviewer", "skills" => ["elixir"]}
+
+    assert updated.roles == [
+             %{"name" => "reviewer", "skills" => ["elixir"]},
+             %{"name" => "inspector", "skills" => []}
+           ]
+
     refute File.exists?(initial.cwd)
     refute File.exists?(Path.join(root, "workspaces/new-dylan"))
   end
@@ -133,6 +144,7 @@ defmodule Babs.Citizens.CatalogTest do
         launch_profile: "trusted_autonomous",
         env: %{"TOKEN" => "secret"},
         role: "copilot-tester",
+        roles: [%{"name" => "copilot-tester", "skills" => []}],
         status: "failed",
         metadata: %{"internal" => true},
         last_error: "boom"
@@ -151,10 +163,25 @@ defmodule Babs.Citizens.CatalogTest do
              cwd: cwd,
              env: %{"TOKEN" => "secret"},
              role: "copilot-tester",
+             roles: [%{"name" => "copilot-tester", "skills" => []}],
              path: nil
            } = Catalog.to_config(record)
 
     assert cwd == record.cwd
+  end
+
+  test "to_config derives legacy role from canonical roles when needed" do
+    record =
+      insert_citizen!(%{
+        slug: "roles-only",
+        role: nil,
+        roles: [%{"name" => "developer", "skills" => ["elixir"]}]
+      })
+
+    assert %CitizenConfig{
+             role: %{"name" => "developer", "skills" => ["elixir"]},
+             roles: [%{"name" => "developer", "skills" => ["elixir"]}]
+           } = Catalog.to_config(record)
   end
 
   test "insert_new inserts a UI-created record without mkdir, merge, or warnings tuple" do
@@ -170,6 +197,7 @@ defmodule Babs.Citizens.CatalogTest do
       launch_profile: "trusted_autonomous",
       cwd: missing_cwd,
       env: %{},
+      roles: [%{"name" => "developer", "skills" => []}],
       role: nil
     }
 
@@ -178,6 +206,8 @@ defmodule Babs.Citizens.CatalogTest do
     assert record.slug == "insert-new"
     assert record.status == "running"
     assert record.launch_profile == "trusted_autonomous"
+    assert record.role == "developer"
+    assert record.roles == [%{"name" => "developer", "skills" => []}]
     assert record.metadata == %{}
     assert record.is_mayor == false
     refute File.exists?(missing_cwd)
