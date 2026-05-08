@@ -241,7 +241,12 @@ convention; Mix writes app-local `.coverdata` export files from that basename.
     and
     `.trinity/reviews/20260509-064229-apps-babs_citizens-test-babs_citizens-federation-peer_client_test.exs`.
     All PASS with no blockers.
-- PR review loop: Pending.
+- PR review loop:
+  - PR #60 CI passed.
+  - GitHub Codex review R1 returned "Didn't find any major issues" for the
+    implementation head.
+  - PR #60 was squash-merged as `8c2b8c3`, closing Phase 17.5 and the Phase 17
+    implementation sequence.
 
 ---
 
@@ -251,3 +256,4 @@ convention; Mix writes app-local `.coverdata` export files from that basename.
 |------|--------|----|
 | 2026-05-09 | Initial Phase 17.5 remote operation BDD/E2E CHG | Codex |
 | 2026-05-09 | Fold Trinity plan review advisories and mark CHG approved | Codex |
+| 2026-05-09 | Record PR #60 Codex review pass and merge result | Codex |
