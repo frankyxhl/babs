@@ -294,6 +294,17 @@ PR.
   - Post-fix validation passed: focused event tests with 14 tests,
     CI-equivalent `mix test --max-cases 1`, default full `mix test`, exported
     coverage at `:babs_citizens` 84.55% and `:babs` 89.27%.
+- 2026-05-08 GitHub Codex review R4:
+  - Fixed P2 metadata normalization bug: `Api.create_ticket/2` now persists and
+    returns the normalized `TicketMarkdown.parse/2` result instead of using the
+    parsed Ticket only for validation.
+  - Added API regression coverage for duplicate/mixed-case inspection roles and
+    duplicate citizen candidates, proving both the returned Ticket and persisted
+    Ticket use canonical `metadata.inspection`.
+  - Post-fix validation passed: focused API writer/store tests with 41 tests,
+    CI-equivalent `mix test --max-cases 1`, default full `mix test` with 398
+    `:babs_citizens` tests and 88 `:babs` tests, exported coverage at
+    `:babs_citizens` 84.53% and `:babs` 89.27%.
 
 ## Change History
 
@@ -309,3 +320,4 @@ PR.
 | 2026-05-08 | Fixed GitHub Codex R2 P3 for non-UTC inspection id timestamps | Codex |
 | 2026-05-08 | Fixed GitHub CI test isolation for ReattachScannerTest under max-cases 1 | Codex |
 | 2026-05-08 | Fixed GitHub Codex R3 P2 for empty inspector request events | Codex |
+| 2026-05-08 | Fixed GitHub Codex R4 P2 for create-ticket metadata normalization | Codex |

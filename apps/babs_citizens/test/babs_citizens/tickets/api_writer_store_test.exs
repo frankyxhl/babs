@@ -130,6 +130,48 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert List.last(history)["inspection_id"] == "insp_20260508000000_42"
   end
 
+  test "create_ticket persists normalized inspection metadata" do
+    root = tmp_root()
+
+    metadata = %{
+      "inspection" => %{
+        "mode" => "auto",
+        "strategy" => "council",
+        "roles" => ["Inspector", "inspector", "QA Reviewer"],
+        "citizens" => ["clare", "clare", "dylan"],
+        "quorum" => "all_pass",
+        "max_inspectors" => 2,
+        "allow_self_inspection" => true
+      }
+    }
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Normalize inspection",
+                 body: "Inspection policy metadata should be canonical.",
+                 metadata: metadata
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    expected = %{
+      "mode" => "auto",
+      "strategy" => "council",
+      "roles" => ["inspector", "qa-reviewer"],
+      "citizens" => ["clare", "dylan"],
+      "quorum" => "all_pass",
+      "max_inspectors" => 2,
+      "allow_self_inspection" => true
+    }
+
+    assert ticket.metadata["inspection"] == expected
+    assert {:ok, %{ticket: shown}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert shown.metadata["inspection"] == expected
+  end
+
   test "comment_ticket notifies every current assignee including the author" do
     root = tmp_root()
     parent = self()
