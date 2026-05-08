@@ -286,6 +286,14 @@ PR.
   - Validation passed: focused `ReattachScannerTest`, CI-equivalent
     `mix test --max-cases 1`, default full `mix test`, exported coverage,
     `af validate`, `git diff --check`, and added-line privacy scan.
+- 2026-05-08 GitHub Codex review R3:
+  - Fixed P2 audit correctness bug: `inspection_requested` now rejects empty
+    inspector lists and blank inspector values, preventing persisted audit
+    events that claim an inspection was requested with no deliverable prompt.
+  - Added regression coverage for both empty and blank inspector routing fields.
+  - Post-fix validation passed: focused event tests with 14 tests,
+    CI-equivalent `mix test --max-cases 1`, default full `mix test`, exported
+    coverage at `:babs_citizens` 84.55% and `:babs` 89.27%.
 
 ## Change History
 
@@ -300,3 +308,4 @@ PR.
 | 2026-05-08 | Fixed GitHub Codex R1 P2 for redacted inspection failure reasons | Codex |
 | 2026-05-08 | Fixed GitHub Codex R2 P3 for non-UTC inspection id timestamps | Codex |
 | 2026-05-08 | Fixed GitHub CI test isolation for ReattachScannerTest under max-cases 1 | Codex |
+| 2026-05-08 | Fixed GitHub Codex R3 P2 for empty inspector request events | Codex |

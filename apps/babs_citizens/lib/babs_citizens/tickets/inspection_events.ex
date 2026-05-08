@@ -151,10 +151,17 @@ defmodule Babs.Citizens.Tickets.InspectionEvents do
   defp validate_non_empty(_value, reason), do: {:error, reason}
 
   defp validate_string_list(values, reason) when is_list(values) do
-    if Enum.all?(values, &is_binary/1), do: :ok, else: {:error, reason}
+    if values != [] and Enum.all?(values, &non_empty_binary?/1) do
+      :ok
+    else
+      {:error, reason}
+    end
   end
 
   defp validate_string_list(_values, reason), do: {:error, reason}
+
+  defp non_empty_binary?(value) when is_binary(value), do: String.trim(value) != ""
+  defp non_empty_binary?(_value), do: false
 
   defp validate_findings(values) when is_list(values) do
     if Enum.all?(values, &is_map/1), do: :ok, else: {:error, {:invalid_findings, values}}

@@ -123,6 +123,12 @@ defmodule Babs.Citizens.Tickets.InspectionEventsTest do
 
   test "rejects malformed constructor routing fields" do
     assert {:error, :invalid_inspectors} =
+             InspectionEvents.requested(@id, @inspection_id, @policy, [], now: @now)
+
+    assert {:error, :invalid_inspectors} =
+             InspectionEvents.requested(@id, @inspection_id, @policy, ["clare", " "], now: @now)
+
+    assert {:error, :invalid_inspectors} =
              InspectionEvents.requested(@id, @inspection_id, @policy, ["clare", 1], now: @now)
 
     assert {:error, :invalid_inspector} =
