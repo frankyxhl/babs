@@ -1646,7 +1646,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     |> Enum.reduce_while({:ok, %{}}, fn path, {:ok, acc} ->
       id = Path.basename(path, ".md")
 
-      case existing_mayor_child(root, id, plan, opts) do
+      case existing_mayor_child(root, id, path, plan, opts) do
         {:ok, nil} ->
           {:cont, {:ok, acc}}
 
@@ -1659,23 +1659,30 @@ defmodule Babs.Citizens.Tickets.Writer do
     end)
   end
 
-  defp existing_mayor_child(root, id, plan, opts) do
+  defp existing_mayor_child(root, id, path, plan, opts) do
+    case mayor_child_materialization_candidate(path, plan) do
+      :candidate ->
+        recover_existing_mayor_child(root, id, plan, opts)
+
+      :unrelated ->
+        {:ok, nil}
+
+      {:error, reason} ->
+        {:error, {:mayor_child_tickets, {:unrecoverable_child_history, id, reason}}}
+    end
+  end
+
+  defp recover_existing_mayor_child(root, id, plan, opts) do
     with {:ok, ticket} <- Store.read_ticket(root, id, opts) do
       case materialized_child_status(ticket, plan) do
-        :unrelated ->
-          {:ok, nil}
-
         {:ok, index} ->
-          case ensure_materialized_child_history(root, ticket) do
-            :ok ->
-              {:ok, {index, ticket}}
-
-            {:error, reason} ->
-              {:error, {:mayor_child_tickets, {:unrecoverable_child_history, id, reason}}}
-          end
+          recover_existing_mayor_child_history(root, ticket, index)
 
         {:stale, _index} ->
           {:error, {:mayor_child_tickets, {:stale_materialized_child, id}}}
+
+        :unrelated ->
+          {:ok, nil}
       end
     else
       {:error, {:not_found, _id}} ->
@@ -1684,6 +1691,69 @@ defmodule Babs.Citizens.Tickets.Writer do
       {:error, reason} ->
         {:error, {:mayor_child_tickets, {:unrecoverable_child_history, id, reason}}}
     end
+  end
+
+  defp recover_existing_mayor_child_history(root, ticket, index) do
+    case ensure_materialized_child_history(root, ticket) do
+      :ok ->
+        {:ok, {index, ticket}}
+
+      {:error, reason} ->
+        {:error, {:mayor_child_tickets, {:unrecoverable_child_history, ticket.id, reason}}}
+    end
+  end
+
+  defp mayor_child_materialization_candidate(path, plan) do
+    case File.read(path) do
+      {:ok, content} ->
+        mayor_child_materialization_candidate_from_content(content, plan)
+
+      {:error, reason} ->
+        {:error, {:redacted_io_error, {:read_ticket, reason}}}
+    end
+  end
+
+  defp mayor_child_materialization_candidate_from_content(content, plan) do
+    with {:ok, yaml} <- ticket_frontmatter_yaml(content),
+         {:ok, raw} <- decode_ticket_frontmatter(yaml),
+         true <- raw_mayor_materialization_for_plan?(raw, plan) do
+      :candidate
+    else
+      false ->
+        :unrelated
+
+      {:error, _reason} ->
+        :unrelated
+    end
+  end
+
+  defp ticket_frontmatter_yaml(content) do
+    case Regex.run(~r/\A---\s*\n(.*?)\n---\s*\n?/s, content) do
+      [_, yaml] -> {:ok, yaml}
+      _ -> {:error, {:invalid_frontmatter, :missing_frontmatter}}
+    end
+  end
+
+  defp decode_ticket_frontmatter(yaml) do
+    case YamlElixir.read_from_string(yaml) do
+      {:ok, raw} when is_map(raw) -> {:ok, raw}
+      {:ok, _value} -> {:error, {:invalid_frontmatter, :frontmatter_not_map}}
+      {:error, reason} -> {:error, {:invalid_frontmatter, {:yaml_decode_failed, reason}}}
+    end
+  rescue
+    error -> {:error, {:invalid_frontmatter, {:yaml_decode_failed, error.__struct__}}}
+  end
+
+  defp raw_mayor_materialization_for_plan?(raw, plan) do
+    materialization =
+      raw
+      |> metadata_value("metadata")
+      |> metadata_value("mayor_materialization")
+
+    is_map(materialization) and
+      metadata_value(raw, "parent_ticket") == plan.root_ticket_id and
+      metadata_value(materialization, "root_ticket_id") == plan.root_ticket_id and
+      metadata_value(materialization, "proposal_id") == plan.proposal_id
   end
 
   defp materialized_child_status(%Ticket{} = ticket, plan) do

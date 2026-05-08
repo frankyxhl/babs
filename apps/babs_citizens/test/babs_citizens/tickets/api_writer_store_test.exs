@@ -314,6 +314,55 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            ]
   end
 
+  test "mayor proposal approval ignores unrelated malformed ticket files during recovery scan" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    invalid_path = Path.join(root, "T-2026-05-07-999.md")
+    File.write!(invalid_path, "not ticket markdown")
+
+    proposal = proposal(ticket.id, "prop_invalid_unrelated", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{children_created: children_created}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_invalid_unrelated",
+               tickets_root: root,
+               proposal_revision: revision,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert [child] = children_created["children"]
+
+    assert {:ok, %{ticket: child_ticket}} =
+             Api.show_ticket(child["ticket_id"], tickets_root: root)
+
+    assert child_ticket.parent_ticket == ticket.id
+
+    assert child_ticket.metadata["mayor_materialization"]["proposal_id"] ==
+             "prop_invalid_unrelated"
+
+    assert {:ok, %{invalid: [%{path: ^invalid_path}]}} = Api.list_tickets(tickets_root: root)
+  end
+
   test "mayor proposal approval validates root marker size before creating child tickets" do
     root = tmp_root()
 
