@@ -3,7 +3,7 @@
 **Applies to:** BAB project
 **Last updated:** 2026-05-09
 **Last reviewed:** 2026-05-09
-**Status:** Proposed
+**Status:** Approved
 **Date:** 2026-05-09
 **Requested by:** Operator
 **Priority:** High
@@ -268,9 +268,37 @@ this slice touches browser UI beyond API plumbing.
   - Trinity fast-review R3 on 2026-05-09: GLM PASS and DeepSeek PASS with no
     blockers. Folded advisories for roadmap anti-goal wording and server-owned
     remote transition event names.
-- Implementation: Pending.
-- Validation: Pending.
-- Implementation review: Pending.
+- Implementation:
+  - Added a receiving-node capability guard for `write` and `control`
+    federation requests, including per-Citizen overrides and typed redacted
+    errors.
+  - Added redacted JSONL audit records for successful non-Ticket control
+    actions and denied remote requests.
+  - Added mutating `/api/v1` endpoints for remote Ticket comments,
+    transitions, assignments, unassignments, Citizen hardline injection, and
+    Citizen lifecycle actions.
+  - Added `PeerClient` mutating helpers and corrected remote snapshot
+    `read_only?` from configured capabilities.
+  - Updated Ticket comment actors to accept `remote:<peer-id>` and Ticket state
+    transitions to persist server-owned `remote_transition` history events.
+- Validation:
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/federation_control_guard_test.exs apps/babs_citizens/test/babs_citizens/federation_audit_test.exs apps/babs/test/babs_web/controllers/api_v1_control_controller_test.exs apps/babs_citizens/test/babs_citizens/federation/peer_client_test.exs --seed 1` passed.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/federation_config_test.exs apps/babs/test/babs_web/controllers/api_v1_read_controller_test.exs apps/babs/test/babs_web/controllers/api_v1_events_controller_test.exs --seed 1` passed.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test` passed.
+  - `mise exec -- mix test --cover --export-coverage phase17_4` passed.
+  - `npm run test:js` passed.
+  - `af validate --root .` passed.
+  - `git diff --check` passed.
+  - Diff privacy grep passed.
+- Implementation review:
+  - Trinity fast-review on 2026-05-09:
+    `.trinity/reviews/20260509-052757-Phase-17.4-remote-write-control-gate-implementation`.
+    GLM PASS and DeepSeek PASS with no blockers.
+  - Folded non-blocking advisories for stale `PeerClient` moduledoc,
+    unsupported `HttpcClient` method handling, API-boundary missing-peer test,
+    assign authorization ordering comment, and denied-audit write observability.
 - PR review loop: Pending.
 
 ---
@@ -282,3 +310,5 @@ this slice touches browser UI beyond API plumbing.
 | 2026-05-09 | Initial Phase 17.4 remote write/control gate CHG | Codex |
 | 2026-05-09 | Fold Trinity plan review findings for ADR consistency, endpoint body shapes, assignment capability target, PeerClient read-only snapshot, and audit rotation scope | Codex |
 | 2026-05-09 | Fold Trinity R3 advisories for roadmap wording and transition event ownership | Codex |
+| 2026-05-09 | Implement Phase 17.4 remote write/control gate and record validation results | Codex |
+| 2026-05-09 | Fold Trinity implementation review advisories | Codex |
