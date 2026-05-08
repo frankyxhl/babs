@@ -264,7 +264,9 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert first_child["priority"] == "normal"
     assert first_child["inspector"] == "auto"
     assert first_child["routing"]["status"] == "failed"
+    assert first_child["routing"]["reason"] == "No eligible Citizen found for role developer"
     assert second_child["routing"]["status"] == "failed"
+    assert second_child["routing"]["reason"] == "No eligible Citizen found for role developer"
 
     assert {:ok, %{ticket: first_ticket}} =
              Api.show_ticket(first_child["ticket_id"], tickets_root: root)

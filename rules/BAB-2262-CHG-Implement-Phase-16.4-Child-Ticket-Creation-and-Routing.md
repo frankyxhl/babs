@@ -348,7 +348,8 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     the root marker is missing, blocking mutations after partial child
     materialization has started.
   - Role routing is attempted per child and records `assigned`,
-    `not_requested`, or `failed` without deleting created children.
+    `not_requested`, or `failed` without deleting created children; the root
+    marker preserves assigned Citizen slugs and stable routing failure reasons.
   - Ticket detail renders created child Ticket links, role/inspector badges,
     and routing status after materialization.
   - Browser-harness BDD now includes `mayor proposal approval creates child
@@ -375,8 +376,11 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     and final GitHub review request.
   - GitHub Codex Review R5 found one additional filesystem-only partial
     materialization lock issue. Fixed locally by making Writer mutation actions
-    scan child materialization metadata before edit/remove/reject; per the
-    operator's five-round limit, no sixth Codex review was requested.
+    scan child materialization metadata before edit/remove/reject.
+  - GitHub Codex Review R6 was explicitly allowed by the operator and found
+    that root child summaries stripped routing details. Fixed by preserving
+    assigned Citizen slugs and stable failure reasons in the compact root
+    marker, with regression coverage.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -438,6 +442,15 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Post-Codex-R5 `af validate --root .`: PASS, 171 documents checked.
   - Post-Codex-R5 `git diff --check`: PASS.
   - Post-Codex-R5 added-line privacy scan: PASS, no matches.
+  - Post-Codex-R6 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R6 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R6 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 56 tests.
+  - Post-Codex-R6 `mise exec -- mix test`: PASS, 583 tests.
+  - Post-Codex-R6 `npm run test:js`: PASS, 15 tests.
+  - Post-Codex-R6 `af validate --root .`: PASS, 171 documents checked.
+  - Post-Codex-R6 `git diff --check`: PASS.
+  - Post-Codex-R6 added-line privacy scan: PASS, no matches.
 
 ---
 
@@ -452,4 +465,5 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Fix GitHub Codex R2 missing-root-marker retry recovery finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R3 child-history recovery audit finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R4 materialization edit lock and stale recovery findings | Codex |
-| 2026-05-09 | Fix GitHub Codex R5 partial-materialization mutation lock finding without requesting a sixth review | Codex |
+| 2026-05-09 | Fix GitHub Codex R5 partial-materialization mutation lock finding | Codex |
+| 2026-05-09 | Fix GitHub Codex R6 routing detail persistence finding | Codex |

@@ -139,6 +139,17 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
     }
   end
 
-  defp compact_routing(%{"status" => status}) when is_binary(status), do: %{"status" => status}
+  defp compact_routing(%{"status" => "assigned", "assignees" => assignees})
+       when is_list(assignees) do
+    %{"status" => "assigned", "assignees" => Enum.filter(assignees, &is_binary/1)}
+  end
+
+  defp compact_routing(%{"status" => "failed", "reason" => reason}) when is_binary(reason),
+    do: %{"status" => "failed", "reason" => reason}
+
+  defp compact_routing(%{"status" => status})
+       when status in ["assigned", "failed", "not_requested"],
+       do: %{"status" => status}
+
   defp compact_routing(_routing), do: %{"status" => "unknown"}
 end

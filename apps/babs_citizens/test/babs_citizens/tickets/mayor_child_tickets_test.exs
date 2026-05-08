@@ -90,6 +90,18 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
           "status" => "failed",
           "reason" => "No eligible Citizen found for role developer"
         }
+      },
+      %{
+        child_index: 1,
+        ticket_id: "T-2026-05-08-066",
+        title: "Build frontend",
+        priority: "normal",
+        inspector: "user",
+        assignee_role: "developer",
+        routing: %{
+          "status" => "assigned",
+          "assignees" => ["dylan"]
+        }
       }
     ]
 
@@ -110,7 +122,19 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
                "priority" => "normal",
                "inspector" => "user",
                "assignee_role" => "developer",
-               "routing" => %{"status" => "failed"}
+               "routing" => %{
+                 "status" => "failed",
+                 "reason" => "No eligible Citizen found for role developer"
+               }
+             },
+             %{
+               "child_index" => 1,
+               "ticket_id" => "T-2026-05-08-066",
+               "title" => "Build frontend",
+               "priority" => "normal",
+               "inspector" => "user",
+               "assignee_role" => "developer",
+               "routing" => %{"status" => "assigned", "assignees" => ["dylan"]}
              }
            ]
 
