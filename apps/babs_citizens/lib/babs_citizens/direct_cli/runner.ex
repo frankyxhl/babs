@@ -168,7 +168,7 @@ defmodule Babs.Citizens.DirectCli.Runner do
     with {:ok, artifacts} <- execute_command(command, opts),
          artifacts <- Map.put_new(artifacts, :provider_session_id, command.provider_session_id),
          {:ok, result} <-
-           adapter.parse_result(artifacts, secret_opts(turn.config)) do
+           adapter.parse_result(artifacts, parse_opts(turn)) do
       persist_successful_turn(started, turn, result)
     else
       {:error, reason} ->
@@ -237,7 +237,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
     command_opts =
       [
         timeout_ms: Keyword.get(opts, :timeout_ms, 120_000),
-        output_limit: Keyword.get(opts, :output_limit, 65_536)
+        output_limit: Keyword.get(opts, :output_limit, 65_536),
+        ticket_id: turn.ticket_id
       ]
       |> maybe_command_provider_session_id(session.provider_session_id, resumable?)
 
@@ -440,6 +441,8 @@ defmodule Babs.Citizens.DirectCli.Runner do
     do: Map.put(event, "error", diagnostic_summary(reason, turn))
 
   defp diagnostic_summary(reason, turn), do: Diagnostics.summary(reason, secret_opts(turn.config))
+
+  defp parse_opts(turn), do: Keyword.put(secret_opts(turn.config), :ticket_id, turn.ticket_id)
 
   defp maybe_provider_session_id(event, session_id)
        when is_binary(session_id) and session_id != "",

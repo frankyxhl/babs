@@ -8,6 +8,10 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   alias Babs.Citizens.DirectCli.Adapters.Common
   alias Babs.Citizens.ProviderRuntime.Result
 
+  @ticket_id_regex ~r/^T-\d{4}-\d{2}-\d{2}-\d{3}$/i
+  @reply_line_regex ~r/^\s*BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:\s*(.+?)\s*$/i
+  @ticket_reply_regex ~r/BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:/i
+
   @impl true
   def provider, do: "copilot"
 
@@ -22,7 +26,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
 
   @impl true
   def start_command(config, prompt, opts \\ []) do
-    Common.command(config, provider(), base_args(config, prompt, []), opts)
+    Common.command(config, provider(), base_args(config, prompt, [], opts), opts)
   end
 
   @impl true
@@ -30,7 +34,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
     Common.command(
       config,
       provider(),
-      base_args(config, prompt, ["--resume=#{provider_session_id}"]),
+      base_args(config, prompt, ["--resume=#{provider_session_id}"], opts),
       Keyword.merge(opts, provider_session_id: provider_session_id, resume?: true)
     )
   end
@@ -39,29 +43,34 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   def parse_result(%{stdout: stdout} = artifacts, opts \\ []) do
     values = Common.decode_json_lines(stdout)
     text = Common.find_text(values)
+    ticket_id = ticket_id_from_opts(opts)
+    final_reply = if is_binary(text), do: extract_final_reply(text, ticket_id), else: nil
     session_id = Common.find_session_id(values) || artifacts[:provider_session_id]
 
     cond do
       not is_binary(text) or String.trim(text) == "" ->
         {:error, :no_assistant_reply}
 
+      not is_binary(final_reply) ->
+        {:error, :missing_babs_reply}
+
       true ->
-        {:ok, direct_success(text, session_id, opts)}
+        {:ok, direct_success(final_reply, session_id, opts)}
     end
   end
 
-  defp base_args(%{cli: cli, cli_args: ["copilot" | _rest], cwd: cwd}, prompt, extra)
+  defp base_args(%{cli: cli, cli_args: ["copilot" | _rest], cwd: cwd}, prompt, extra, opts)
        when is_binary(cli) do
-    [cli, "copilot", "--"] ++ copilot_args(cwd, prompt, extra)
+    [cli, "copilot", "--"] ++ copilot_args(cwd, prompt, extra, opts)
   end
 
-  defp base_args(%{cli: cli, cwd: cwd}, prompt, extra),
-    do: [cli] ++ copilot_args(cwd, prompt, extra)
+  defp base_args(%{cli: cli, cwd: cwd}, prompt, extra, opts),
+    do: [cli] ++ copilot_args(cwd, prompt, extra, opts)
 
-  defp copilot_args(cwd, prompt, extra) do
+  defp copilot_args(cwd, prompt, extra, opts) do
     [
       "-p",
-      prompt,
+      copilot_prompt(prompt, opts),
       "--output-format",
       "json",
       "--stream",
@@ -71,6 +80,84 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
       "-C",
       cwd
     ] ++ extra
+  end
+
+  defp copilot_prompt(prompt, opts) do
+    ticket_id = ticket_id_from_opts(opts) || last_ticket_id(prompt)
+
+    required_reply =
+      if ticket_id do
+        "BABS_REPLY #{ticket_id}: <your answer>"
+      else
+        "BABS_REPLY <ticket_id>: <your answer>"
+      end
+
+    """
+    You are running as a Babs Citizen through GitHub Copilot CLI non-interactive mode.
+    Return exactly one final line and nothing else.
+    Do not explain your reasoning, describe your plan, quote these instructions, or use markdown.
+    The final line must start with:
+    #{required_reply}
+
+    Original Babs prompt:
+    #{prompt}
+    """
+    |> String.trim()
+  end
+
+  defp extract_final_reply(text, expected_ticket_id) when is_binary(text) do
+    text
+    |> String.split(~r/\R/)
+    |> Enum.reverse()
+    |> Enum.find_value(fn line ->
+      case Regex.run(@reply_line_regex, line, capture: :all_but_first) do
+        [ticket_id, reply] ->
+          reply = String.trim(reply)
+
+          if reply_ticket_id_matches?(ticket_id, expected_ticket_id) and
+               not placeholder_reply?(reply) do
+            reply
+          end
+
+        _other ->
+          nil
+      end
+    end)
+  end
+
+  defp last_ticket_id(prompt) when is_binary(prompt) do
+    prompt
+    |> then(&Regex.scan(@ticket_reply_regex, &1, capture: :all_but_first))
+    |> List.last()
+    |> case do
+      [ticket_id] -> ticket_id
+      _other -> nil
+    end
+  end
+
+  defp ticket_id_from_opts(opts) do
+    case Keyword.get(opts, :ticket_id) do
+      ticket_id when is_binary(ticket_id) ->
+        ticket_id = String.trim(ticket_id)
+        if Regex.match?(@ticket_id_regex, ticket_id), do: ticket_id
+
+      _other ->
+        nil
+    end
+  end
+
+  defp reply_ticket_id_matches?(_ticket_id, nil), do: true
+
+  defp reply_ticket_id_matches?(ticket_id, expected_ticket_id),
+    do: ticket_id == expected_ticket_id
+
+  defp placeholder_reply?(reply) do
+    reply
+    |> String.trim()
+    |> String.trim("`")
+    |> String.trim()
+    |> String.downcase()
+    |> then(&(&1 in ["", "your response", "your response.", "<your answer>"]))
   end
 
   defp direct_success(text, session_id, opts) do

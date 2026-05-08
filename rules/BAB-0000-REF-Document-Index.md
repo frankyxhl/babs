@@ -105,6 +105,7 @@
 | 2265 | CHG | Implement Phase 17.3 Mobile PWA Shell |
 | 2266 | CHG | Implement Phase 17.4 Remote Write Control Gate |
 | 2267 | CHG | Implement Phase 17.5 Remote Operation BDD E2E |
+| 2268 | CHG | Fix Copilot Direct Reply Capture |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

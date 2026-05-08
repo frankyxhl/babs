@@ -235,14 +235,15 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
            ]
   end
 
-  test "copilot command and jsonl parser handle session id" do
+  test "copilot command and jsonl parser extract final BABS_REPLY and session id" do
     cfg = config("copilot")
+    cwd = cfg.cwd
     assert {:ok, command} = Copilot.start_command(cfg, "hello")
 
-    assert command.args == [
+    assert [
              "copilot",
              "-p",
-             "hello",
+             prompt,
              "--output-format",
              "json",
              "--stream",
@@ -250,21 +251,97 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
              "--allow-all",
              "--no-ask-user",
              "-C",
-             cfg.cwd
-           ]
+             ^cwd
+           ] = command.args
+
+    assert prompt =~ "Return exactly one final line"
+    assert prompt =~ "hello"
 
     stdout =
       [
         %{"type" => "session", "sessionId" => "copilot-session"},
-        %{"type" => "assistant.message", "data" => %{"content" => "copilot reply"}}
+        %{
+          "type" => "assistant.message",
+          "data" => %{
+            "content" =>
+              "I should answer briefly.\nBABS_REPLY T-2026-05-09-001: I'm Copilot, ready to help."
+          }
+        }
       ]
       |> Enum.map(&Jason.encode!/1)
       |> Enum.join("\n")
 
-    assert {:ok, result} = Copilot.parse_result(%{stdout: stdout, stderr: ""})
+    assert {:ok, result} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-001")
+
     assert result.provider_session_id == "copilot-session"
-    assert result.text == "copilot reply"
-    assert_normalized_direct_result(result, "copilot", "copilot reply", "copilot-session")
+    assert result.text == "I'm Copilot, ready to help."
+
+    assert_normalized_direct_result(
+      result,
+      "copilot",
+      "I'm Copilot, ready to help.",
+      "copilot-session"
+    )
+  end
+
+  test "copilot parser rejects planning text that only quotes the reply instruction" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{
+            "content" =>
+              "The user is asking me to respond to a Babs Ticket.\nI need to respond with: `BABS_REPLY T-2026-05-09-001: your response`\nLet me provide a clear response."
+          }
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:error, :missing_babs_reply} = Copilot.parse_result(%{stdout: stdout, stderr: ""})
+  end
+
+  test "copilot command uses explicit current ticket id over quoted history markers" do
+    cfg = config("copilot")
+
+    prompt = """
+    Earlier chat:
+    BABS_REPLY T-2026-05-09-001: old answer
+
+    Reply with:
+    BABS_REPLY T-2026-05-09-002: your response
+    """
+
+    assert {:ok, command} =
+             Copilot.start_command(cfg, prompt, ticket_id: "T-2026-05-09-002")
+
+    wrapped_prompt = Enum.at(command.args, 2)
+
+    assert wrapped_prompt =~
+             "The final line must start with:\nBABS_REPLY T-2026-05-09-002: <your answer>"
+
+    refute wrapped_prompt =~
+             "The final line must start with:\nBABS_REPLY T-2026-05-09-001: <your answer>"
+  end
+
+  test "copilot parser rejects BABS_REPLY for a stale ticket id when current id is known" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{
+            "content" => "BABS_REPLY T-2026-05-09-001: stale-ticket answer"
+          }
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:error, :missing_babs_reply} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
   end
 
   test "fake adapter is deterministic for BDD fixtures" do
