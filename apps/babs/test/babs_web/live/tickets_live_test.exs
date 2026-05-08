@@ -767,7 +767,7 @@ defmodule BabsWeb.TicketsLiveTest do
     refute html =~ ~s(data-testid="ticket-proposal-approve")
   end
 
-  test "ticket detail edits removes and approves a mayor proposal without child files", %{
+  test "ticket detail edits removes and approves a mayor proposal into linked child tickets", %{
     root: root
   } do
     ticket =
@@ -829,11 +829,27 @@ defmodule BabsWeb.TicketsLiveTest do
     html = render_async(view, 1_000)
     assert html =~ "Approved proposal"
     assert html =~ "approved"
+    assert html =~ ~s(data-testid="ticket-proposal-created")
+    assert html =~ "Created child Tickets"
+    assert html =~ "Build API"
+    assert html =~ "routing failed"
     refute html =~ ~s(data-testid="ticket-proposal-edit-0")
     refute html =~ ~s(data-testid="ticket-proposal-remove-0")
 
-    assert [markdown_file] = Path.wildcard(Path.join(root, "*.md"))
-    assert Path.basename(markdown_file) == "#{ticket.id}.md"
+    assert [child_file, root_file] =
+             root
+             |> Path.join("*.md")
+             |> Path.wildcard()
+             |> Enum.reject(&(Path.basename(&1) == "#{ticket.id}.md"))
+             |> Kernel.++([Path.join(root, "#{ticket.id}.md")])
+
+    assert Path.basename(root_file) == "#{ticket.id}.md"
+    child_id = Path.basename(child_file, ".md")
+    assert html =~ ~s(href="/tickets/#{child_id}")
+
+    assert {:ok, %{ticket: child}} = Api.show_ticket(child_id, tickets_root: root)
+    assert child.parent_ticket == ticket.id
+    assert child.assigner == "mayor:flora"
   end
 
   test "ticket detail shows proposal validation errors and rejects proposals", %{root: root} do

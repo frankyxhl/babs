@@ -570,6 +570,44 @@
     margin: 0 0 0 24px;
   }
 
+  .proposal-created {
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--ks-line);
+    border-radius: 8px;
+    background: var(--ks-panel-2);
+    padding: 10px;
+  }
+
+  .proposal-created h3 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .proposal-created ol {
+    display: grid;
+    gap: 8px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .proposal-created li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .proposal-created-title {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+
   .proposal-child-list {
     display: grid;
     gap: 10px;

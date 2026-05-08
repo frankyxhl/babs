@@ -66,5 +66,26 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:mayor_proposal_review, {:stale_proposal_revision, "new", "old"}}) ==
              "Mayor proposal changed; refresh before editing again"
+
+    assert Error.message({:mayor_proposal_review, {:already_materialized, :children_created}}) ==
+             "Mayor proposal children already exist; approve again to repair the root marker"
+
+    assert Error.message({:mayor_proposal_review, {:already_materialized, :children_started}}) ==
+             "Mayor proposal child materialization has started; approve again to repair the root marker"
+
+    assert Error.message({:mayor_child_tickets, {:partial_child_write, ["T-1"], :boom}}) ==
+             "Mayor proposal created 1 child Ticket before failing; review created child Tickets before retrying"
+
+    assert Error.message({:mayor_child_tickets, {:invalid_child_title, 1, :multiline}}) ==
+             "Mayor proposal child 2 title cannot contain line breaks"
+
+    assert Error.message(
+             {:mayor_child_tickets,
+              {:unrecoverable_child_history, "T-2026-05-08-002", :raw_reason}}
+           ) ==
+             "Mayor proposal child Ticket T-2026-05-08-002 has invalid history and cannot be recovered"
+
+    assert Error.message({:mayor_child_tickets, {:stale_materialized_child, "T-2026-05-08-002"}}) ==
+             "Mayor proposal child Ticket T-2026-05-08-002 no longer matches the current proposal"
   end
 end

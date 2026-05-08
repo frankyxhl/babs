@@ -169,6 +169,7 @@ defmodule BabsWeb.TicketPresenter do
       risks: list(proposal["risks"]),
       questions: list(proposal["questions"]),
       children: children,
+      created_children: proposal_created_children(state.children_created),
       feedback: state.feedback,
       decision: state.decision
     }
@@ -216,6 +217,38 @@ defmodule BabsWeb.TicketPresenter do
     |> Enum.reject(&(&1 in [nil, "", "any"]))
     |> Enum.uniq()
   end
+
+  defp proposal_created_children(%{"children" => children}) when is_list(children) do
+    Enum.map(children, fn child ->
+      routing = Map.get(child, "routing", %{})
+
+      %{
+        index: Map.get(child, "child_index"),
+        number: created_child_number(Map.get(child, "child_index")),
+        ticket_id: Map.get(child, "ticket_id"),
+        title: Map.get(child, "title"),
+        priority: Map.get(child, "priority") || "normal",
+        inspector: Map.get(child, "inspector") || "user",
+        assignee_role: Map.get(child, "assignee_role") || "any",
+        routing_status: Map.get(routing, "status") || "unknown",
+        routing_label: proposal_routing_label(routing)
+      }
+    end)
+  end
+
+  defp proposal_created_children(_value), do: []
+
+  defp created_child_number(index) when is_integer(index), do: index + 1
+  defp created_child_number(_index), do: nil
+
+  defp proposal_routing_label(%{"status" => "assigned", "assignees" => assignees}) do
+    "assigned to #{assignees(assignees)}"
+  end
+
+  defp proposal_routing_label(%{"status" => "failed"}), do: "routing failed"
+  defp proposal_routing_label(%{"status" => "not_requested"}), do: "routing not requested"
+  defp proposal_routing_label(%{"status" => status}) when is_binary(status), do: status
+  defp proposal_routing_label(_routing), do: "routing unknown"
 
   defp inspection_kind(%{"mode" => "auto", "strategy" => "council"}), do: :auto_council
   defp inspection_kind(%{"mode" => "auto"}), do: :auto_single

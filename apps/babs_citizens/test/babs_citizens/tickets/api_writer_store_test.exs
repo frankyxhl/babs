@@ -188,6 +188,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              Api.approve_mayor_proposal(ticket.id, "prop_review",
                tickets_root: root,
                proposal_revision: third_revision,
+               date: ~D[2026-05-08],
                now: "2026-05-08T00:04:00Z"
              )
 
@@ -206,11 +207,570 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              "mayor_proposal_received",
              "mayor_proposal_revised",
              "mayor_proposal_revised",
+             "mayor_children_created",
              "mayor_proposal_approved"
            ]
 
-    assert [markdown_file] = Path.wildcard(Path.join(root, "*.md"))
-    assert Path.basename(markdown_file) == "#{ticket.id}.md"
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 2
+  end
+
+  test "mayor proposal approval creates child tickets and is idempotent" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal =
+      proposal(ticket.id, "prop_children", ["Build backend", "Build frontend"])
+      |> put_in(["children", Access.at(0), "inspector"], "auto")
+      |> put_in(["children", Access.at(0), "metadata"], %{
+        "inspection" => %{"mode" => "auto", "roles" => ["inspector"]}
+      })
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: approved, children_created: children_created}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_children",
+               tickets_root: root,
+               proposal_revision: revision,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert approved["event"] == "mayor_proposal_approved"
+    assert children_created["event"] == "mayor_children_created"
+    assert children_created["proposal_id"] == "prop_children"
+    assert [first_child, second_child] = children_created["children"]
+    assert first_child["child_index"] == 0
+    assert first_child["title"] == "Build backend"
+    assert first_child["priority"] == "normal"
+    assert first_child["inspector"] == "auto"
+    assert first_child["routing"]["status"] == "failed"
+    assert first_child["routing"]["reason"] == "No eligible Citizen found for role developer"
+    assert second_child["routing"]["status"] == "failed"
+    assert second_child["routing"]["reason"] == "No eligible Citizen found for role developer"
+
+    assert {:ok, %{ticket: first_ticket}} =
+             Api.show_ticket(first_child["ticket_id"], tickets_root: root)
+
+    assert first_ticket.parent_ticket == ticket.id
+    assert first_ticket.assigner == "mayor:flora"
+    assert first_ticket.title == "Build backend"
+    assert first_ticket.body == "Complete Build backend."
+    assert first_ticket.assignee_role == "developer"
+    assert first_ticket.inspector == "auto"
+    assert first_ticket.metadata["inspection"]["mode"] == "auto"
+
+    assert {:ok,
+            %{
+              event: ^approved,
+              children_created: ^children_created,
+              already_materialized?: true
+            }} =
+             Api.approve_mayor_proposal(ticket.id, "prop_children",
+               tickets_root: root,
+               proposal_revision: revision,
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert {:error,
+            {:mayor_proposal_review, {:stale_proposal_revision, _current_revision, "old"}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_children",
+               tickets_root: root,
+               proposal_revision: "old",
+               now: "2026-05-08T00:04:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 3
+
+    assert {:ok, %{history: root_history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.map(root_history, & &1["event"]) == [
+             "created",
+             "mayor_proposal_received",
+             "mayor_children_created",
+             "mayor_proposal_approved"
+           ]
+  end
+
+  test "mayor proposal approval ignores unrelated malformed ticket files during recovery scan" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    invalid_path = Path.join(root, "T-2026-05-07-999.md")
+    File.write!(invalid_path, "not ticket markdown")
+
+    proposal = proposal(ticket.id, "prop_invalid_unrelated", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{children_created: children_created}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_invalid_unrelated",
+               tickets_root: root,
+               proposal_revision: revision,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert [child] = children_created["children"]
+
+    assert {:ok, %{ticket: child_ticket}} =
+             Api.show_ticket(child["ticket_id"], tickets_root: root)
+
+    assert child_ticket.parent_ticket == ticket.id
+
+    assert child_ticket.metadata["mayor_materialization"]["proposal_id"] ==
+             "prop_invalid_unrelated"
+
+    assert {:ok, %{invalid: [%{path: ^invalid_path}]}} = Api.list_tickets(tickets_root: root)
+  end
+
+  test "mayor proposal approval validates root marker size before creating child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    oversized_title = String.duplicate("A", 17_000)
+    proposal = proposal(ticket.id, "prop_oversized_marker", [oversized_title])
+    ticket_id = ticket.id
+
+    TicketMarkdown.history_path(root, ticket.id)
+    |> File.write!(Jason.encode!(proposal_received(ticket.id, proposal)) <> "\n", [:append])
+
+    assert {:error, {:history_event_too_large, ^ticket_id}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_oversized_marker",
+               tickets_root: root,
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 1
+  end
+
+  test "mayor proposal approval recovers existing children after root marker append failure" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_recover_marker", ["Build backend", "Build frontend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    history_path = TicketMarkdown.history_path(root, ticket.id)
+    File.chmod!(history_path, 0o444)
+
+    try do
+      assert {:error, {:redacted_io_error, {:append_history, _reason}}} =
+               Api.approve_mayor_proposal(ticket.id, "prop_recover_marker",
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:02:00Z"
+               )
+    after
+      File.chmod!(history_path, 0o644)
+    end
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 3
+
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.revise_mayor_proposal_child(
+               ticket.id,
+               "prop_recover_marker",
+               0,
+               %{
+                 title: "Changed"
+               },
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.remove_mayor_proposal_child(ticket.id, "prop_recover_marker", 1,
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.reject_mayor_proposal(ticket.id, "prop_recover_marker", "Stop.",
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    child_ids =
+      root
+      |> Path.join("T-2026-05-08-*.md")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".md"))
+      |> Enum.reject(&(&1 == ticket.id))
+      |> Enum.sort()
+
+    [first_child_id | _rest] = child_ids
+    File.rm!(TicketMarkdown.history_path(root, first_child_id))
+
+    assert {:ok, %{event: approved, children_created: children_created}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_recover_marker",
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert approved["event"] == "mayor_proposal_approved"
+    assert [first_child, second_child] = children_created["children"]
+    assert first_child["title"] == "Build backend"
+    assert second_child["title"] == "Build frontend"
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 3
+
+    assert {:ok, %{history: child_history}} = Api.show_ticket(first_child_id, tickets_root: root)
+    assert Enum.any?(child_history, &(&1["event"] == "created"))
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.map(history, & &1["event"]) == [
+             "created",
+             "mayor_proposal_received",
+             "mayor_children_created",
+             "mayor_proposal_approved"
+           ]
+  end
+
+  test "mayor proposal retry preserves failed child route after assignment injection failure" do
+    root = tmp_root()
+
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "clare",
+        display_name: "Clare",
+        roles: ["developer"]
+      })
+
+      assert {:ok, ticket} =
+               Api.create_ticket(
+                 %{
+                   type: "mission",
+                   title: "Mission root",
+                   body: "Split this mission.",
+                   metadata: mayor_metadata()
+                 },
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:00:00Z"
+               )
+
+      proposal = proposal(ticket.id, "prop_recover_failed_route", ["Build backend"])
+
+      assert :ok =
+               Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+                 tickets_root: root
+               )
+
+      history_path = TicketMarkdown.history_path(root, ticket.id)
+      File.chmod!(history_path, 0o444)
+
+      try do
+        assert {:error, {:redacted_io_error, {:append_history, _reason}}} =
+                 Api.approve_mayor_proposal(ticket.id, "prop_recover_failed_route",
+                   tickets_root: root,
+                   date: ~D[2026-05-08],
+                   now: "2026-05-08T00:02:00Z",
+                   citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                   pane_lookup: fn "clare" -> {:ok, self()} end,
+                   pane_injector: fn "clare", _prompt -> {:error, :offline} end
+                 )
+      after
+        File.chmod!(history_path, 0o644)
+      end
+
+      [child_id] =
+        root
+        |> Path.join("T-2026-05-08-*.md")
+        |> Path.wildcard()
+        |> Enum.map(&Path.basename(&1, ".md"))
+        |> Enum.reject(&(&1 == ticket.id))
+
+      assert {:ok, %{ticket: child_ticket, history: child_history}} =
+               Api.show_ticket(child_id, tickets_root: root)
+
+      assert child_ticket.assignees == ["clare"]
+      assert Enum.any?(child_history, &match?(%{"event" => "injection_failed"}, &1))
+      refute Enum.any?(child_history, &match?(%{"event" => "injected"}, &1))
+
+      assert {:ok, %{children_created: children_created}} =
+               Api.approve_mayor_proposal(ticket.id, "prop_recover_failed_route",
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:03:00Z",
+                 pane_injector: fn "clare", _prompt ->
+                   flunk("failed recovered route should not be reinjected")
+                 end
+               )
+
+      assert [child] = children_created["children"]
+      assert child["routing"]["status"] == "failed"
+      assert child["routing"]["reason"] == "Ticket prompt could not be injected into clare"
+    end)
+  end
+
+  test "mayor proposal approval rejects stale recovered child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_stale_recover", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    history_path = TicketMarkdown.history_path(root, ticket.id)
+    File.chmod!(history_path, 0o444)
+
+    try do
+      assert {:error, {:redacted_io_error, {:append_history, _reason}}} =
+               Api.approve_mayor_proposal(ticket.id, "prop_stale_recover",
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:02:00Z"
+               )
+    after
+      File.chmod!(history_path, 0o644)
+    end
+
+    child_id =
+      root
+      |> Path.join("T-2026-05-08-*.md")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".md"))
+      |> Enum.reject(&(&1 == ticket.id))
+      |> List.first()
+
+    child_path = TicketMarkdown.path(root, child_id)
+
+    child_path
+    |> File.read!()
+    |> String.replace("# Build backend", "# Build stale backend")
+    |> then(&File.write!(child_path, &1))
+
+    assert {:error, {:mayor_child_tickets, {:stale_materialized_child, ^child_id}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_stale_recover",
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 2
+  end
+
+  test "mayor proposal approval rejects multiline child titles before creating child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_multiline_title", ["Bad\nTitle"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    assert {:error, {:mayor_child_tickets, {:invalid_child_title, 0, :multiline}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_multiline_title",
+               tickets_root: root,
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 1
+  end
+
+  test "mayor proposal approval repairs missing approval after children are recorded" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Repair approval root",
+                 body: "Children were already materialized.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_repair", ["Build backend"])
+
+    children_created = %{
+      "ts" => "2026-05-08T00:02:00Z",
+      "event" => "mayor_children_created",
+      "by" => "user",
+      "ticket_id" => ticket.id,
+      "proposal_id" => "prop_repair",
+      "children" => [
+        %{
+          "child_index" => 0,
+          "ticket_id" => "T-2026-05-08-099",
+          "title" => "Build backend",
+          "priority" => "normal",
+          "inspector" => "user",
+          "assignee_role" => "developer",
+          "routing" => %{"status" => "assigned", "assignees" => ["dylan"]}
+        }
+      ]
+    }
+
+    assert :ok =
+             Api.append_ticket_events(
+               ticket.id,
+               [proposal_received(ticket.id, proposal), children_created],
+               tickets_root: root
+             )
+
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_created}}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_repair", 0, %{title: "Changed"},
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_created}}} =
+             Api.reject_mayor_proposal(ticket.id, "prop_repair", "Stop.",
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:ok,
+            %{
+              event: approved,
+              children_created: ^children_created,
+              already_materialized?: true
+            }} =
+             Api.approve_mayor_proposal(ticket.id, "prop_repair",
+               tickets_root: root,
+               proposal_revision: revision,
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert approved["event"] == "mayor_proposal_approved"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.map(history, & &1["event"]) == [
+             "created",
+             "mayor_proposal_received",
+             "mayor_children_created",
+             "mayor_proposal_approved"
+           ]
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 1
   end
 
   test "mayor proposal API rejects invalid and terminal actions without appending history" do
@@ -268,7 +828,8 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert {:ok, %{event: approved}} =
              Api.approve_mayor_proposal(ticket.id, "prop_review",
                tickets_root: root,
-               proposal_revision: fresh_revision
+               proposal_revision: fresh_revision,
+               date: ~D[2026-05-08]
              )
 
     assert approved["event"] == "mayor_proposal_approved"
@@ -309,6 +870,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              "created",
              "mayor_proposal_received",
              "mayor_proposal_revised",
+             "mayor_children_created",
              "mayor_proposal_approved"
            ]
   end
