@@ -5,6 +5,7 @@ defmodule Babs.Citizens.Tickets.MayorSelector do
 
   alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline}
 
+  @execution_lock_registry Babs.Citizens.ExecutionLockRegistry
   @mayor_roles ~w(mayor planner)
 
   @spec select(map(), keyword()) :: {:ok, map()} | {:error, term()}
@@ -54,6 +55,9 @@ defmodule Babs.Citizens.Tickets.MayorSelector do
       not record.is_mayor ->
         {:error, {:mayor_selector, {:ineligible_mayor, record.slug, :not_marked_mayor}}}
 
+      execution_busy?(record.slug) ->
+        {:error, {:mayor_selector, {:busy_mayor, record.slug}}}
+
       not mayor_role?(record) ->
         {:error, {:mayor_selector, {:ineligible_mayor, record.slug, :missing_mayor_role}}}
 
@@ -74,5 +78,11 @@ defmodule Babs.Citizens.Tickets.MayorSelector do
     record
     |> CitizenRecord.role_names()
     |> Enum.find(&(&1 in @mayor_roles))
+  end
+
+  defp execution_busy?(slug) do
+    @execution_lock_registry
+    |> Registry.lookup(slug)
+    |> Enum.any?()
   end
 end

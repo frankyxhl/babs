@@ -88,6 +88,7 @@ future UI and execution slices a tested boundary:
      - slug must exist;
      - Citizen must have `is_mayor: true`;
      - Citizen must not be `failed`;
+     - Citizen must not already hold an `ExecutionLock`;
      - Citizen must have a normalized role of `mayor` or `planner`.
    - Select a default Mayor when `policy["mayor"]` is nil:
      - scan configured/imported Citizens deterministically by slug;
@@ -97,7 +98,7 @@ future UI and execution slices a tested boundary:
      - exclude imported external-owned Citizens from automatic default
        selection.
    - Return stable nested error terms for missing policy, missing Mayor,
-     ineligible Mayor, failed Mayor, and no default Mayor.
+     ineligible Mayor, failed Mayor, busy Mayor, and no default Mayor.
    - Add unit tests for pinned/default/external/failed/non-Mayor cases,
      including AND-condition cases proving `is_mayor`, status, and role all
      matter.
@@ -168,6 +169,8 @@ future UI and execution slices a tested boundary:
 - Imported external-owned Citizens are not selected as automatic default
   Mayors.
 - Ineligible, failed, or missing pinned Mayor Citizens produce stable errors.
+- Busy pinned Mayor Citizens produce stable errors, and busy default Mayor
+  candidates are skipped.
 - The Mayor prompt includes opaque `rules_refs`, Ticket context, role/citizen
   summaries, inspection options, and the Phase 16.1 JSON proposal contract.
 - The Mayor prompt does not include local paths, private hostnames, private
@@ -240,6 +243,23 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     `.trinity/reviews/20260508-205129-Phase-16.2-final-post-advisory-implementation-diff`.
   - GLM PASS and DeepSeek PASS with no blocking findings.
   - Remaining advisories are non-blocking style/guard-surface notes.
+- 2026-05-08 Codex PR review R1:
+  - Codex found one P2 issue: Mayor selection did not account for
+    `ExecutionLock` busy Citizens.
+  - Fixed `MayorSelector` so automatic default selection skips busy Mayors and
+    pinned busy Mayors return `{:busy_mayor, slug}`.
+  - Added regression tests for both default and pinned busy Mayor behavior.
+  - Focused Mayor selector/planner/router suite passed: 21 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed with a fresh temporary test
+    directory: `babs_citizens` 462 tests, `babs` 97 tests.
+  - `mise exec -- mix test` passed with a fresh temporary test directory:
+    `babs_citizens` 462 tests, `babs` 97 tests.
+  - Coverage passed after the R1 fix: `babs_citizens` 85.71%, `babs` 88.92%.
+  - Final Trinity R1-fix implementation review packet:
+    `.trinity/reviews/20260508-210605-Phase-16.2-Codex-R1-busy-Mayor-selection-fix`.
+  - GLM PASS and DeepSeek PASS with no blocking findings.
 
 ---
 
@@ -247,6 +267,7 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Fix Codex R1 busy Mayor selection finding and update validation | Codex |
 | 2026-05-08 | Record final GLM and DeepSeek implementation PASS/PASS | Codex |
 | 2026-05-08 | Fold Trinity implementation advisories and refresh validation | Codex |
 | 2026-05-08 | Implement Mayor selector/planner/prompt assembly and record validation | Codex |

@@ -2,6 +2,7 @@ defmodule Babs.Citizens.Tickets.MayorSelectorTest do
   use Babs.Citizens.RepoCase, async: false
 
   alias Babs.Citizens.ImportedHardline
+  alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.MayorSelector
 
   setup do
@@ -89,6 +90,22 @@ defmodule Babs.Citizens.Tickets.MayorSelectorTest do
 
     assert {:ok, %{slug: "external", selection: :pinned}} =
              MayorSelector.select(policy("external"))
+  end
+
+  test "skips busy default Mayors and rejects busy pinned Mayors", %{config_root: config_root} do
+    write_citizen_toml!(config_root, "busy")
+    write_citizen_toml!(config_root, "ready")
+
+    insert_citizen!(%{slug: "busy", is_mayor: true, roles: ["mayor"]})
+    insert_citizen!(%{slug: "ready", is_mayor: true, roles: ["mayor"]})
+
+    ExecutionLock.with_lock("busy", fn ->
+      assert {:ok, %{slug: "ready", selection: :default}} =
+               MayorSelector.select(policy(nil))
+
+      assert {:error, {:mayor_selector, {:busy_mayor, "busy"}}} =
+               MayorSelector.select(policy("busy"))
+    end)
   end
 
   test "rejects missing, failed, and ineligible pinned Mayors", %{config_root: config_root} do
