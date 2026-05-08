@@ -92,6 +92,11 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:mayor_proposal_review, {:terminal_ticket, id, state}}),
     do: "Ticket #{id} is #{state} and cannot review Mayor proposals"
 
+  def message({:mayor_child_tickets, {:partial_child_write, created_ids, _reason}})
+      when is_list(created_ids) do
+    "Mayor proposal created #{length(created_ids)} child Ticket before failing; review created child Tickets before retrying"
+  end
+
   def message({:terminal_ticket, id, state}),
     do: "Ticket #{id} is #{state} and cannot be commented on"
 

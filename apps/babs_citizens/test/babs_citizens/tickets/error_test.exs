@@ -66,5 +66,8 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:mayor_proposal_review, {:stale_proposal_revision, "new", "old"}}) ==
              "Mayor proposal changed; refresh before editing again"
+
+    assert Error.message({:mayor_child_tickets, {:partial_child_write, ["T-1"], :boom}}) ==
+             "Mayor proposal created 1 child Ticket before failing; review created child Tickets before retrying"
   end
 end

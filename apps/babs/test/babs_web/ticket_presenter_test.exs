@@ -176,6 +176,32 @@ defmodule BabsWeb.TicketPresenterTest do
     assert rejected.actionable? == false
   end
 
+  test "proposal_panel renders created child Ticket summaries after approval" do
+    proposal = proposal(["Build API"])
+
+    approved =
+      ticket(type: "mission", metadata: %{"mayor" => mayor_policy()})
+      |> TicketPresenter.proposal_panel([
+        proposal_received(proposal),
+        children_created(proposal),
+        proposal_decision("mayor_proposal_approved", proposal)
+      ])
+
+    assert approved.status == :approved
+    assert approved.actionable? == false
+
+    assert [
+             %{
+               index: 0,
+               ticket_id: "T-2026-05-08-002",
+               title: "Build API",
+               assignee_role: "developer",
+               routing_status: "assigned",
+               routing_label: "assigned to dylan"
+             }
+           ] = approved.created_children
+  end
+
   defp ticket(opts \\ []) do
     %Ticket{
       id: "T-2026-05-08-001",
@@ -300,5 +326,26 @@ defmodule BabsWeb.TicketPresenterTest do
       "proposal" => proposal
     }
     |> Map.merge(if feedback, do: %{"feedback" => feedback}, else: %{})
+  end
+
+  defp children_created(proposal) do
+    %{
+      "ts" => "2026-05-08T12:10:30Z",
+      "event" => "mayor_children_created",
+      "by" => "user",
+      "ticket_id" => "T-2026-05-08-001",
+      "proposal_id" => proposal["proposal_id"],
+      "children" => [
+        %{
+          "child_index" => 0,
+          "ticket_id" => "T-2026-05-08-002",
+          "title" => "Build API",
+          "priority" => "normal",
+          "inspector" => "user",
+          "assignee_role" => "developer",
+          "routing" => %{"status" => "assigned", "assignees" => ["dylan"]}
+        }
+      ]
+    }
   end
 end

@@ -19,14 +19,18 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.InspectionEvents
   alias Babs.Citizens.Tickets.InspectionQuorum
   alias Babs.Citizens.Tickets.InspectorSelector
+  alias Babs.Citizens.Tickets.MayorChildTickets
   alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.RoleRouter
   alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
+  alias Babs.Citizens.Tickets.Ticket
+  alias Babs.Citizens.Tickets.TicketId
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.TurnIds
+  alias Babs.Citizens.Tickets.WriterSupervisor
 
   require Logger
 
@@ -335,10 +339,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   def handle_call({:approve_mayor_proposal, id, proposal_id, opts}, _from, state) do
     state = reset_idle(state, opts)
 
-    result =
-      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
-        MayorProposalReview.approve(ticket, history, proposal_id, event_opts)
-      end)
+    result = approve_mayor_proposal_with_children(state.root, id, proposal_id, opts)
 
     {:reply, result, state}
   end
@@ -1433,6 +1434,209 @@ defmodule Babs.Citizens.Tickets.Writer do
          :ok <- validate_events(id, [event]),
          :ok <- append_events(root, id, [event]) do
       {:ok, %{event: event}}
+    end
+  end
+
+  defp approve_mayor_proposal_with_children(root, id, proposal_id, opts) do
+    with {:ok, ticket} <- Store.read_ticket(root, id, opts),
+         {:ok, history} <- History.read(root, id),
+         {:ok, state} <- MayorProposalReview.from_history(ticket, history),
+         :ok <- ensure_materialized_proposal_id(state, proposal_id),
+         :ok <- ensure_materialized_proposal_revision(state, opts) do
+      case state.children_created do
+        created when is_map(created) ->
+          append_missing_mayor_approval(root, ticket, history, state, proposal_id, created, opts)
+
+        _not_created ->
+          materialize_mayor_children(root, ticket, history, state, proposal_id, opts)
+      end
+    end
+  end
+
+  defp append_missing_mayor_approval(
+         _root,
+         _ticket,
+         _history,
+         %{decision: decision},
+         _proposal_id,
+         created,
+         _opts
+       )
+       when is_map(decision) do
+    {:ok,
+     %{
+       event: decision,
+       children_created: created,
+       already_materialized?: true
+     }}
+  end
+
+  defp append_missing_mayor_approval(root, ticket, history, _state, proposal_id, created, opts) do
+    event_opts = proposal_event_opts(opts)
+
+    with {:ok, approval} <- MayorProposalReview.approve(ticket, history, proposal_id, event_opts),
+         :ok <- validate_events(ticket.id, [approval]),
+         :ok <- append_events(root, ticket.id, [approval]) do
+      {:ok,
+       %{
+         event: approval,
+         children_created: created,
+         already_materialized?: true
+       }}
+    end
+  end
+
+  defp materialize_mayor_children(root, ticket, history, state, proposal_id, opts) do
+    event_opts = proposal_event_opts(opts)
+
+    with {:ok, approval} <- MayorProposalReview.approve(ticket, history, proposal_id, event_opts),
+         {:ok, plan} <- MayorChildTickets.plan(ticket, state),
+         {:ok, created_children} <- create_mayor_children(root, plan, opts),
+         routed_children <- route_mayor_children(root, created_children, opts),
+         children_created <-
+           MayorChildTickets.children_created_event(ticket, plan, routed_children, event_opts),
+         events <- [children_created, approval],
+         :ok <- validate_events(ticket.id, events),
+         :ok <- append_events(root, ticket.id, events) do
+      {:ok, %{event: approval, children_created: children_created}}
+    else
+      {:error, {:mayor_child_tickets, _reason}} = error ->
+        error
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp ensure_materialized_proposal_id(%{proposal_id: proposal_id}, proposal_id), do: :ok
+
+  defp ensure_materialized_proposal_id(%{proposal_id: expected}, actual),
+    do: {:error, {:mayor_proposal_review, {:stale_proposal_id, expected, actual}}}
+
+  defp ensure_materialized_proposal_revision(%{revision_token: expected}, opts) do
+    case Keyword.get(opts, :proposal_revision) do
+      nil -> :ok
+      ^expected -> :ok
+      actual -> {:error, {:mayor_proposal_review, {:stale_proposal_revision, expected, actual}}}
+    end
+  end
+
+  defp create_mayor_children(root, plan, opts) do
+    plan.children
+    |> Enum.reduce_while({:ok, []}, fn child, {:ok, acc} ->
+      case create_mayor_child(root, child, opts) do
+        {:ok, ticket} ->
+          {:cont, {:ok, [%{child: child, ticket: ticket} | acc]}}
+
+        {:error, reason} ->
+          created_ids =
+            acc
+            |> Enum.reverse()
+            |> Enum.map(& &1.ticket.id)
+
+          {:halt, {:error, {:mayor_child_tickets, {:partial_child_write, created_ids, reason}}}}
+      end
+    end)
+    |> case do
+      {:ok, children} -> {:ok, Enum.reverse(children)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp create_mayor_child(root, child, opts) do
+    case TicketId.claim_next(root, opts) do
+      {:ok, id, path} ->
+        case persist_mayor_child(root, id, path, child, opts) do
+          {:ok, ticket} ->
+            {:ok, ticket}
+
+          {:error, _reason} = error ->
+            cleanup_empty_claim(path)
+            error
+        end
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  defp persist_mayor_child(root, id, path, child, opts) do
+    with ticket <- child_ticket(id, path, child.attrs, opts),
+         {:ok, ticket} <- normalize_ticket(ticket, opts),
+         {:ok, pid} <-
+           WriterSupervisor.start_writer(ticket.id, Keyword.put(opts, :tickets_root, root)),
+         {:ok, ticket} <- __MODULE__.create(pid, ticket, opts) do
+      {:ok, ticket}
+    end
+  end
+
+  defp child_ticket(id, path, attrs, opts) do
+    now = now(opts)
+
+    %Ticket{
+      id: id,
+      type: attrs.type,
+      state: attrs.state,
+      assigner: attrs.assigner,
+      assignees: attrs.assignees,
+      assignee_role: attrs.assignee_role,
+      inspector: attrs.inspector,
+      priority: attrs.priority,
+      parent_ticket: attrs.parent_ticket,
+      created_at: now,
+      updated_at: now,
+      metadata: attrs.metadata,
+      title: attrs.title,
+      body: attrs.body,
+      path: path,
+      warnings: []
+    }
+  end
+
+  defp normalize_ticket(ticket, opts) do
+    case TicketMarkdown.parse(TicketMarkdown.render(ticket),
+           path: ticket.path,
+           known_citizens: Keyword.get(opts, :known_citizens)
+         ) do
+      {:ok, ticket} -> {:ok, ticket}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp cleanup_empty_claim(path) do
+    case File.read(path) do
+      {:ok, ""} -> File.rm(path)
+      _result -> :ok
+    end
+  end
+
+  defp route_mayor_children(root, created_children, opts) do
+    Enum.map(created_children, fn %{child: child, ticket: ticket} ->
+      routing = route_mayor_child(root, ticket, child, opts)
+
+      %{
+        child_index: child.child_index,
+        ticket_id: ticket.id,
+        title: ticket.title,
+        priority: ticket.priority,
+        inspector: ticket.inspector,
+        assignee_role: ticket.assignee_role,
+        routing: routing
+      }
+    end)
+  end
+
+  defp route_mayor_child(_root, _ticket, %{route?: false}, _opts) do
+    %{"status" => "not_requested"}
+  end
+
+  defp route_mayor_child(root, ticket, %{route?: true}, opts) do
+    with {:ok, pid} <-
+           WriterSupervisor.start_writer(ticket.id, Keyword.put(opts, :tickets_root, root)),
+         {:ok, %{ticket: assigned}} <- __MODULE__.assign_by_role(pid, ticket.id, opts) do
+      %{"status" => "assigned", "assignees" => assigned.assignees}
+    else
+      {:error, reason} -> %{"status" => "failed", "reason" => error_text(reason)}
     end
   end
 

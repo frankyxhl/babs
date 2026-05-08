@@ -360,6 +360,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_ticket_inspection_panel_shows_council_status,
         ),
         Scenario(
+            name="mayor proposal approval creates child tickets",
+            given="a Mayor proposal is waiting for operator approval",
+            when="the operator approves the proposal from Ticket detail",
+            then="child Tickets are created, routed, and linked from the root Ticket",
+            run=scenario_mayor_proposal_approval_creates_child_tickets,
+        ),
+        Scenario(
             name="ticket new form captures Elena Copilot JSONL reply",
             given="a Ticket is created from /tickets/new",
             when="a Copilot events.jsonl assistant reply is captured for Elena",
@@ -1135,6 +1142,64 @@ def scenario_ticket_inspection_panel_shows_council_status(context: BabsBddContex
         assert_element_visible("[data-testid='ticket-reject-form']", "human reject override")
     finally:
         cleanup_ticket(context.tickets_root, ticket_id)
+
+
+def scenario_mayor_proposal_approval_creates_child_tickets(context: BabsBddContext) -> None:
+    proposal_id = f"prop_bdd_{int(time.time() * 1000)}"
+    child_title = f"BDD Mayor Child {int(time.time() * 1000)}"
+    ticket_id = None
+    created_child_ids: list[str] = []
+
+    try:
+        ticket_id = create_mayor_proposal_ticket_once(
+            context.tickets_root,
+            proposal_id,
+            child_title,
+        )
+
+        context.open_path(f"/tickets/{ticket_id}")
+        wait_until(
+            "LiveView socket to connect on Mayor proposal detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible('[data-testid="ticket-proposal-panel"]', "Mayor proposal panel")
+        assert_element_visible('[data-testid="ticket-proposal-approve"]', "Mayor proposal approve button")
+        assert child_title in js("document.body.innerText")
+        click_selector('[data-testid="ticket-proposal-approve"]')
+
+        wait_until(
+            "Mayor approval to show created child Ticket links",
+            lambda: "Approved proposal" in js("document.body.innerText")
+            and "Created child Tickets" in js("document.body.innerText")
+            and "routing failed" in js("document.body.innerText"),
+            timeout=20,
+        )
+
+        events = ticket_history_events(context.tickets_root, ticket_id)
+        created = next(event for event in events if event.get("event") == "mayor_children_created")
+        approved = next(event for event in events if event.get("event") == "mayor_proposal_approved")
+        assert approved["proposal_id"] == proposal_id
+        assert created["proposal_id"] == proposal_id
+        assert len(created["children"]) == 1
+        child = created["children"][0]
+        created_child_ids = [child["ticket_id"]]
+        assert child["title"] == child_title
+        assert child["routing"]["status"] == "failed"
+        assert_element_visible(
+            f'[data-testid="ticket-proposal-created-child-{child["ticket_id"]}"]',
+            "created Mayor child Ticket row",
+        )
+        assert f'href="/tickets/{child["ticket_id"]}' in js("document.body.innerHTML")
+        assert ticket_markdown_path(context.tickets_root, child["ticket_id"]).exists()
+        child_markdown = ticket_markdown_path(context.tickets_root, child["ticket_id"]).read_text()
+        assert f'parent_ticket: "{ticket_id}"' in child_markdown
+        assert 'assigner: "mayor:flora"' in child_markdown
+    finally:
+        if ticket_id is not None:
+            cleanup_ticket(context.tickets_root, ticket_id)
+        for child_id in created_child_ids:
+            cleanup_ticket(context.tickets_root, child_id)
 
 
 def scenario_ticket_new_form_captures_elena_copilot_jsonl_reply(context: BabsBddContext) -> None:
@@ -2315,6 +2380,101 @@ def auto_inspection_metadata(citizens: list[str], strategy: str) -> dict:
             "allow_self_inspection": False,
         },
     }
+
+
+def create_mayor_proposal_ticket_once(tickets_root_path: Path, proposal_id: str, child_title: str) -> str:
+    script = """
+    root = System.fetch_env!("BABS_BDD_TICKETS_ROOT")
+    proposal_id = System.fetch_env!("BABS_BDD_PROPOSAL_ID")
+    child_title = System.fetch_env!("BABS_BDD_CHILD_TITLE")
+
+    Application.put_env(:babs_citizens, :tickets_root, root)
+    {:ok, _apps} = Application.ensure_all_started(:babs_citizens)
+
+    {:ok, ticket} =
+      Babs.Citizens.Tickets.Api.create_ticket(
+        %{
+          type: "mission",
+          title: "BDD Mayor Proposal Root",
+          body: "Approve this Mayor proposal from the browser.",
+          metadata: %{
+            "mayor" => %{
+              "mode" => "propose",
+              "mayor" => "flora",
+              "rules_refs" => ["BAB-1503", "COR-1616"],
+              "max_children" => 5,
+              "allowed_roles" => ["developer", "inspector"],
+              "require_human_approval" => true
+            }
+          }
+        },
+        tickets_root: root,
+        now: "2026-05-08T12:00:00Z"
+      )
+
+    proposal = %{
+      "proposal_id" => proposal_id,
+      "root_ticket_id" => ticket.id,
+      "summary" => "Split the mission into one child Ticket.",
+      "rules_refs_used" => ["BAB-1503"],
+      "children" => [
+        %{
+          "title" => child_title,
+          "body" => "Complete " <> child_title <> ".",
+          "type" => "assignment",
+          "priority" => "normal",
+          "assignee_role" => "developer",
+          "inspector" => "user",
+          "metadata" => %{}
+        }
+      ],
+      "risks" => [],
+      "questions" => []
+    }
+
+    :ok =
+      Babs.Citizens.Tickets.Api.append_ticket_events(
+        ticket.id,
+        [
+          %{
+            "ts" => "2026-05-08T12:01:00Z",
+            "event" => "mayor_proposal_received",
+            "by" => "flora",
+            "ticket_id" => ticket.id,
+            "proposal_id" => proposal_id,
+            "proposal" => proposal
+          }
+        ],
+        tickets_root: root
+      )
+
+    IO.puts(ticket.id)
+    """
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "BABS_BDD_TICKETS_ROOT": str(tickets_root_path),
+            "BABS_BDD_PROPOSAL_ID": proposal_id,
+            "BABS_BDD_CHILD_TITLE": child_title,
+        }
+    )
+    result = subprocess.run(
+        ["mise", "exec", "--", "mix", "run", "--no-start", "-e", script],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            "Mayor proposal BDD setup failed:\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    return result.stdout.strip().splitlines()[-1]
 
 
 def append_inspection_history(

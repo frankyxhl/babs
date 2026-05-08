@@ -9,6 +9,7 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
 
   @proposal_events ~w(mayor_proposal_received mayor_proposal_revised)
   @decision_events ~w(mayor_proposal_approved mayor_proposal_rejected)
+  @children_created_event "mayor_children_created"
 
   @spec from_history(map(), [map()]) :: :missing | {:ok, map()} | {:error, term()}
   def from_history(ticket, history) when is_list(history) do
@@ -21,6 +22,9 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
           with {:ok, proposal} <- normalize_event_proposal(ticket, policy, event) do
             decision = latest_decision_after(history, index, proposal["proposal_id"])
 
+            children_created =
+              latest_children_created_after(history, index, proposal["proposal_id"])
+
             {:ok,
              %{
                status: decision_status(decision),
@@ -30,7 +34,8 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
                revision_token: revision_token(event),
                source_event: event,
                decision: decision,
-               feedback: decision && decision["feedback"]
+               feedback: decision && decision["feedback"],
+               children_created: children_created
              }}
           end
       end
@@ -132,6 +137,15 @@ defmodule Babs.Citizens.Tickets.MayorProposalReview do
     |> Enum.drop(index + 1)
     |> Enum.filter(fn event ->
       event["event"] in @decision_events and event["proposal_id"] == proposal_id
+    end)
+    |> List.last()
+  end
+
+  defp latest_children_created_after(history, index, proposal_id) do
+    history
+    |> Enum.drop(index + 1)
+    |> Enum.filter(fn event ->
+      event["event"] == @children_created_event and event["proposal_id"] == proposal_id
     end)
     |> List.last()
   end

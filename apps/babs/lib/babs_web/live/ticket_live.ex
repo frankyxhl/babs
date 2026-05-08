@@ -503,6 +503,30 @@ defmodule BabsWeb.TicketLive do
                 </ol>
               </div>
 
+              <div
+                :if={@proposal_panel.created_children != []}
+                class="proposal-created"
+                data-testid="ticket-proposal-created"
+              >
+                <h3><BabsWeb.Icon.icon name="check" /> Created child Tickets</h3>
+                <ol>
+                  <li
+                    :for={child <- @proposal_panel.created_children}
+                    data-testid={"ticket-proposal-created-child-#{child.ticket_id}"}
+                  >
+                    <a class="ticket-link" href={TicketPath.detail(child.ticket_id, @socket_token)}>
+                      {child.ticket_id}
+                    </a>
+                    <span class="proposal-created-title">{child.title}</span>
+                    <span class={proposal_routing_badge_class(child.routing_status)}>
+                      {child.routing_label}
+                    </span>
+                    <span class="badge">{child.assignee_role}</span>
+                    <span class="badge">{child.inspector}</span>
+                  </li>
+                </ol>
+              </div>
+
               <div class="proposal-lists">
                 <div :if={@proposal_panel.rules_refs != []}>
                   <h3>Rule Refs</h3>
@@ -880,6 +904,10 @@ defmodule BabsWeb.TicketLive do
   defp proposal_status_badge_class(:awaiting), do: "badge queued"
   defp proposal_status_badge_class(:invalid), do: "badge failed"
   defp proposal_status_badge_class(_status), do: "badge"
+
+  defp proposal_routing_badge_class("assigned"), do: "badge captured"
+  defp proposal_routing_badge_class("failed"), do: "badge failed"
+  defp proposal_routing_badge_class(_status), do: "badge queued"
 
   defp proposal_panel_visible?(%{kind: :hidden}), do: false
   defp proposal_panel_visible?(_panel), do: true
