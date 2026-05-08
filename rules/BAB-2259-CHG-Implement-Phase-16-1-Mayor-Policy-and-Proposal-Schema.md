@@ -246,11 +246,30 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Final Trinity R1-fix implementation review packet:
     `.trinity/reviews/20260508-195708-Phase-16.1-final-Codex-R1-required-field-consistency-fix`.
   - GLM PASS and DeepSeek PASS with no blocking findings.
+- 2026-05-08 Codex PR review R2:
+  - Codex found one P2 issue: fenced JSON extraction could match Markdown code
+    fences inside a JSON string before parsing the proposal object.
+  - Fixed proposal parsing so whole-body JSON is decoded first; fenced fallback
+    now extracts only an outer fence delimited by standalone fence lines.
+  - Added regression tests for whole-body JSON and fenced JSON where a child
+    body contains a Markdown code fence.
+  - Focused Mayor policy/proposal/Ticket markdown suite passed: 23 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed with a fresh temporary test
+    directory: `babs_citizens` 449 tests, `babs` 97 tests.
+  - `mise exec -- mix test` passed with a fresh temporary test directory:
+    `babs_citizens` 449 tests, `babs` 97 tests.
+  - Coverage passed after the R2 fix: `babs_citizens` 85.51%, `babs` 88.92%.
+  - Final Trinity R2-fix implementation review packet:
+    `.trinity/reviews/20260508-200541-Phase-16.1-final-Codex-R2-fenced-JSON-parsing-fix`.
+  - GLM PASS and DeepSeek PASS with no blocking findings.
 
 ## Change History
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Fix Codex R2 fenced JSON parsing finding and update validation | Codex |
 | 2026-05-08 | Fix Codex R1 required proposal-list-field finding and update validation | Codex |
 | 2026-05-08 | Record final GLM and DeepSeek implementation PASS/PASS | Codex |
 | 2026-05-08 | Fold DeepSeek parser-option advisory and update final validation | Codex |

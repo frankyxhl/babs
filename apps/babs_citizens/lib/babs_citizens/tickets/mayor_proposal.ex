@@ -31,8 +31,7 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
   def parse(text, opts \\ [])
 
   def parse(text, opts) when is_binary(text) do
-    with {:ok, json} <- extract_json(text),
-         {:ok, decoded} <- decode_json(json),
+    with {:ok, decoded} <- decode_text(text),
          {:ok, normalized} <- normalize(decoded, opts) do
       {:ok, normalized}
     end
@@ -66,10 +65,20 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
 
   def normalize(value, _opts), do: {:error, {:mayor_proposal, {:invalid_payload, value}}}
 
-  defp extract_json(text) do
-    case Regex.run(~r/```(?:json)?\s*(.*?)\s*```/s, text) do
-      [_, json] -> {:ok, String.trim(json)}
-      _missing -> {:ok, String.trim(text)}
+  defp decode_text(text) do
+    text = String.trim(text)
+
+    case decode_json(text) do
+      {:ok, decoded} ->
+        {:ok, decoded}
+
+      {:error, {:mayor_proposal, :invalid_json}} ->
+        with {:ok, json} <- extract_fenced_json(text) do
+          decode_json(json)
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -78,6 +87,49 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
       {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
       {:ok, decoded} -> {:error, {:mayor_proposal, {:invalid_payload, decoded}}}
       {:error, _reason} -> {:error, {:mayor_proposal, :invalid_json}}
+    end
+  end
+
+  defp extract_fenced_json(text) do
+    lines = String.split(text, ~r/\R/, trim: false)
+
+    lines
+    |> Enum.with_index()
+    |> Enum.find_value(fn {line, index} ->
+      if fence_start?(line) do
+        case closing_fence_index(lines, index + 1) do
+          nil ->
+            nil
+
+          closing_index ->
+            json =
+              lines
+              |> Enum.slice(index + 1, closing_index - index - 1)
+              |> Enum.join("\n")
+              |> String.trim()
+
+            {:ok, json}
+        end
+      end
+    end)
+    |> case do
+      {:ok, json} -> {:ok, json}
+      nil -> {:error, {:mayor_proposal, :invalid_json}}
+    end
+  end
+
+  defp fence_start?(line) do
+    line = String.trim(line)
+    line == "```" or String.downcase(line) == "```json"
+  end
+
+  defp closing_fence_index(lines, start_index) do
+    lines
+    |> Enum.drop(start_index)
+    |> Enum.find_index(&(String.trim(&1) == "```"))
+    |> case do
+      nil -> nil
+      offset -> start_index + offset
     end
   end
 

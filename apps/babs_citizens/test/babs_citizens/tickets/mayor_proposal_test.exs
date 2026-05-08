@@ -33,6 +33,25 @@ defmodule Babs.Citizens.Tickets.MayorProposalTest do
            ] = proposal["children"]
   end
 
+  test "parses whole-body JSON when child body contains a Markdown code fence" do
+    payload =
+      valid_payload()
+      |> put_in(["children", Access.at(0), "body"], """
+      Use this example:
+
+      ```json
+      {"ok": true}
+      ```
+      """)
+
+    assert {:ok, %{"children" => [%{"body" => body}]}} =
+             MayorProposal.parse(Jason.encode!(payload),
+               allowed_roles: ["developer", "inspector"]
+             )
+
+    assert body =~ "```json"
+  end
+
   test "parses fenced JSON proposals and defaults human inspection children" do
     payload =
       valid_payload()
@@ -52,6 +71,31 @@ defmodule Babs.Citizens.Tickets.MayorProposalTest do
 
     assert [%{"type" => "assignment", "priority" => "normal", "inspector" => "user"}] =
              proposal["children"]
+  end
+
+  test "parses fenced JSON when child body contains a Markdown code fence" do
+    payload =
+      valid_payload()
+      |> put_in(["children", Access.at(0), "body"], """
+      Return a fenced payload:
+
+      ```json
+      {"ok": true}
+      ```
+      """)
+
+    text = """
+    Here is the proposal:
+
+    ```json
+    #{Jason.encode!(payload)}
+    ```
+    """
+
+    assert {:ok, %{"children" => [%{"body" => body}]}} =
+             MayorProposal.parse(text, allowed_roles: ["developer", "inspector"])
+
+    assert body =~ "```json"
   end
 
   test "accepts explicit compact inspector values that match derived inspection mode" do
