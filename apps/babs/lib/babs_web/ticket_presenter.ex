@@ -3,8 +3,11 @@ defmodule BabsWeb.TicketPresenter do
   Presentation helpers for Ticket LiveViews.
   """
 
+  require Logger
+
   alias Babs.Citizens.Tickets.InspectionPolicy
   alias Babs.Citizens.Tickets.Error
+  alias Babs.Citizens.Tickets.MayorProposalReview
 
   @groups [
     {"billboard", "Billboard"},
@@ -97,6 +100,45 @@ defmodule BabsWeb.TicketPresenter do
     ]
   end
 
+  def proposal_panel(ticket, history) when is_list(history) do
+    case MayorProposalReview.from_history(ticket, history) do
+      :missing ->
+        %{kind: :hidden}
+
+      {:ok, %{status: :awaiting, policy: policy}} ->
+        %{
+          kind: :awaiting,
+          status: :awaiting,
+          actionable?: false,
+          mayor: policy["mayor"] || "default",
+          rules_refs: list(policy["rules_refs"])
+        }
+
+      {:ok, state} ->
+        proposal_panel_from_state(state)
+
+      {:error, reason} ->
+        %{
+          kind: :invalid,
+          status: :invalid,
+          actionable?: false,
+          error: Error.message(reason)
+        }
+    end
+  rescue
+    error ->
+      Logger.warning("Babs ticket proposal panel unavailable: #{Exception.message(error)}")
+
+      %{
+        kind: :invalid,
+        status: :invalid,
+        actionable?: false,
+        error: Error.message({:mayor_proposal_review, {:invalid_proposal, error}})
+      }
+  end
+
+  def proposal_panel(_ticket, _history), do: %{kind: :hidden}
+
   defp inspection_unavailable do
     %{
       kind: :unavailable,
@@ -110,6 +152,68 @@ defmodule BabsWeb.TicketPresenter do
       result: nil,
       inspectors: []
     }
+  end
+
+  defp proposal_panel_from_state(%{proposal: proposal} = state) do
+    children = proposal_children(proposal)
+
+    %{
+      kind: :proposal,
+      status: state.status,
+      actionable?: state.status == :pending,
+      proposal_id: state.proposal_id,
+      summary: proposal["summary"],
+      rules_refs: list(proposal["rules_refs_used"]),
+      roles: proposal_roles(children),
+      risks: list(proposal["risks"]),
+      questions: list(proposal["questions"]),
+      children: children,
+      feedback: state.feedback,
+      decision: state.decision
+    }
+  end
+
+  defp proposal_children(proposal) do
+    proposal
+    |> Map.get("children", [])
+    |> Enum.with_index()
+    |> Enum.map(fn {child, index} ->
+      %{
+        index: index,
+        number: index + 1,
+        title: child["title"],
+        body: child["body"],
+        type: child["type"] || "assignment",
+        priority: child["priority"] || "normal",
+        assignee_role: child["assignee_role"] || "any",
+        inspector: child["inspector"] || "user",
+        inspection_mode:
+          metadata_value(metadata_value(child["metadata"], "inspection"), "mode") || "human"
+      }
+    end)
+  end
+
+  defp metadata_value(map, key) when is_map(map) do
+    atom_key =
+      try do
+        String.to_existing_atom(key)
+      rescue
+        ArgumentError -> nil
+      end
+
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> atom_key && Map.get(map, atom_key)
+    end
+  end
+
+  defp metadata_value(_value, _key), do: nil
+
+  defp proposal_roles(children) do
+    children
+    |> Enum.map(& &1.assignee_role)
+    |> Enum.reject(&(&1 in [nil, "", "any"]))
+    |> Enum.uniq()
   end
 
   defp inspection_kind(%{"mode" => "auto", "strategy" => "council"}), do: :auto_council

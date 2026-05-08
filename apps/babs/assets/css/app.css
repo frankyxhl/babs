@@ -453,6 +453,165 @@
     gap: 14px;
   }
 
+  .ticket-main-stack {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    min-width: 0;
+  }
+
+  .proposal-panel {
+    display: grid;
+    gap: 14px;
+  }
+
+  .proposal-head,
+  .proposal-child-head,
+  .proposal-child-actions,
+  .proposal-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .proposal-head h2 {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 17px;
+  }
+
+  .proposal-head p,
+  .proposal-child-head p,
+  .proposal-feedback {
+    margin: 4px 0 0;
+    color: var(--ks-muted);
+  }
+
+  .proposal-awaiting,
+  .proposal-invalid {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border: 1px solid var(--ks-line);
+    border-radius: 8px;
+    background: var(--ks-panel-2);
+    padding: 12px;
+  }
+
+  .proposal-invalid {
+    border-color: var(--ks-danger);
+  }
+
+  .proposal-summary {
+    margin: 0;
+    font-weight: 700;
+  }
+
+  .proposal-facts,
+  .proposal-lists,
+  .proposal-edit-grid {
+    display: grid;
+    gap: 8px;
+  }
+
+  .proposal-facts {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+
+  .proposal-facts div {
+    display: grid;
+    gap: 2px;
+  }
+
+  .proposal-facts dt,
+  .proposal-lists h3 {
+    color: var(--ks-muted);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .proposal-facts dd,
+  .proposal-lists ul {
+    margin: 0;
+  }
+
+  .proposal-tree {
+    display: grid;
+    gap: 8px;
+    border: 1px solid var(--ks-line);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--ks-accent-soft);
+  }
+
+  .proposal-tree-root,
+  .proposal-tree li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .proposal-tree ol,
+  .proposal-child-list,
+  .proposal-inline-list,
+  .proposal-lists ul {
+    list-style: none;
+    padding: 0;
+  }
+
+  .proposal-tree ol {
+    display: grid;
+    gap: 6px;
+    margin: 0 0 0 24px;
+  }
+
+  .proposal-child-list {
+    display: grid;
+    gap: 10px;
+    margin: 0;
+  }
+
+  .proposal-child {
+    display: grid;
+    gap: 10px;
+    border: 1px solid var(--ks-line);
+    border-radius: 8px;
+    background: var(--ks-panel-2);
+    padding: 10px;
+  }
+
+  .proposal-child-badges {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .proposal-edit-form {
+    display: grid;
+    gap: 9px;
+  }
+
+  .proposal-edit-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .proposal-actions {
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .proposal-reject-form {
+    display: grid;
+    gap: 8px;
+    flex: 1 1 280px;
+  }
+
   .message-list {
     display: grid;
     gap: 10px;

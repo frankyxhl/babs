@@ -77,6 +77,20 @@ defmodule BabsWeb.Icon do
       "M12 6v6l4 2"
     ]
 
+  defp paths("edit"),
+    do: [
+      "M12 20h9",
+      "M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"
+    ]
+
+  defp paths("git-branch"),
+    do: [
+      "M6 3v12",
+      "M18 9a3 3 0 1 0-3-3",
+      "M6 21a3 3 0 1 0 0-6",
+      "M18 9a9 9 0 0 1-9 9"
+    ]
+
   defp paths("refresh"),
     do: [
       "M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16",
@@ -113,6 +127,15 @@ defmodule BabsWeb.Icon do
       "m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",
       "M12 9v4",
       "M12 17h.01"
+    ]
+
+  defp paths("trash"),
+    do: [
+      "M3 6h18",
+      "M8 6V4h8v2",
+      "M19 6l-1 14H6L5 6",
+      "M10 11v6",
+      "M14 11v6"
     ]
 
   defp paths("users"),

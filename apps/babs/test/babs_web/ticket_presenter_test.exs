@@ -105,10 +105,81 @@ defmodule BabsWeb.TicketPresenterTest do
     assert panel.label == "Inspection data unavailable"
   end
 
+  test "proposal_panel renders hidden awaiting invalid and pending states" do
+    assert %{kind: :hidden} = TicketPresenter.proposal_panel(ticket(), [])
+
+    awaiting =
+      TicketPresenter.proposal_panel(
+        ticket(type: "mission", metadata: %{"mayor" => mayor_policy()}),
+        []
+      )
+
+    assert awaiting.kind == :awaiting
+    assert awaiting.status == :awaiting
+    assert awaiting.mayor == "flora"
+    assert awaiting.rules_refs == ["BAB-1503", "COR-1616"]
+
+    invalid =
+      TicketPresenter.proposal_panel(
+        ticket(type: "mission", metadata: %{"mayor" => mayor_policy()}),
+        [
+          %{
+            "ts" => "2026-05-08T12:10:00Z",
+            "event" => "mayor_proposal_received",
+            "by" => "flora",
+            "ticket_id" => "T-2026-05-08-001",
+            "proposal_id" => "prop_bad"
+          }
+        ]
+      )
+
+    assert invalid.kind == :invalid
+    assert invalid.error =~ "Invalid Mayor proposal"
+
+    pending =
+      TicketPresenter.proposal_panel(
+        ticket(type: "mission", metadata: %{"mayor" => mayor_policy()}),
+        [proposal_received(proposal(["Build API", "Build UI"]))]
+      )
+
+    assert pending.kind == :proposal
+    assert pending.status == :pending
+    assert pending.proposal_id == "prop_demo"
+    assert pending.summary == "Split the work."
+    assert pending.roles == ["developer"]
+    assert pending.risks == ["Keep slices small."]
+    assert pending.questions == []
+    assert [%{index: 0, title: "Build API"}, %{index: 1, title: "Build UI"}] = pending.children
+  end
+
+  test "proposal_panel renders decided status and feedback" do
+    proposal = proposal(["Build API"])
+    base = [proposal_received(proposal)]
+
+    approved =
+      ticket(type: "mission", metadata: %{"mayor" => mayor_policy()})
+      |> TicketPresenter.proposal_panel(
+        base ++ [proposal_decision("mayor_proposal_approved", proposal)]
+      )
+
+    assert approved.status == :approved
+    assert approved.actionable? == false
+
+    rejected =
+      ticket(type: "mission", metadata: %{"mayor" => mayor_policy()})
+      |> TicketPresenter.proposal_panel(
+        base ++ [proposal_decision("mayor_proposal_rejected", proposal, "Needs a smaller slice.")]
+      )
+
+    assert rejected.status == :rejected
+    assert rejected.feedback == "Needs a smaller slice."
+    assert rejected.actionable? == false
+  end
+
   defp ticket(opts \\ []) do
     %Ticket{
       id: "T-2026-05-08-001",
-      type: "assignment",
+      type: Keyword.get(opts, :type, "assignment"),
       state: Keyword.get(opts, :state, "pending_approval"),
       assigner: "user",
       assignees: ["clare"],
@@ -172,5 +243,62 @@ defmodule BabsWeb.TicketPresenterTest do
       "result" => result,
       "quorum" => "all_pass"
     }
+  end
+
+  defp mayor_policy do
+    %{
+      "mode" => "propose",
+      "mayor" => "flora",
+      "rules_refs" => ["BAB-1503", "COR-1616"],
+      "max_children" => 5,
+      "allowed_roles" => ["developer", "inspector"],
+      "require_human_approval" => true
+    }
+  end
+
+  defp proposal(titles) do
+    %{
+      "proposal_id" => "prop_demo",
+      "root_ticket_id" => "T-2026-05-08-001",
+      "summary" => "Split the work.",
+      "rules_refs_used" => ["BAB-1503"],
+      "children" =>
+        Enum.map(titles, fn title ->
+          %{
+            "title" => title,
+            "body" => "Complete #{title}.",
+            "type" => "assignment",
+            "priority" => "normal",
+            "assignee_role" => "developer",
+            "inspector" => "user",
+            "metadata" => %{}
+          }
+        end),
+      "risks" => ["Keep slices small."],
+      "questions" => []
+    }
+  end
+
+  defp proposal_received(proposal) do
+    %{
+      "ts" => "2026-05-08T12:10:00Z",
+      "event" => "mayor_proposal_received",
+      "by" => "flora",
+      "ticket_id" => "T-2026-05-08-001",
+      "proposal_id" => proposal["proposal_id"],
+      "proposal" => proposal
+    }
+  end
+
+  defp proposal_decision(event, proposal, feedback \\ nil) do
+    %{
+      "ts" => "2026-05-08T12:11:00Z",
+      "event" => event,
+      "by" => "user",
+      "ticket_id" => "T-2026-05-08-001",
+      "proposal_id" => proposal["proposal_id"],
+      "proposal" => proposal
+    }
+    |> Map.merge(if feedback, do: %{"feedback" => feedback}, else: %{})
   end
 end

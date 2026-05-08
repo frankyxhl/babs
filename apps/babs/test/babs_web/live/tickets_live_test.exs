@@ -750,10 +750,138 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-testid="ticket-reject-form")
   end
 
+  test "ticket detail renders mayor awaiting state for opted-in missions", %{root: root} do
+    ticket =
+      create_ticket!(root, "Mayor mission", "Ask a Mayor to split this.",
+        type: "mission",
+        metadata: mayor_metadata()
+      )
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-proposal-panel")
+    assert html =~ ~s(data-testid="ticket-proposal-awaiting")
+    assert html =~ "Awaiting Mayor proposal"
+    assert html =~ "flora"
+    assert html =~ "BAB-1503"
+    refute html =~ ~s(data-testid="ticket-proposal-approve")
+  end
+
+  test "ticket detail edits removes and approves a mayor proposal without child files", %{
+    root: root
+  } do
+    ticket =
+      create_ticket!(root, "Mayor proposal mission", "Review the Mayor proposal.",
+        type: "mission",
+        metadata: mayor_metadata()
+      )
+
+    proposal = proposal(ticket.id, "prop_ui", ["Build backend", "Build UI"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-proposal-panel")
+    assert html =~ ~s(data-testid="ticket-proposal-tree")
+    assert html =~ ~s(data-testid="ticket-proposal-child-0")
+    assert html =~ "Build backend"
+    assert html =~ "Build UI"
+    assert html =~ ~s(data-icon="git-branch")
+    assert html =~ ~s(data-icon="edit")
+    assert html =~ ~s(data-icon="trash")
+    assert html =~ ~s(data-icon="check")
+
+    view
+    |> form(~s(form[data-testid="ticket-proposal-edit-0"]),
+      child: %{
+        title: "Build API",
+        body: "Implement the API.",
+        assignee_role: "developer",
+        priority: "high",
+        inspector: "auto"
+      }
+    )
+    |> render_submit()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Updated proposed child 1"
+    assert html =~ "Build API"
+    assert html =~ "high"
+    assert html =~ "auto"
+
+    view
+    |> element(~s(button[data-testid="ticket-proposal-remove-1"]))
+    |> render_click()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Removed proposed child 2"
+    refute html =~ "Build UI"
+
+    view
+    |> element(~s(button[data-testid="ticket-proposal-approve"]))
+    |> render_click()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Approved proposal"
+    assert html =~ "approved"
+    refute html =~ ~s(data-testid="ticket-proposal-edit-0")
+    refute html =~ ~s(data-testid="ticket-proposal-remove-0")
+
+    assert [markdown_file] = Path.wildcard(Path.join(root, "*.md"))
+    assert Path.basename(markdown_file) == "#{ticket.id}.md"
+  end
+
+  test "ticket detail shows proposal validation errors and rejects proposals", %{root: root} do
+    ticket =
+      create_ticket!(root, "Mayor reject mission", "Reject or edit the proposal.",
+        type: "mission",
+        metadata: mayor_metadata()
+      )
+
+    proposal = proposal(ticket.id, "prop_reject", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    {:ok, view, _html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    view
+    |> form(~s(form[data-testid="ticket-proposal-edit-0"]),
+      child: %{
+        title: " ",
+        body: "Still body.",
+        assignee_role: "developer",
+        priority: "normal",
+        inspector: "user"
+      }
+    )
+    |> render_submit()
+
+    assert render_async(view, 1_000) =~ "Invalid proposal edit"
+
+    view
+    |> form(~s(form[data-testid="ticket-proposal-reject-form"]), %{
+      feedback: "Needs a smaller slice."
+    })
+    |> render_submit()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Rejected proposal"
+    assert html =~ "Needs a smaller slice."
+    assert html =~ "rejected"
+    refute html =~ ~s(data-testid="ticket-proposal-approve")
+  end
+
   defp create_ticket!(root, title, body, opts \\ []) do
     attrs =
       opts
-      |> Keyword.take([:state, :assignees, :priority, :assignee_role, :metadata])
+      |> Keyword.take([:type, :state, :assignees, :priority, :assignee_role, :metadata])
       |> Enum.into(%{title: title, body: body})
 
     api_opts =
@@ -801,5 +929,52 @@ defmodule BabsWeb.TicketsLiveTest do
         Application.delete_env(:babs_citizens, :root)
       end
     end
+  end
+
+  defp mayor_metadata do
+    %{
+      "mayor" => %{
+        "mode" => "propose",
+        "mayor" => "flora",
+        "rules_refs" => ["BAB-1503", "COR-1616"],
+        "max_children" => 5,
+        "allowed_roles" => ["developer", "inspector"],
+        "require_human_approval" => true
+      }
+    }
+  end
+
+  defp proposal(ticket_id, proposal_id, titles) do
+    %{
+      "proposal_id" => proposal_id,
+      "root_ticket_id" => ticket_id,
+      "summary" => "Split the work.",
+      "rules_refs_used" => ["BAB-1503"],
+      "children" =>
+        Enum.map(titles, fn title ->
+          %{
+            "title" => title,
+            "body" => "Complete #{title}.",
+            "type" => "assignment",
+            "priority" => "normal",
+            "assignee_role" => "developer",
+            "inspector" => "user",
+            "metadata" => %{}
+          }
+        end),
+      "risks" => ["Keep slices small."],
+      "questions" => []
+    }
+  end
+
+  defp proposal_received(ticket_id, proposal) do
+    %{
+      "ts" => "2026-05-08T00:01:00Z",
+      "event" => "mayor_proposal_received",
+      "by" => "flora",
+      "ticket_id" => ticket_id,
+      "proposal_id" => proposal["proposal_id"],
+      "proposal" => proposal
+    }
   end
 end

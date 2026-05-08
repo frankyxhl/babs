@@ -63,6 +63,32 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:invalid_comment_author, value}),
     do: "Invalid Ticket comment author: #{inspect(value)}"
 
+  def message({:mayor_proposal_review, :no_proposal}), do: "No Mayor proposal is available"
+
+  def message({:mayor_proposal_review, {:invalid_policy, reason}}),
+    do: "Invalid Mayor policy: #{inspect(reason)}"
+
+  def message({:mayor_proposal_review, {:invalid_proposal, reason}}),
+    do: "Invalid Mayor proposal: #{inspect(reason)}"
+
+  def message({:mayor_proposal_review, {:stale_proposal_id, expected, actual}}),
+    do: "Mayor proposal changed: expected #{expected}, got #{actual}"
+
+  def message({:mayor_proposal_review, {:invalid_child_index, index}}),
+    do: "Invalid proposal child index: #{inspect(index)}"
+
+  def message({:mayor_proposal_review, {:invalid_edit, reason}}),
+    do: "Invalid proposal edit: #{inspect(reason)}"
+
+  def message({:mayor_proposal_review, :empty_feedback}),
+    do: "Proposal rejection feedback is required"
+
+  def message({:mayor_proposal_review, {:already_decided, status}}),
+    do: "Mayor proposal is already #{status}"
+
+  def message({:mayor_proposal_review, {:terminal_ticket, id, state}}),
+    do: "Ticket #{id} is #{state} and cannot review Mayor proposals"
+
   def message({:terminal_ticket, id, state}),
     do: "Ticket #{id} is #{state} and cannot be commented on"
 

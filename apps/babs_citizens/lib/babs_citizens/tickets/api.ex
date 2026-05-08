@@ -130,6 +130,64 @@ defmodule Babs.Citizens.Tickets.Api do
     end
   end
 
+  @spec revise_mayor_proposal_child(
+          String.t(),
+          String.t(),
+          non_neg_integer(),
+          map() | keyword(),
+          keyword()
+        ) ::
+          {:ok, map()} | {:error, term()}
+  def revise_mayor_proposal_child(id, proposal_id, child_index, attrs, opts \\ [])
+      when is_binary(id) and is_binary(proposal_id) and is_integer(child_index) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.revise_mayor_proposal_child(pid, id, proposal_id, child_index, attrs, opts)
+    end
+  end
+
+  @spec remove_mayor_proposal_child(String.t(), String.t(), non_neg_integer(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def remove_mayor_proposal_child(id, proposal_id, child_index, opts \\ [])
+      when is_binary(id) and is_binary(proposal_id) and is_integer(child_index) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.remove_mayor_proposal_child(pid, id, proposal_id, child_index, opts)
+    end
+  end
+
+  @spec approve_mayor_proposal(String.t(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def approve_mayor_proposal(id, proposal_id, opts \\ [])
+      when is_binary(id) and is_binary(proposal_id) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.approve_mayor_proposal(pid, id, proposal_id, opts)
+    end
+  end
+
+  @spec reject_mayor_proposal(String.t(), String.t(), String.t(), keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def reject_mayor_proposal(id, proposal_id, feedback, opts \\ [])
+      when is_binary(id) and is_binary(proposal_id) and is_binary(feedback) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.reject_mayor_proposal(pid, id, proposal_id, feedback, opts)
+    end
+  end
+
   @spec request_inspection(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def request_inspection(id, opts \\ []) when is_binary(id) do
     with :ok <- TicketId.validate(id),

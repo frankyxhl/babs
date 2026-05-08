@@ -19,6 +19,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.InspectionEvents
   alias Babs.Citizens.Tickets.InspectionQuorum
   alias Babs.Citizens.Tickets.InspectorSelector
+  alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.RoleRouter
@@ -74,6 +75,30 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   def append_history_events(pid, id, events, opts \\ []) do
     GenServer.call(pid, {:append_history_events, id, events, opts}, 30_000)
+  end
+
+  def revise_mayor_proposal_child(pid, id, proposal_id, child_index, attrs, opts \\ []) do
+    GenServer.call(
+      pid,
+      {:revise_mayor_proposal_child, id, proposal_id, child_index, attrs, opts},
+      30_000
+    )
+  end
+
+  def remove_mayor_proposal_child(pid, id, proposal_id, child_index, opts \\ []) do
+    GenServer.call(
+      pid,
+      {:remove_mayor_proposal_child, id, proposal_id, child_index, opts},
+      30_000
+    )
+  end
+
+  def approve_mayor_proposal(pid, id, proposal_id, opts \\ []) do
+    GenServer.call(pid, {:approve_mayor_proposal, id, proposal_id, opts}, 30_000)
+  end
+
+  def reject_mayor_proposal(pid, id, proposal_id, feedback, opts \\ []) do
+    GenServer.call(pid, {:reject_mayor_proposal, id, proposal_id, feedback, opts}, 30_000)
   end
 
   def request_inspection(pid, id, opts \\ []) do
@@ -266,6 +291,65 @@ defmodule Babs.Citizens.Tickets.Writer do
            :ok <- append_events(state.root, id, events) do
         :ok
       end
+
+    {:reply, result, state}
+  end
+
+  def handle_call(
+        {:revise_mayor_proposal_child, id, proposal_id, child_index, attrs, opts},
+        _from,
+        state
+      ) do
+    state = reset_idle(state, opts)
+
+    result =
+      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+        MayorProposalReview.revise_child(
+          ticket,
+          history,
+          proposal_id,
+          child_index,
+          attrs,
+          event_opts
+        )
+      end)
+
+    {:reply, result, state}
+  end
+
+  def handle_call(
+        {:remove_mayor_proposal_child, id, proposal_id, child_index, opts},
+        _from,
+        state
+      ) do
+    state = reset_idle(state, opts)
+
+    result =
+      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+        MayorProposalReview.remove_child(ticket, history, proposal_id, child_index, event_opts)
+      end)
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:approve_mayor_proposal, id, proposal_id, opts}, _from, state) do
+    state = reset_idle(state, opts)
+
+    result =
+      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+        MayorProposalReview.approve(ticket, history, proposal_id, event_opts)
+      end)
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:reject_mayor_proposal, id, proposal_id, feedback, opts}, _from, state) do
+    state = reset_idle(state, opts)
+
+    result =
+      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+        MayorProposalReview.reject(ticket, history, proposal_id, feedback, event_opts)
+      end)
 
     {:reply, result, state}
   end
@@ -1339,6 +1423,17 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, reason} -> {:halt, {:error, reason}}
       end
     end)
+  end
+
+  defp proposal_review_action(root, id, opts, fun) do
+    with {:ok, ticket} <- Store.read_ticket(root, id, opts),
+         {:ok, history} <- History.read(root, id),
+         event_opts <- [now: now(opts), by: by(opts)],
+         {:ok, event} <- fun.(ticket, history, event_opts),
+         :ok <- validate_events(id, [event]),
+         :ok <- append_events(root, id, [event]) do
+      {:ok, %{event: event}}
+    end
   end
 
   defp request_inspection_once(root, id, opts) do
