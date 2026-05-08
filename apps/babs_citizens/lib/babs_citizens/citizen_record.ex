@@ -56,6 +56,19 @@ defmodule Babs.Citizens.CitizenRecord do
 
   def generate_id, do: "BAB-CIT-" <> Ecto.UUID.generate()
 
+  def role_names(%__MODULE__{} = record) do
+    case Roles.normalize(record.roles || []) do
+      {:ok, roles} when roles != [] ->
+        Enum.map(roles, & &1["name"])
+
+      _other ->
+        case Roles.normalize(record.role) do
+          {:ok, roles} -> Enum.map(roles, & &1["name"])
+          {:error, _reason} -> []
+        end
+    end
+  end
+
   def changeset(record, attrs) do
     record
     |> cast(attrs, @fields)

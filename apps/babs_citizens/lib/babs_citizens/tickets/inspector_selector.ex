@@ -3,7 +3,7 @@ defmodule Babs.Citizens.Tickets.InspectorSelector do
   Selects eligible Inspector Citizens for Phase 15 automatic inspection.
   """
 
-  alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Roles}
+  alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline}
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.InspectionPolicy
   alias Babs.Citizens.Tickets.Ticket
@@ -102,14 +102,7 @@ defmodule Babs.Citizens.Tickets.InspectorSelector do
   end
 
   defp record_role_names(%CitizenRecord{} = record) do
-    record
-    |> Catalog.to_config()
-    |> Map.get(:roles, [])
-    |> Roles.normalize()
-    |> case do
-      {:ok, roles} -> Enum.map(roles, & &1["name"])
-      {:error, _reason} -> []
-    end
+    CitizenRecord.role_names(record)
   end
 
   defp latest_inspection_requests(opts) do
