@@ -165,7 +165,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
       |> Map.put(:status, status)
       |> Map.put(:error, redacted_error(reason))
     else
-      unreachable_snapshot(peer, reason, now)
+      unreachable_snapshot(peer, reason)
     end
   end
 
@@ -175,7 +175,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
 
   defp previous_peer_id(_previous), do: nil
 
-  defp unreachable_snapshot(peer, reason, now) do
+  defp unreachable_snapshot(peer, reason) do
     %{
       peer_id: peer.id,
       peer_name: peer.name,
@@ -183,7 +183,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
       status: :unreachable,
       read_only?: true,
       capabilities: peer.capabilities,
-      fetched_at: now,
+      fetched_at: nil,
       node: %{"id" => peer.id, "name" => peer.name},
       citizens: [],
       tickets: [],

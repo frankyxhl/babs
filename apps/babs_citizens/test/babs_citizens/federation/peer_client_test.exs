@@ -144,6 +144,7 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
 
     assert unreachable.status == :unreachable
     assert unreachable.peer_id == "alpha"
+    assert unreachable.fetched_at == nil
     assert unreachable.error =~ "econnrefused"
 
     bad_json = fn _url, _opts -> {:ok, %{status: 200, body: "not json"}} end
@@ -152,6 +153,7 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
              PeerClient.fetch_first_peer(toml: peer_toml(), http_client: bad_json, now: @now)
 
     assert malformed.status == :unreachable
+    assert malformed.fetched_at == nil
   end
 
   test "missing peer response keys return explicit status without hiding remote state as empty" do
@@ -172,7 +174,31 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
 
     assert malformed.status == :unreachable
     assert malformed.citizens == []
+    assert malformed.fetched_at == nil
     assert malformed.error =~ "invalid_citizens_response"
+  end
+
+  test "repeated failed fetches never become fresh without a successful snapshot" do
+    http_error = fn _url, _opts -> {:error, :timeout} end
+
+    assert {:ok, first_failure} =
+             PeerClient.fetch_first_peer(toml: peer_toml(), http_client: http_error, now: @now)
+
+    retry_now = DateTime.add(@now, 5, :second)
+
+    assert {:ok, retry_failure} =
+             PeerClient.fetch_first_peer(
+               toml: peer_toml(),
+               http_client: http_error,
+               now: retry_now,
+               previous_snapshot: first_failure
+             )
+
+    assert first_failure.status == :unreachable
+    assert first_failure.fetched_at == nil
+    assert retry_failure.status == :unreachable
+    assert retry_failure.fetched_at == nil
+    assert retry_failure.error =~ "timeout"
   end
 
   test "failed fetch can fall back to a stale previous snapshot" do

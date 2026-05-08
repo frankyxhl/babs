@@ -348,7 +348,7 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - `mise exec -- mix format --check-formatted` PASS.
   - `mise exec -- mix compile --warnings-as-errors` PASS.
   - `mise exec -- mix test` PASS: 614 tests, 0 failures.
-  - `mise exec -- mix test --max-cases 1` PASS after Codex P2 fixes: 618 tests,
+  - `mise exec -- mix test --max-cases 1` PASS after Codex P2 fixes: 619 tests,
     0 failures.
   - `npm run test:js` PASS: 15 tests, 0 failures.
   - `BABS_BDD_SCENARIO='federation events feed' npm run test:bdd` PASS.
@@ -393,6 +393,13 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     LiveView process for slow/unreachable peers. Fixed by moving peer fetches to
     LiveView `start_async` and assigning results only after the async task
     completes.
+  - GitHub Codex R5 on PR #57 reported the same LiveView blocking issue against
+    the old `a964ade` commit; inspection confirmed the current head already used
+    `start_async`.
+  - GitHub Codex R6 on PR #57 found P2: first-failure fallback snapshots recorded
+    `fetched_at`, so a repeated failed read could briefly display as `:fresh`.
+    Fixed by leaving `fetched_at` unset until a successful peer read exists, with
+    a regression test for repeated failures.
 
 ---
 
@@ -404,3 +411,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-09 | Fold Trinity R1 plan review blockers and advisories | Codex |
 | 2026-05-09 | Mark Approved after Trinity R2 PASS/PASS and fold advisories | Codex |
 | 2026-05-09 | Record implementation scope and validation results | Codex |
+| 2026-05-09 | Fold GitHub Codex R6 peer freshness fallback fix | Codex |
