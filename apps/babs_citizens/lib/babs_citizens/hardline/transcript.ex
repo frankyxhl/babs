@@ -80,6 +80,24 @@ defmodule Babs.Citizens.Hardline.Transcript do
   """
   @spec replay_output(Path.t(), keyword()) :: {:ok, binary()} | {:error, term()}
   def replay_output(cwd, opts \\ []) when is_binary(cwd) and is_list(opts) do
+    with {:ok, info} <- replay_output_info(cwd, opts) do
+      {:ok, info.output}
+    end
+  end
+
+  @doc """
+  Replay output bytes and return metadata for read-only API consumers.
+  """
+  @spec replay_output_info(Path.t(), keyword()) ::
+          {:ok,
+           %{
+             output: binary(),
+             truncated: boolean(),
+             lines: pos_integer(),
+             returned_lines: non_neg_integer()
+           }}
+          | {:error, term()}
+  def replay_output_info(cwd, opts \\ []) when is_binary(cwd) and is_list(opts) do
     line_limit = Keyword.get(opts, :lines, 200)
     slug = Keyword.get(opts, :slug)
     tail_bytes = Keyword.get(opts, :tail_bytes, @default_replay_tail_bytes)
@@ -87,15 +105,22 @@ defmodule Babs.Citizens.Hardline.Transcript do
     with {:ok, line_limit} <- positive_line_limit(line_limit),
          {:ok, slug} <- valid_slug_filter(slug),
          {:ok, tail_bytes} <- positive_tail_bytes(tail_bytes),
-         {:ok, contents} <- read_transcript_tail(path(cwd), tail_bytes) do
-      output =
+         {:ok, contents, tail_truncated?} <- read_transcript_tail(path(cwd), tail_bytes) do
+      raw_output =
         contents
         |> String.split("\n", trim: true)
         |> Enum.flat_map(&decode_output_payload(&1, slug))
         |> IO.iodata_to_binary()
-        |> newest_lines(line_limit)
 
-      {:ok, output}
+      {output, line_truncated?, returned_lines} = newest_lines_info(raw_output, line_limit)
+
+      {:ok,
+       %{
+         output: output,
+         truncated: tail_truncated? or line_truncated?,
+         lines: line_limit,
+         returned_lines: returned_lines
+       }}
     end
   end
 
@@ -133,7 +158,9 @@ defmodule Babs.Citizens.Hardline.Transcript do
       {:ok, stat} ->
         with {:ok, io} <- File.open(path, [:read, :binary]) do
           try do
-            read_tail(io, stat.size, tail_bytes)
+            with {:ok, contents} <- read_tail(io, stat.size, tail_bytes) do
+              {:ok, contents, stat.size > tail_bytes}
+            end
           after
             File.close(io)
           end
@@ -142,7 +169,7 @@ defmodule Babs.Citizens.Hardline.Transcript do
         end
 
       {:error, :enoent} ->
-        {:ok, ""}
+        {:ok, "", false}
 
       {:error, reason} ->
         {:error, {:file_error, path, reason}}
@@ -190,12 +217,21 @@ defmodule Babs.Citizens.Hardline.Transcript do
   defp slug_matches?(%{"slug" => slug}, slug), do: true
   defp slug_matches?(_record, _slug), do: false
 
-  defp newest_lines(output, line_limit) do
-    output
-    |> :binary.split("\n", [:global])
-    |> trim_trailing_empty_line()
-    |> Enum.take(-line_limit)
-    |> join_lines(String.ends_with?(output, "\n"))
+  defp newest_lines_info(output, line_limit) do
+    trailing_newline? = String.ends_with?(output, "\n")
+
+    parts =
+      output
+      |> :binary.split("\n", [:global])
+      |> trim_trailing_empty_line()
+
+    selected = Enum.take(parts, -line_limit)
+
+    {
+      join_lines(selected, trailing_newline?),
+      length(parts) > line_limit,
+      length(selected)
+    }
   end
 
   defp trim_trailing_empty_line(parts) do

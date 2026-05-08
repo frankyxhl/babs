@@ -445,6 +445,35 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     blockers. Folded non-blocking advisories for provider runtime subkeys, roles
     projection as names, transcript `returned_lines`, explicit error envelope
     behavior, config-read extension point, and Ticket-root read errors.
+- Implementation:
+  - Added `Babs.Citizens.Federation.Config` and `Babs.Citizens.Federation` for
+    local node identity, sorted peers, normalized capability expansion, and
+    per-Citizen peer overrides.
+  - Added `/api/v1` JSON routing and read-only endpoints for node, Citizens,
+    bounded Citizen transcripts, Tickets list, and Ticket detail/history.
+  - Added explicit allowlist projections for Citizen and Ticket JSON responses;
+    raw `cwd`, raw Ticket paths, `last_error`, `target_label`, and invalid-file
+    paths are not serialized.
+  - Added transcript replay metadata via `replay_output_info/2` while preserving
+    the existing `replay_output/2` output-only API.
+  - Added `BABS_FEDERATION_CONFIG` runtime config support.
+- Validation before implementation review:
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/federation_config_test.exs apps/babs/test/babs_web/controllers/api_v1_read_controller_test.exs --seed 1`
+    passed: 14 tests, 0 failures.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test` passed: 600 tests, 0 failures.
+  - `npm run test:js` passed: 15 tests, 0 failures.
+  - `af validate --root .` passed: 173 documents, 0 issues.
+  - `git diff --check` passed.
+  - Privacy grep over the diff found no private IPs, local user paths, or
+    credential-like strings.
+- Implementation review:
+  - Trinity fast-review R1 on 2026-05-09: GLM PASS and DeepSeek PASS with no
+    blockers. Folded DeepSeek's advisory about preserving falsey
+    `provider_runtime` subkey values in the safe projection helper. Deferred
+    broader API auth/CORS/cache topics to later Phase 17 slices; retained the
+    existing manual controller dispatch style used elsewhere in BabsWeb.
 
 ---
 
@@ -457,3 +486,5 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-09 | Fold Trinity R2 plan review blockers and advisories | Codex |
 | 2026-05-09 | Fold Trinity R3 plan review blockers and advisories | Codex |
 | 2026-05-09 | Mark Approved after Trinity R4 PASS/PASS and fold non-blocking advisories | Codex |
+| 2026-05-09 | Implement Phase 17.1 read API and record validation results | Codex |
+| 2026-05-09 | Record Trinity implementation review PASS/PASS and folded advisory | Codex |

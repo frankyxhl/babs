@@ -13,6 +13,10 @@ defmodule BabsWeb.Router do
     plug(:put_root_layout, html: {BabsWeb.Layouts, :root})
   end
 
+  pipeline :api do
+    plug(:accepts, ["json"])
+  end
+
   scope "/", BabsWeb do
     pipe_through(:browser)
 
@@ -27,5 +31,16 @@ defmodule BabsWeb.Router do
     get("/tickets", TerminalController, :tickets)
     get("/tickets/new", TerminalController, :new_ticket)
     get("/tickets/:id", TerminalController, :ticket)
+  end
+
+  scope "/api/v1", BabsWeb.Api.V1 do
+    pipe_through(:api)
+
+    get("/node", ReadController, :node)
+    get("/citizens", ReadController, :citizens)
+    get("/citizens/:slug/transcript", ReadController, :citizen_transcript)
+    get("/citizens/:slug", ReadController, :citizen)
+    get("/tickets", ReadController, :tickets)
+    get("/tickets/:id", ReadController, :ticket)
   end
 end
