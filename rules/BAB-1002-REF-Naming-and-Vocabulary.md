@@ -1,8 +1,8 @@
 # REF-1002: Naming & Vocabulary
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-06
-**Last reviewed:** 2026-05-06
+**Last updated:** 2026-05-08
+**Last reviewed:** 2026-05-08
 **Status:** Active
 
 ---
@@ -67,7 +67,13 @@ A special Citizen with `is_mayor: true` (V0-L only — Phase 16 in `BAB-2300`). 
 
 ### Inspector
 
-A Citizen with `role: inspector` (V0-L only — Phase 15). Reviews tickets in `Pending Approval` state and decides approve/reject. In v0.1 (V0-S/V0-M), the inspector role is fulfilled by the human user.
+An approver for Tickets in `Pending Approval` state. The default Inspector is
+the human operator. Starting in Phase 15, a Ticket may opt into automatic
+inspection through `metadata.inspection`, selecting one or more Inspector
+Citizens by explicit slug and/or normalized role labels such as `inspector` or
+`reviewer`. A group of selected Inspector Citizens is an **Inspector Council**.
+Do not assume a single `role: inspector` field; Citizens can have multiple
+roles, and inspection eligibility is policy-driven.
 
 ### Mission (deprecated as runtime concept; reborn as `Ticket(type=mission)`)
 
@@ -220,3 +226,4 @@ Both tools are deliberately named to read together: `af` runs the playbook for a
 | 2026-05-06 | Add Imported Tmux Session vocabulary and shift Inspector/Mayor phase references after Phase 13 attach insertion | Codex |
 | 2026-05-07 | Add Citizen `launch_profile` vocabulary and switch Elena wording to direct `copilot` | Codex |
 | 2026-05-07 | Clarify Copilot `trustedFolders` handling for trusted-autonomous Babs-owned workspaces | Codex |
+| 2026-05-08 | Update Inspector vocabulary for Phase 15 Inspector Council and policy-driven multi-role selection | Codex |

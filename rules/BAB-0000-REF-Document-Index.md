@@ -92,6 +92,7 @@
 | 2252 | CHG | Implement Phase 14.2 Citizen Role UI |
 | 2253 | CHG | Implement Phase 14.3 Ticket Role Router |
 | 2254 | CHG | Implement Phase 14.4 Role BDD E2E Hardening |
+| 2255 | CHG | Implement Phase 15.1 Inspection Policy and Events |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
@@ -105,6 +106,7 @@
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Add BAB-2255 Phase 15.1 Inspection Policy and Events CHG | Codex |
 | 2026-05-08 | Add BAB-2254 Phase 14.4 Role BDD E2E Hardening CHG | Codex |
 | 2026-05-08 | Add BAB-2253 Phase 14.3 Ticket Role Router CHG | Codex |
 | 2026-05-08 | Add BAB-2252 Phase 14.2 Citizen Role UI CHG | Codex |

@@ -5,6 +5,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   alias Babs.Citizens.DirectCli.Adapters.Fake
   alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Api
+  alias Babs.Citizens.Tickets.InspectionEvents
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
 
@@ -95,6 +96,38 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert Enum.map(history, & &1["event"]) == ["created", "comment"]
     assert List.last(history)["body"] == "Working on it."
     assert List.last(history)["ticket_id"] == ticket.id
+  end
+
+  test "append_ticket_events stores inspection events through the writer path" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Inspection event", body: "Record inspection request."},
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    policy = %{
+      "mode" => "auto",
+      "strategy" => "single",
+      "roles" => ["inspector"],
+      "citizens" => [],
+      "quorum" => "all_pass",
+      "max_inspectors" => 3,
+      "allow_self_inspection" => false
+    }
+
+    assert {:ok, event} =
+             InspectionEvents.requested(ticket.id, "insp_20260508000000_42", policy, ["clare"],
+               now: "2026-05-08T00:01:00Z"
+             )
+
+    assert :ok = Api.append_ticket_events(ticket.id, [event], tickets_root: root)
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    assert Enum.map(history, & &1["event"]) == ["created", "inspection_requested"]
+    assert List.last(history)["inspection_id"] == "insp_20260508000000_42"
   end
 
   test "comment_ticket notifies every current assignee including the author" do
