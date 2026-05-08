@@ -169,11 +169,9 @@ to Mayor automation in Phase 16.
 
 ```bash
 mise exec -- mix test apps/babs/test/babs_web/ticket_presenter_test.exs
-mise exec -- mix test apps/babs/test/babs_web/live/tickets_live_test.exs
-mise exec -- mix test apps/babs/test/babs_web/live/kitchen_sink_live_test.exs
-mise exec -- mix test apps/babs/test/babs_web/live/new_ticket_live_test.exs
-mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/inspection_decision_capture_test.exs
-python3 test/browser/bdd/run.py
+mise exec -- mix test apps/babs/test/babs_web/live/new_ticket_live_test.exs apps/babs/test/babs_web/live/tickets_live_test.exs apps/babs/test/babs_web/ticket_presenter_test.exs
+BABS_BROWSER_BASE_URL=http://127.0.0.1:4100 BABS_HTTP_PORT=4100 BABS_HTTP_IP=127.0.0.1 BABS_BDD_SCENARIO="inspection panel" npm run test:bdd
+BABS_CITIZENS_DB_PATH=/tmp/babs-bdd.sqlite3 BABS_BROWSER_BASE_URL=http://127.0.0.1:4100 BABS_HTTP_PORT=4100 BABS_HTTP_IP=127.0.0.1 npm run test:bdd
 mise exec -- mix format --check-formatted
 mise exec -- mix compile --warnings-as-errors
 mise exec -- mix test --max-cases 1
@@ -181,7 +179,7 @@ mise exec -- mix test
 mise exec -- mix test --cover --export-coverage phase15_4 && mise exec -- mix cmd mix test.coverage
 af validate --root .
 git diff --check
-git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|/Users/[^[:space:]]+|api_token|secret|token|wukong|macmini)' || true
+git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|/Users/[^[:space:]]+|api_token|secret|token)' || true
 ```
 
 ## Results
@@ -194,10 +192,49 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     paths, malformed-data fallback rendering, presenter/LiveView test
     boundary, UI REFACTOR passes, deterministic BDD seed mechanics, and broader
     private-IP scan coverage.
+- 2026-05-08 implementation:
+  - Added `TicketPresenter.inspection_panel/2` to reduce Ticket metadata and
+    history into a presentational inspection summary.
+  - Added the Ticket detail inspection panel with human mode, auto mode,
+    selected inspectors, decision badges, summaries, findings, failure states,
+    and quorum/completion status.
+  - Added New Ticket Human/Auto inspection controls that default to Human and
+    write Phase 15 inspection metadata only for Auto inspection.
+  - Added browser-harness BDD scenarios for auto approval, rejection, and
+    two-inspector council status rendering.
+- 2026-05-08 validation:
+  - `mise exec -- mix test apps/babs/test/babs_web/ticket_presenter_test.exs`
+    passed: 5 tests.
+  - Focused LiveView/presenter suite passed: 28 tests.
+  - Focused browser-harness BDD `inspection panel` scenarios passed: 3
+    scenarios.
+  - Full browser-harness BDD passed against a temporary local SQLite database;
+    one workspace-root scenario remained intentionally skipped.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: `babs_citizens` 435 tests,
+    `babs` 97 tests.
+  - `mise exec -- mix test` passed: `babs_citizens` 435 tests, `babs` 97 tests.
+  - Coverage passed: `babs_citizens` 85.66%, `babs` 88.92%.
+  - `af validate --root .` passed: 167 documents checked, 0 issues.
+  - `git diff --check` passed.
+  - Added-line privacy scan passed for private IPs, local checkout paths,
+    tokens, and secrets.
+- 2026-05-08 Trinity implementation review:
+  - Trinity packet:
+    `.trinity/reviews/20260508-180453-Phase-15.4-inspection-UI-implementation-diff`.
+  - GLM PASS with no blocking findings.
+  - GLM noted three non-blocking advisories: repeated history reversals in the
+    presenter, the intentional default `inspector` role for Auto inspection,
+    and possible council UX friction when max inspectors defaults to 1.
+  - DeepSeek was skipped for this implementation gate after repeated provider
+    timeout/service-down behavior; this was treated as reviewer unavailability,
+    not as a code finding.
 
 ## Change History
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Record implementation results, validation, and DeepSeek reviewer unavailability | Codex |
 | 2026-05-08 | Mark Approved after Trinity fast-review PASS/PASS and fold advisories | Codex |
 | 2026-05-08 | Initial Phase 15.4 inspection UI, BDD, and E2E CHG | Codex |

@@ -156,6 +156,55 @@ defmodule BabsWeb.TicketLive do
               <span class={state_badge_class(@ticket.state)}><span class="dot"></span>{@ticket.state}</span>
             </section>
 
+            <section class="rail-block inspection-panel" data-testid="ticket-inspection-panel">
+              <p class="rail-label">Inspection</p>
+              <div class="inspection-mode">
+                <BabsWeb.Icon.icon name="shield-check" />
+                <span data-testid="ticket-inspection-mode">{@inspection_panel.label}</span>
+              </div>
+
+              <dl class="stat-list compact">
+                <div :if={@inspection_panel.quorum}>
+                  <dt>Quorum</dt>
+                  <dd>{@inspection_panel.quorum}</dd>
+                </div>
+                <div :if={@inspection_panel.result}>
+                  <dt>Result</dt>
+                  <dd>
+                    <span class={inspection_badge_class(@inspection_panel.result)}>
+                      <span class="dot"></span>{@inspection_panel.result}
+                    </span>
+                  </dd>
+                </div>
+                <div :if={@inspection_panel.roles != []}>
+                  <dt>Roles</dt>
+                  <dd>{join_values(@inspection_panel.roles)}</dd>
+                </div>
+                <div :if={@inspection_panel.citizens != []}>
+                  <dt>Citizens</dt>
+                  <dd>{join_values(@inspection_panel.citizens)}</dd>
+                </div>
+              </dl>
+
+              <ol :if={@inspection_panel.inspectors != []} class="inspection-list">
+                <li
+                  :for={inspector <- @inspection_panel.inspectors}
+                  data-testid={"ticket-inspector-#{inspector.slug}"}
+                >
+                  <div class="inspection-row">
+                    <strong>{inspector.slug}</strong>
+                    <span class={inspection_badge_class(inspector.status)}>
+                      <span class="dot"></span>{inspector.status_label}
+                    </span>
+                  </div>
+                  <p :if={inspector.summary} class="inspection-summary">{inspector.summary}</p>
+                  <ul :if={inspector.findings != []} class="inspection-findings">
+                    <li :for={finding <- inspector.findings}>{finding_text(finding)}</li>
+                  </ul>
+                </li>
+              </ol>
+            </section>
+
             <section class="rail-block">
               <p class="rail-label">Ticket Body</p>
               <pre class="ticket-body">{@ticket.body}</pre>
@@ -452,6 +501,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:ticket, ticket)
         |> assign(:history, history)
         |> assign(:conversation, Conversation.from_history(history))
+        |> assign(:inspection_panel, TicketPresenter.inspection_panel(ticket, history))
         |> assign(:citizens, citizens)
         |> assign(:error, nil)
 
@@ -460,6 +510,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:ticket, nil)
         |> assign(:history, [])
         |> assign(:conversation, Conversation.from_history([]))
+        |> assign(:inspection_panel, nil)
         |> assign(:citizens, citizens)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
@@ -531,6 +582,47 @@ defmodule BabsWeb.TicketLive do
   defp status_badge_class("queued"), do: "badge queued"
   defp status_badge_class("busy"), do: "badge pending"
   defp status_badge_class(_status), do: "badge"
+
+  defp inspection_badge_class("approved"), do: "badge captured"
+  defp inspection_badge_class("approve"), do: "badge captured"
+  defp inspection_badge_class("rejected"), do: "badge failed"
+  defp inspection_badge_class("reject"), do: "badge failed"
+  defp inspection_badge_class("needs_changes"), do: "badge pending"
+  defp inspection_badge_class("requires_human"), do: "badge pending"
+  defp inspection_badge_class("failed"), do: "badge failed"
+  defp inspection_badge_class("delivered"), do: "badge delivered"
+  defp inspection_badge_class("pending"), do: "badge queued"
+  defp inspection_badge_class(_status), do: "badge"
+
+  defp join_values(values), do: Enum.join(values, ", ")
+
+  defp finding_text(%{"body" => body}) when is_binary(body) and body != "", do: body
+
+  defp finding_text(%{"message" => message}) when is_binary(message) and message != "",
+    do: message
+
+  defp finding_text(%{"summary" => summary}) when is_binary(summary) and summary != "",
+    do: summary
+
+  defp finding_text(%{"path" => path} = finding) when is_binary(path) and path != "" do
+    case Map.get(finding, "line") do
+      line when is_integer(line) -> "#{path}:#{line}"
+      line when is_binary(line) and line != "" -> "#{path}:#{line}"
+      _line -> path
+    end
+  end
+
+  defp finding_text(finding) when is_map(finding) do
+    finding
+    |> Map.values()
+    |> Enum.find(&is_binary/1)
+    |> case do
+      nil -> "Finding"
+      value -> value
+    end
+  end
+
+  defp finding_text(_finding), do: "Finding"
 
   defp message_class(%{legacy?: true}), do: "message legacy"
   defp message_class(%{role: :user}), do: "message mine"
