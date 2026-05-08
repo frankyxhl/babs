@@ -5,11 +5,13 @@ defmodule BabsWeb.NewTicketLive do
 
   use Phoenix.LiveView
 
+  alias Babs.Citizens.Catalog
+  alias Babs.Citizens.Roles
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.Error
   alias BabsWeb.TicketPath
 
-  @empty_form %{"title" => "", "body" => "", "priority" => "normal"}
+  @empty_form %{"title" => "", "body" => "", "priority" => "normal", "assignee_role" => ""}
   @priorities ~w(low normal high urgent)
 
   @impl true
@@ -20,6 +22,7 @@ defmodule BabsWeb.NewTicketLive do
      |> assign(:errors, %{})
      |> assign(:status, nil)
      |> assign(:priorities, @priorities)
+     |> assign(:assignee_role_options, known_role_labels())
      |> assign(:socket_token, Map.get(session, "socket_token", ""))}
   end
 
@@ -72,10 +75,20 @@ defmodule BabsWeb.NewTicketLive do
           </label>
 
           <label>
-            Priority
+            <span class="label-with-icon"><BabsWeb.Icon.icon name="tag" /> Priority</span>
             <select name="ticket[priority]" data-testid="ticket-priority">
               <option :for={priority <- @priorities} value={priority} selected={@form["priority"] == priority}>
                 {priority}
+              </option>
+            </select>
+          </label>
+
+          <label>
+            <span class="label-with-icon"><BabsWeb.Icon.icon name="route" /> Assignee Role</span>
+            <select name="ticket[assignee_role]" data-testid="ticket-assignee-role">
+              <option value="" selected={@form["assignee_role"] == ""}>Unassigned</option>
+              <option :for={role <- @assignee_role_options} value={role} selected={@form["assignee_role"] == role}>
+                {role}
               </option>
             </select>
           </label>
@@ -137,7 +150,8 @@ defmodule BabsWeb.NewTicketLive do
        %{
          title: String.trim(params["title"]),
          body: String.trim(params["body"]),
-         priority: params["priority"]
+         priority: params["priority"],
+         assignee_role: blank_to_nil(params["assignee_role"])
        }}
     else
       {:error, errors}
@@ -151,6 +165,29 @@ defmodule BabsWeb.NewTicketLive do
       errors
     end
   end
+
+  defp known_role_labels do
+    Catalog.list_configured_or_imported_citizens()
+    |> Enum.flat_map(&role_names/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  rescue
+    _error -> []
+  end
+
+  defp role_names(citizen) do
+    citizen
+    |> Catalog.to_config()
+    |> Map.get(:roles, [])
+    |> Roles.normalize()
+    |> case do
+      {:ok, roles} -> Enum.map(roles, & &1["name"])
+      {:error, _reason} -> []
+    end
+  end
+
+  defp blank_to_nil(value) when value in [nil, ""], do: nil
+  defp blank_to_nil(value), do: value
 
   def styles do
     """
@@ -189,6 +226,8 @@ defmodule BabsWeb.NewTicketLive do
       padding: 18px;
     }
     label { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-size: 13px; }
+    .label-with-icon { display: inline-flex; align-items: center; gap: 6px; }
+    .label-with-icon .icon { width: 14px; height: 14px; }
     input, select, textarea {
       width: 100%;
       min-width: 0;

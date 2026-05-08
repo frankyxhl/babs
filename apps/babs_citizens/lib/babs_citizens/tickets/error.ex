@@ -37,6 +37,13 @@ defmodule Babs.Citizens.Tickets.Error do
     do: "Ticket #{id} approval requires approve_ticket"
 
   def message({:no_assignees, id}), do: "Ticket #{id} has no assignees"
+  def message({:missing_assignee_role, id}), do: "Ticket #{id} has no assignee role"
+  def message({:invalid_assignee_role, value}), do: "Invalid assignee role: #{inspect(value)}"
+  def message({:no_role_candidate, role}), do: "No eligible Citizen found for role #{role}"
+
+  def message({:role_route_already_assigned, id}),
+    do: "Ticket #{id} already has named assignees"
+
   def message({:invalid_slug, slug}), do: "Invalid Citizen slug: #{inspect(slug)}"
   def message({:unknown_citizen, slug}), do: "Unknown Citizen: #{slug}"
   def message({:citizen_not_running, slug}), do: "Citizen #{slug} is not running"

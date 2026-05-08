@@ -39,6 +39,15 @@ defmodule BabsWeb.TicketLive do
      end)}
   end
 
+  def handle_event("assign_role", _params, socket) do
+    role = socket.assigns.ticket.assignee_role
+
+    {:noreply,
+     start_ticket_action(socket, {:assign_role, role}, fn ->
+       Api.assign_ticket_by_role(socket.assigns.id)
+     end)}
+  end
+
   def handle_event("transition", %{"to" => to_state} = params, socket) do
     event = blank_to_nil(Map.get(params, "event"))
 
@@ -155,6 +164,19 @@ defmodule BabsWeb.TicketLive do
             <section class="rail-block" data-testid="ticket-actions">
               <p class="rail-label">Actions</p>
               <div class="rail-actions">
+                <button
+                  :if={role_assignable?(@ticket)}
+                  type="button"
+                  class="ks-button primary"
+                  phx-click="assign_role"
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid={"ticket-assign-role-#{@ticket.assignee_role}"}
+                  aria-label={"Assign #{@ticket.id} by role #{@ticket.assignee_role}"}
+                  title={"Assign by role #{@ticket.assignee_role}"}
+                >
+                  <BabsWeb.Icon.icon name="route" /> Route {@ticket.assignee_role}
+                </button>
+
                 <button
                   :for={citizen <- @citizens}
                   :if={assignable?(@ticket)}
@@ -472,12 +494,18 @@ defmodule BabsWeb.TicketLive do
   end
 
   defp assignable?(ticket), do: ticket.state == "open" and ticket.assignees == []
+  defp role_assignable?(ticket), do: assignable?(ticket) and has_assignee_role?(ticket)
   defp ready_for_approval?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
   defp unassignable?(ticket), do: ticket.state == "in_progress" and ticket.assignees != []
   defp cancellable?(ticket), do: ticket.state in ["open", "in_progress", "pending_approval"]
   defp approvable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
   defp rejectable?(ticket), do: ticket.state == "pending_approval" and ticket.assignees != []
   defp commentable?(ticket), do: ticket.state not in ["closed", "cancelled"]
+
+  defp has_assignee_role?(%{assignee_role: role}) when is_binary(role),
+    do: String.trim(role) != ""
+
+  defp has_assignee_role?(_ticket), do: false
 
   defp ticket_action_busy?(nil), do: false
   defp ticket_action_busy?(_action), do: true
@@ -556,6 +584,7 @@ defmodule BabsWeb.TicketLive do
   end
 
   defp ticket_action_success({:assign, slug}), do: "Assigned to #{slug}"
+  defp ticket_action_success({:assign_role, role}), do: "Assigned by role #{role}"
   defp ticket_action_success({:transition, to_state, _event}), do: "Moved to #{to_state}"
   defp ticket_action_success({:unassign, slug}), do: "Unassigned #{slug}"
   defp ticket_action_success({:comment, _body}), do: "Comment stored"
