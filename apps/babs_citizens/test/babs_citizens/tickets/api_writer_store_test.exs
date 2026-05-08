@@ -1,6 +1,8 @@
 defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   use ExUnit.Case, async: false
 
+  alias Babs.Citizens.CitizenConfig
+  alias Babs.Citizens.DirectCli.Adapters.Fake
   alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.TicketMarkdown
@@ -1209,6 +1211,78 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     end)
   end
 
+  test "assign_ticket_by_role reserves direct backend before persisting assignment" do
+    root = tmp_root()
+    parent = self()
+    config = fake_direct_config("flora")
+
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "flora")
+
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "flora",
+        display_name: "Flora",
+        cwd: config.cwd,
+        cli: config.cli,
+        ticket_backend: "direct_cli",
+        roles: ["developer"]
+      })
+
+      assert {:ok, ticket} =
+               Api.create_ticket(
+                 %{
+                   title: "Direct role route",
+                   body: "Use direct role routing.",
+                   assignee_role: "developer"
+                 },
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:00:00Z"
+               )
+
+      executor = fn command ->
+        send(parent, {:direct_role_command, command})
+
+        {:ok,
+         %{
+           stdout:
+             Jason.encode!(%{
+               "session_id" => "fake-session-flora",
+               "content" => "direct role acknowledged"
+             })
+         }}
+      end
+
+      assert {:ok, %{ticket: assigned, delivery: {:injected, "flora"}}} =
+               Api.assign_ticket_by_role(ticket.id,
+                 tickets_root: root,
+                 now: "2026-05-08T00:01:00Z",
+                 citizen_config_fetcher: fn "flora" -> config end,
+                 adapter: Fake,
+                 executor: executor,
+                 reply_capture: fn _turn -> :ok end
+               )
+
+      assert assigned.state == "in_progress"
+      assert assigned.assignees == ["flora"]
+
+      assert_receive {:direct_role_command, command}, 1_000
+      prompt = List.last(command.args)
+      assert prompt =~ "[Babs Ticket #{ticket.id} assigned]"
+      assert prompt =~ "Use direct role routing."
+
+      assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+      assert Enum.find(history, &(&1["event"] == "assigned"))["via_role"] == "developer"
+
+      assert Enum.any?(
+               history,
+               &match?(%{"event" => "turn_delivery_attempted", "backend" => "direct_cli"}, &1)
+             )
+
+      assert Enum.any?(history, &match?(%{"event" => "injected", "injected_to" => ["flora"]}, &1))
+    end)
+  end
+
   test "assign_ticket_by_role reports missing role and already assigned tickets" do
     root = tmp_root()
 
@@ -1463,5 +1537,19 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
         Application.delete_env(:babs_citizens, :root)
       end
     end
+  end
+
+  defp fake_direct_config(slug) do
+    %CitizenConfig{
+      id: "BAB-CIT-#{String.upcase(slug)}",
+      slug: slug,
+      display_name: String.capitalize(slug),
+      cli: "babs-fake-ai",
+      cli_args: [],
+      launch_profile: "trusted_autonomous",
+      ticket_backend: "direct_cli",
+      cwd: tmp_root(),
+      env: %{}
+    }
   end
 end

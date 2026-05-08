@@ -245,6 +245,17 @@ Phase 14.4 remains the browser-harness BDD/E2E hardening slice for role flows.
   - GLM PASS and DeepSeek PASS.
   - Non-blocking advisories recorded for future helper extraction, test helper
     cleanup, and history scan scalability.
+- 2026-05-08 GitHub Codex review round 1:
+  - Fixed P2 role-route race where concurrent Tickets could resolve the same
+    Citizen before assignment delivery acquired the execution lock.
+  - Role-routed hardline assignments now reserve the selected Citizen before
+    prepare/write/inject.
+  - Role-routed direct CLI assignments now let the direct runner acquire the
+    execution lock before a preflight callback persists assignment state.
+  - Revalidation passed: focused Ticket/DirectRunner tests, format check,
+    warnings-as-errors compile, full `mix test` with 376 `babs_citizens` tests
+    and 88 `babs` tests, `af validate --root .`, `git diff --check`, and
+    added-line privacy scan.
 
 ## Change History
 
@@ -253,3 +264,4 @@ Phase 14.4 remains the browser-harness BDD/E2E hardening slice for role flows.
 | 2026-05-08 | Initial Phase 14.3 implementation CHG | Codex |
 | 2026-05-08 | Trinity fast-review passed GLM and DeepSeek; folded role matching, history scan, UI candidate, form-param, and error-semantics advisories | Codex |
 | 2026-05-08 | Implemented role router and local/Trinity validation results | Codex |
+| 2026-05-08 | Fixed GitHub Codex P2 role-route execution-lock race | Codex |

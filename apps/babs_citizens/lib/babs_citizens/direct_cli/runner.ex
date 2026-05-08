@@ -69,16 +69,34 @@ defmodule Babs.Citizens.DirectCli.Runner do
   end
 
   def run_turn(turn, opts \\ []) do
-    ExecutionLock.with_lock(turn.slug, fn -> run_locked(turn, opts) end)
+    ExecutionLock.with_lock(turn.slug, fn -> run_reserved_turn(turn, opts) end)
     |> case do
       {:error, {:execution_busy, _slug} = reason} ->
         notify_startup(opts, {:error, reason})
-        _ignored = append_events(turn, [attempt_busy_event(turn)])
-        result = turn |> Map.put(:fallback, :none) |> handle_direct_failure(reason, opts)
-        result
+
+        if Keyword.get(opts, :suppress_busy_events, false) do
+          {:error, reason}
+        else
+          _ignored = append_events(turn, [attempt_busy_event(turn)])
+          turn |> Map.put(:fallback, :none) |> handle_direct_failure(reason, opts)
+        end
 
       result ->
         result
+    end
+  end
+
+  defp run_reserved_turn(turn, opts) do
+    case before_start(turn, opts) do
+      {:ok, prepared_turn} ->
+        run_locked(prepared_turn, opts)
+
+      :ok ->
+        run_locked(turn, opts)
+
+      {:error, reason} ->
+        notify_startup(opts, {:error, reason})
+        {:error, reason}
     end
   end
 
@@ -96,6 +114,19 @@ defmodule Babs.Citizens.DirectCli.Runner do
         handle_direct_failure(turn, reason, opts)
     end
   end
+
+  defp before_start(turn, opts) do
+    case Keyword.get(opts, :before_start) do
+      fun when is_function(fun, 1) -> normalize_before_start_result(fun.(turn))
+      fun when is_function(fun, 0) -> normalize_before_start_result(fun.())
+      _other -> {:ok, turn}
+    end
+  end
+
+  defp normalize_before_start_result(:ok), do: :ok
+  defp normalize_before_start_result({:ok, prepared_turn}), do: {:ok, prepared_turn}
+  defp normalize_before_start_result({:error, reason}), do: {:error, reason}
+  defp normalize_before_start_result(other), do: {:error, {:before_start_failed, other}}
 
   defp await_startup_ack(pid, ref, timeout_ms) do
     monitor = Process.monitor(pid)
