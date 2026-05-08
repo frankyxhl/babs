@@ -38,6 +38,70 @@ defmodule Babs.Citizens.Tickets.TicketMarkdownTest do
     assert {:unknown_citizen, "ghost"} in ticket.warnings
   end
 
+  test "normalizes inspection metadata during parse and render" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        source: test
+        inspection:
+          mode: auto
+          strategy: council
+          roles: [Inspector, reviewer, Inspector]
+          citizens: [clare, dylan, clare]
+          quorum: all_pass
+          max_inspectors: 2
+          allow_self_inspection: true
+      """)
+
+    assert {:ok, ticket} = TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+
+    assert ticket.metadata["inspection"] == %{
+             "mode" => "auto",
+             "strategy" => "council",
+             "roles" => ["inspector", "reviewer"],
+             "citizens" => ["clare", "dylan"],
+             "quorum" => "all_pass",
+             "max_inspectors" => 2,
+             "allow_self_inspection" => true
+           }
+
+    assert {:ok, reparsed} = ticket |> TicketMarkdown.render() |> TicketMarkdown.parse()
+    assert reparsed.metadata == ticket.metadata
+  end
+
+  test "rejects invalid inspection metadata with nested frontmatter error" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        inspection:
+          mode: auto
+          quorum: majority
+      """)
+
+    assert {:error,
+            {:invalid_frontmatter, {:inspection_policy, {:unsupported_quorum, "majority"}}}} =
+             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+  end
+
+  test "rejects scalar inspection roles with nested frontmatter error" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        inspection:
+          mode: auto
+          roles: inspector
+      """)
+
+    assert {:error, {:invalid_frontmatter, {:inspection_policy, {:invalid_roles, "inspector"}}}} =
+             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+  end
+
   test "rejects unknown top-level frontmatter keys" do
     content =
       String.replace(sample_markdown(), "metadata: {source: test}", "metadata: {}\nextra: nope")

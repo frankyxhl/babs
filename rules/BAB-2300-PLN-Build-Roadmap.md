@@ -330,7 +330,8 @@ Citizens still import and route correctly.
 
 **Planning doc**: `BAB-2243` PRP
 **Current status**: Approved PRP after Trinity fast-review with GLM and
-DeepSeek PASS.
+DeepSeek PASS. Phase 15.1 execution CHG `BAB-2255` drafts the inspection
+policy and event-foundation slice.
 **Scope**: Replace the earlier single-inspector plan with Ticket-level
 inspection policy and an Inspector Council. The human operator remains the
 default inspector; Tickets can explicitly opt into automatic inspection by one

@@ -154,20 +154,20 @@ defmodule Babs.Citizens.Tickets.Api do
   end
 
   defp write_new_ticket(root, ticket, opts) do
-    with :ok <- validate_ticket(ticket, opts),
+    with {:ok, ticket} <- normalize_ticket(ticket, opts),
          {:ok, pid} <-
            WriterSupervisor.start_writer(ticket.id, Keyword.put(opts, :tickets_root, root)) do
       Writer.create(pid, ticket, opts)
     end
   end
 
-  defp validate_ticket(ticket, opts) do
+  defp normalize_ticket(ticket, opts) do
     case Babs.Citizens.Tickets.TicketMarkdown.parse(
            Babs.Citizens.Tickets.TicketMarkdown.render(ticket),
            path: ticket.path,
            known_citizens: Keyword.get(opts, :known_citizens)
          ) do
-      {:ok, _ticket} -> :ok
+      {:ok, ticket} -> {:ok, ticket}
       {:error, reason} -> {:error, reason}
     end
   end

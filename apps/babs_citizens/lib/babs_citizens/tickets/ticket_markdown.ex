@@ -5,6 +5,7 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
 
   alias Babs.Citizens.Tickets.Ticket
   alias Babs.Citizens.Tickets.TicketId
+  alias Babs.Citizens.Tickets.InspectionPolicy
 
   @keys ~w(
     id
@@ -243,8 +244,17 @@ defmodule Babs.Citizens.Tickets.TicketMarkdown do
 
   defp metadata(raw) do
     case raw["metadata"] do
-      value when is_map(value) -> {:ok, value}
-      value -> {:error, {:invalid_frontmatter, {:invalid_value, "metadata", value}}}
+      value when is_map(value) ->
+        case InspectionPolicy.normalize_metadata(value) do
+          {:ok, metadata} ->
+            {:ok, metadata}
+
+          {:error, {:inspection_policy, reason}} ->
+            {:error, {:invalid_frontmatter, {:inspection_policy, reason}}}
+        end
+
+      value ->
+        {:error, {:invalid_frontmatter, {:invalid_value, "metadata", value}}}
     end
   end
 
