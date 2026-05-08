@@ -92,6 +92,10 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:mayor_proposal_review, {:already_materialized, :children_created}}),
     do: "Mayor proposal children already exist; approve again to repair the root marker"
 
+  def message({:mayor_proposal_review, {:already_materialized, :children_started}}),
+    do:
+      "Mayor proposal child materialization has started; approve again to repair the root marker"
+
   def message({:mayor_proposal_review, {:terminal_ticket, id, state}}),
     do: "Ticket #{id} is #{state} and cannot review Mayor proposals"
 

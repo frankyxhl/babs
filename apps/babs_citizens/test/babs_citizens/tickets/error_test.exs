@@ -70,6 +70,9 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
     assert Error.message({:mayor_proposal_review, {:already_materialized, :children_created}}) ==
              "Mayor proposal children already exist; approve again to repair the root marker"
 
+    assert Error.message({:mayor_proposal_review, {:already_materialized, :children_started}}) ==
+             "Mayor proposal child materialization has started; approve again to repair the root marker"
+
     assert Error.message({:mayor_child_tickets, {:partial_child_write, ["T-1"], :boom}}) ==
              "Mayor proposal created 1 child Ticket before failing; review created child Tickets before retrying"
 

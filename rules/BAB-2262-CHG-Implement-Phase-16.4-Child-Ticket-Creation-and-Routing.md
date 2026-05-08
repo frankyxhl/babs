@@ -344,6 +344,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     marker.
   - Recovered children must match the current planned child fields, preventing
     stale child Tickets from being recorded for a later edited proposal.
+  - Proposal edit/remove/reject now also checks materialized child files when
+    the root marker is missing, blocking mutations after partial child
+    materialization has started.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children.
   - Ticket detail renders created child Ticket links, role/inspector badges,
@@ -370,6 +373,10 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     after materialization had started, and stale recovered children after
     proposal edits. Both were fixed with regression coverage before the fifth
     and final GitHub review request.
+  - GitHub Codex Review R5 found one additional filesystem-only partial
+    materialization lock issue. Fixed locally by making Writer mutation actions
+    scan child materialization metadata before edit/remove/reject; per the
+    operator's five-round limit, no sixth Codex review was requested.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -422,6 +429,15 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Post-Codex-R4 `af validate --root .`: PASS, 171 documents checked.
   - Post-Codex-R4 `git diff --check`: PASS.
   - Post-Codex-R4 added-line privacy scan: PASS, no matches.
+  - Post-Codex-R5 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 56 tests.
+  - Post-Codex-R5 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R5 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R5 `mise exec -- mix test`: PASS, 583 tests.
+  - Post-Codex-R5 `npm run test:js`: PASS, 15 tests.
+  - Post-Codex-R5 `af validate --root .`: PASS, 171 documents checked.
+  - Post-Codex-R5 `git diff --check`: PASS.
+  - Post-Codex-R5 added-line privacy scan: PASS, no matches.
 
 ---
 
@@ -436,3 +452,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Fix GitHub Codex R2 missing-root-marker retry recovery finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R3 child-history recovery audit finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R4 materialization edit lock and stale recovery findings | Codex |
+| 2026-05-09 | Fix GitHub Codex R5 partial-materialization mutation lock finding without requesting a sixth review | Codex |

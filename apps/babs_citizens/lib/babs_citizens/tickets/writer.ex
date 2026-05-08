@@ -307,7 +307,9 @@ defmodule Babs.Citizens.Tickets.Writer do
     state = reset_idle(state, opts)
 
     result =
-      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+      proposal_review_mutation_action(state.root, id, proposal_id, opts, fn ticket,
+                                                                            history,
+                                                                            event_opts ->
         MayorProposalReview.revise_child(
           ticket,
           history,
@@ -329,7 +331,9 @@ defmodule Babs.Citizens.Tickets.Writer do
     state = reset_idle(state, opts)
 
     result =
-      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+      proposal_review_mutation_action(state.root, id, proposal_id, opts, fn ticket,
+                                                                            history,
+                                                                            event_opts ->
         MayorProposalReview.remove_child(ticket, history, proposal_id, child_index, event_opts)
       end)
 
@@ -348,7 +352,9 @@ defmodule Babs.Citizens.Tickets.Writer do
     state = reset_idle(state, opts)
 
     result =
-      proposal_review_action(state.root, id, opts, fn ticket, history, event_opts ->
+      proposal_review_mutation_action(state.root, id, proposal_id, opts, fn ticket,
+                                                                            history,
+                                                                            event_opts ->
         MayorProposalReview.reject(ticket, history, proposal_id, feedback, event_opts)
       end)
 
@@ -1426,15 +1432,68 @@ defmodule Babs.Citizens.Tickets.Writer do
     end)
   end
 
-  defp proposal_review_action(root, id, opts, fun) do
+  defp proposal_review_mutation_action(root, id, proposal_id, opts, fun) do
     with {:ok, ticket} <- Store.read_ticket(root, id, opts),
          {:ok, history} <- History.read(root, id),
+         {:ok, state} <- MayorProposalReview.from_history(ticket, history),
+         :ok <- ensure_no_materialized_child_files(root, ticket, proposal_id, opts, state),
          event_opts <- proposal_event_opts(opts),
          {:ok, event} <- fun.(ticket, history, event_opts),
          :ok <- validate_events(id, [event]),
          :ok <- append_events(root, id, [event]) do
       {:ok, %{event: event}}
     end
+  end
+
+  defp ensure_no_materialized_child_files(_root, _ticket, _proposal_id, _opts, %{
+         decision: decision
+       })
+       when is_map(decision) do
+    :ok
+  end
+
+  defp ensure_no_materialized_child_files(
+         root,
+         %Ticket{id: root_ticket_id},
+         proposal_id,
+         opts,
+         _state
+       ) do
+    case existing_mayor_materialization_ids(root, root_ticket_id, proposal_id, opts) do
+      [] -> :ok
+      _ids -> {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}}
+    end
+  end
+
+  defp existing_mayor_materialization_ids(root, root_ticket_id, proposal_id, opts) do
+    root
+    |> Path.join("T-*.md")
+    |> Path.wildcard()
+    |> Enum.flat_map(fn path ->
+      id = Path.basename(path, ".md")
+
+      case Store.read_ticket(root, id, opts) do
+        {:ok, ticket} ->
+          if mayor_materialization_for?(ticket, root_ticket_id, proposal_id) do
+            [ticket.id]
+          else
+            []
+          end
+
+        {:error, _reason} ->
+          []
+      end
+    end)
+    |> Enum.sort()
+  end
+
+  defp mayor_materialization_for?(%Ticket{} = ticket, root_ticket_id, proposal_id) do
+    materialization = metadata_value(ticket.metadata, "mayor_materialization")
+
+    is_map(materialization) and
+      ticket.parent_ticket == root_ticket_id and
+      metadata_value(materialization, "root_ticket_id") == root_ticket_id and
+      metadata_value(materialization, "proposal_id") == proposal_id
   end
 
   defp approve_mayor_proposal_with_children(root, id, proposal_id, opts) do

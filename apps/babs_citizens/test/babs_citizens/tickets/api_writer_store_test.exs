@@ -389,6 +389,32 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            |> Path.wildcard()
            |> length() == 3
 
+    revision = proposal_revision(root, ticket.id)
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.revise_mayor_proposal_child(
+               ticket.id,
+               "prop_recover_marker",
+               0,
+               %{
+                 title: "Changed"
+               },
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.remove_mayor_proposal_child(ticket.id, "prop_recover_marker", 1,
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
+    assert {:error, {:mayor_proposal_review, {:already_materialized, :children_started}}} =
+             Api.reject_mayor_proposal(ticket.id, "prop_recover_marker", "Stop.",
+               tickets_root: root,
+               proposal_revision: revision
+             )
+
     child_ids =
       root
       |> Path.join("T-2026-05-08-*.md")

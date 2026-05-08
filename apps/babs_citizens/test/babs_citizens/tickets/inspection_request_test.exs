@@ -8,8 +8,8 @@ defmodule Babs.Citizens.Tickets.InspectionRequestTest do
     tickets_root = tmp_root!()
 
     on_exit(fn ->
-      File.rm_rf!(config_root)
-      File.rm_rf!(tickets_root)
+      File.rm_rf(config_root)
+      File.rm_rf(tickets_root)
     end)
 
     {:ok, config_root: config_root, tickets_root: tickets_root}
