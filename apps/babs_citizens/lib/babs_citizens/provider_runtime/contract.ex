@@ -170,7 +170,10 @@ defmodule Babs.Citizens.ProviderRuntime.Contract do
 
   defp unsafe_artifact_ref_value(value) do
     cond do
-      String.match?(value, ~r{(^|\s)/(?:Users|home|var|tmp|etc|private|opt)/\S*}) ->
+      String.match?(
+        value,
+        ~r{(^|[^A-Za-z0-9_.-])/(?:Users|home|var|tmp|etc|private|opt)(/|\b)\S*}
+      ) ->
         value
 
       String.match?(value, ~r/\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/) ->

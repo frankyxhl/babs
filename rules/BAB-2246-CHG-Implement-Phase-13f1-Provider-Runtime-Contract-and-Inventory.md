@@ -207,7 +207,7 @@ GitHub Actions Test workflow remains the PR gate.
     12 tests, 0 failures.
   - `mise exec -- mix format --check-formatted`: pass.
   - `mise exec -- mix compile --warnings-as-errors`: pass.
-  - `mise exec -- mix test`: `babs_citizens` 337 tests, 0 failures; `babs`
+  - `mise exec -- mix test`: `babs_citizens` 338 tests, 0 failures; `babs`
     82 tests, 0 failures.
   - `af validate --root .`: 155 documents checked, 0 issues found.
   - `git diff --check`: pass.
@@ -247,6 +247,24 @@ GitHub Actions Test workflow remains the PR gate.
     - `git diff --check`: pass.
     - Targeted privacy scan for private host/IP/path patterns in the Phase
       13f.1 docs/code/tests: pass.
+- 2026-05-08 GitHub Codex PR review R2:
+  - Reviewed commit `23d92d1a26`.
+  - Finding: P2 embedded absolute local paths after punctuation, such as
+    `cursor=/home/...` or `file:///Users/...`, were not rejected.
+  - Fix: tighten artifact-ref value detection so local-path-shaped values are
+    rejected even when embedded after punctuation; add regression coverage for
+    embedded local path forms.
+  - Post-fix validation:
+    - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/provider_runtime`:
+      14 tests, 0 failures.
+    - `mise exec -- mix format --check-formatted`: pass.
+    - `mise exec -- mix compile --warnings-as-errors`: pass.
+    - `mise exec -- mix test`: `babs_citizens` 338 tests, 0 failures; `babs`
+      82 tests, 0 failures.
+    - `af validate --root .`: 155 documents checked, 0 issues found.
+    - `git diff --check`: pass.
+    - Targeted privacy scan for private host/IP/path patterns in the Phase
+      13f.1 docs/code/tests: pass.
 
 ## Change History
 
@@ -257,3 +275,4 @@ GitHub Actions Test workflow remains the PR gate.
 | 2026-05-08 | Record Phase 13f.1 implementation results, validation, and implementation review advisory fold | Codex |
 | 2026-05-08 | Record final Trinity implementation review pass after advisory fold | Codex |
 | 2026-05-08 | Record GitHub Codex R1 P2 artifact-ref privacy fix and validation | Codex |
+| 2026-05-08 | Record GitHub Codex R2 embedded local path artifact-ref privacy fix and validation | Codex |

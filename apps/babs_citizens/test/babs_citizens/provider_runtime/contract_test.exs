@@ -66,6 +66,17 @@ defmodule Babs.Citizens.ProviderRuntime.ContractTest do
              |> Contract.new()
   end
 
+  test "rejects embedded local paths in raw artifact ref values" do
+    for unsafe_value <- ["cursor=/home/app/transcript", "file:///Users/operator/log"] do
+      assert {:error, {:unsafe_raw_artifact_ref, ^unsafe_value}} =
+               valid_attrs()
+               |> Map.put(:raw_artifact_refs, [
+                 %{"kind" => "opaque", "cursor" => unsafe_value}
+               ])
+               |> Contract.new()
+    end
+  end
+
   test "rejects unknown contract fields without raising" do
     assert {:error, {:unknown_field, "unexpected"}} = Contract.new(%{"unexpected" => true})
     assert {:error, {:unknown_field, :unexpected}} = Contract.new(%{unexpected: true})
