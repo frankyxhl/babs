@@ -1160,6 +1160,90 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert ticket_id == ticket.id
   end
 
+  test "assign_ticket_by_role selects citizen and records role-routed history" do
+    root = tmp_root()
+    parent = self()
+
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "clare",
+        display_name: "Clare",
+        roles: [
+          %{"name" => "inspector", "skills" => []},
+          %{"name" => "developer", "skills" => []}
+        ]
+      })
+
+      assert {:ok, ticket} =
+               Api.create_ticket(
+                 %{title: "Role route", body: "Pick a developer.", assignee_role: "developer"},
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:00:00Z"
+               )
+
+      assert {:ok, %{ticket: assigned, delivery: {:injected, "clare"}}} =
+               Api.assign_ticket_by_role(ticket.id,
+                 tickets_root: root,
+                 now: "2026-05-08T00:01:00Z",
+                 citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                 pane_lookup: fn "clare" -> {:ok, self()} end,
+                 pane_injector: fn "clare", prompt ->
+                   send(parent, {:role_prompt, prompt})
+                   :ok
+                 end
+               )
+
+      assert assigned.state == "in_progress"
+      assert assigned.assignees == ["clare"]
+      assert_receive {:role_prompt, prompt}
+      assert prompt =~ "Pick a developer."
+
+      assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+      assigned_event = Enum.find(history, &(&1["event"] == "assigned"))
+      assert assigned_event["to"] == ["clare"]
+      assert assigned_event["via_role"] == "developer"
+      assert assigned_event["body"] == "assigned to clare via role developer"
+    end)
+  end
+
+  test "assign_ticket_by_role reports missing role and already assigned tickets" do
+    root = tmp_root()
+
+    assert {:ok, no_role} =
+             Api.create_ticket(%{title: "No role", body: "No role."},
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    assert {:error, {:missing_assignee_role, no_role_id}} =
+             Api.assign_ticket_by_role(no_role.id, tickets_root: root)
+
+    assert no_role_id == no_role.id
+
+    assert {:ok, assigned} =
+             Api.create_ticket(
+               %{
+                 title: "Already assigned",
+                 body: "Already assigned.",
+                 state: "in_progress",
+                 assignees: ["clare"],
+                 assignee_role: "developer"
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:01:00Z"
+             )
+
+    assert {:error, {:role_route_already_assigned, assigned_id}} =
+             Api.assign_ticket_by_role(assigned.id, tickets_root: root)
+
+    assert assigned_id == assigned.id
+  end
+
   test "oversized comments fail before rewriting ticket markdown" do
     root = tmp_root()
 
@@ -1358,5 +1442,26 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     File.rm_rf!(root)
     File.mkdir_p!(root)
     root
+  end
+
+  defp with_role_catalog(fun) do
+    Babs.Citizens.RepoCase.ensure_repo!()
+    Babs.Citizens.Repo.delete_all(Babs.Citizens.CitizenRecord)
+    config_root = Babs.Citizens.RepoCase.tmp_root!()
+    previous_root = Application.get_env(:babs_citizens, :root)
+    Application.put_env(:babs_citizens, :root, config_root)
+
+    try do
+      fun.(config_root)
+    after
+      File.rm_rf!(config_root)
+      Babs.Citizens.Repo.delete_all(Babs.Citizens.CitizenRecord)
+
+      if previous_root do
+        Application.put_env(:babs_citizens, :root, previous_root)
+      else
+        Application.delete_env(:babs_citizens, :root)
+      end
+    end
   end
 end

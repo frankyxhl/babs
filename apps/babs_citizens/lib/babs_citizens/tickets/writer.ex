@@ -17,6 +17,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.Injector
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
+  alias Babs.Citizens.Tickets.RoleRouter
   alias Babs.Citizens.Tickets.StateMachine
   alias Babs.Citizens.Tickets.Store
   alias Babs.Citizens.Tickets.TicketMarkdown
@@ -45,6 +46,10 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   def assign(pid, id, slug, opts \\ []) do
     GenServer.call(pid, {:assign, id, slug, opts}, 30_000)
+  end
+
+  def assign_by_role(pid, id, opts \\ []) do
+    GenServer.call(pid, {:assign_by_role, id, opts}, 30_000)
   end
 
   def unassign(pid, id, slug, opts \\ []) do
@@ -126,6 +131,37 @@ defmodule Babs.Citizens.Tickets.Writer do
       with {:ok, original} <- read_current(path, id),
            {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
            {:ok, assigned} <- StateMachine.assign(ticket, slug) do
+        case delivery_backend(slug, opts) do
+          "direct_cli" = backend ->
+            persist_assignment(state.root, path, original, assigned, slug, opts, backend)
+
+          backend ->
+            case Injector.prepare(slug, opts) do
+              :ok ->
+                persist_assignment(state.root, path, original, assigned, slug, opts, backend)
+
+              {:error, reason} ->
+                persist_assignment_failure(state.root, path, original, ticket, slug, reason, opts)
+            end
+        end
+      end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:assign_by_role, id, opts}, _from, state) do
+    state = reset_idle(state, opts)
+    path = TicketMarkdown.path(state.root, id)
+
+    result =
+      with {:ok, original} <- read_current(path, id),
+           {:ok, ticket} <- Store.read_ticket(state.root, id, opts),
+           :ok <- ensure_role_routable(ticket),
+           {:ok, %{slug: slug, role: role}} <-
+             RoleRouter.resolve(ticket, Keyword.put(opts, :tickets_root, state.root)),
+           {:ok, assigned} <- StateMachine.assign(ticket, slug) do
+        opts = Keyword.put(opts, :via_role, role)
+
         case delivery_backend(slug, opts) do
           "direct_cli" = backend ->
             persist_assignment(state.root, path, original, assigned, slug, opts, backend)
@@ -304,7 +340,20 @@ defmodule Babs.Citizens.Tickets.Writer do
     with :ok <- run_before_write(path, opts),
          :ok <- detect_conflict(path, original, id),
          :ok <- write_markdown(root, id, TicketMarkdown.render(assigned)),
-         :ok <- append_events(root, id, assignment_events(assigned, slug, now, by, backend, turn)),
+         :ok <-
+           append_events(
+             root,
+             id,
+             assignment_events(
+               assigned,
+               slug,
+               now,
+               by,
+               backend,
+               turn,
+               Keyword.get(opts, :via_role)
+             )
+           ),
          prompt <- Injector.prompt(assigned, slug) do
       deliver_assignment(root, assigned, slug, prompt, now, backend, turn, opts)
     end
@@ -358,15 +407,12 @@ defmodule Babs.Citizens.Tickets.Writer do
     end
   end
 
-  defp assignment_events(ticket, slug, now, by) do
+  defp assignment_events(ticket, slug, now, by, via_role) do
     [
-      %{
-        "ts" => now,
-        "event" => "assigned",
-        "by" => by,
-        "ticket_id" => ticket.id,
-        "to" => [slug]
-      },
+      ticket
+      |> assigned_event(slug, now, by)
+      |> put_optional("via_role", via_role)
+      |> put_optional("body", role_assignment_body(slug, via_role)),
       transition_event("state_change", "open", "in_progress", ticket.id, now, by),
       %{
         "ts" => now,
@@ -378,16 +424,29 @@ defmodule Babs.Citizens.Tickets.Writer do
     ]
   end
 
-  defp assignment_events(ticket, slug, now, by, "direct_cli", turn) do
+  defp assignment_events(ticket, slug, now, by, "direct_cli", turn, via_role) do
     ticket = %{ticket | assignees: [slug]}
 
-    assignment_events(ticket, slug, now, by) ++
+    assignment_events(ticket, slug, now, by, via_role) ++
       turn_created_events(ticket, now, by, turn) ++
       [turn_delivery_attempted_event(ticket, now, turn, slug, delivery_backend: "direct_cli")]
   end
 
-  defp assignment_events(ticket, slug, now, by, _backend, _turn),
-    do: assignment_events(ticket, slug, now, by)
+  defp assignment_events(ticket, slug, now, by, _backend, _turn, via_role),
+    do: assignment_events(ticket, slug, now, by, via_role)
+
+  defp assigned_event(ticket, slug, now, by) do
+    %{
+      "ts" => now,
+      "event" => "assigned",
+      "by" => by,
+      "ticket_id" => ticket.id,
+      "to" => [slug]
+    }
+  end
+
+  defp role_assignment_body(_slug, nil), do: nil
+  defp role_assignment_body(slug, via_role), do: "assigned to #{slug} via role #{via_role}"
 
   defp unassign_events(original, updated, slug, now, by) do
     events = [
@@ -1103,6 +1162,11 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp require_assignees(%{id: id, assignees: assignees}) do
     if assignees == [], do: {:error, {:no_assignees, id}}, else: :ok
   end
+
+  defp ensure_role_routable(%{id: id, assignees: [_slug | _rest]}),
+    do: {:error, {:role_route_already_assigned, id}}
+
+  defp ensure_role_routable(_ticket), do: :ok
 
   defp ensure_commentable(%{state: state, id: id}) when state in ["closed", "cancelled"],
     do: {:error, {:terminal_ticket, id, state}}

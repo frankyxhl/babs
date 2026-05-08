@@ -112,32 +112,53 @@ defmodule BabsWeb.TicketsLiveTest do
   end
 
   test "new ticket form creates a ticket and redirects to detail", %{root: root} do
-    {:ok, view, _html} = live(build_conn(), "/tickets/new?socket_token=token-1")
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+      Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", roles: ["developer"]})
 
-    assert {:error, {:redirect, %{to: to}}} =
-             view
-             |> form("[data-testid='new-ticket-form']",
-               ticket: %{
-                 title: "UI new ticket",
-                 body: "Created from the browser.",
-                 priority: "high"
-               }
-             )
-             |> render_submit()
+      {:ok, view, _html} = live(build_conn(), "/tickets/new?socket_token=token-1")
 
-    assert to =~ ~r(\A/tickets/T-\d{4}-\d{2}-\d{2}-\d{3}\?socket_token=token-1\z)
+      assert {:error, {:redirect, %{to: to}}} =
+               view
+               |> form("[data-testid='new-ticket-form']",
+                 ticket: %{
+                   title: "UI new ticket",
+                   body: "Created from the browser.",
+                   priority: "high",
+                   assignee_role: "developer"
+                 }
+               )
+               |> render_submit()
 
-    id =
-      to
-      |> URI.parse()
-      |> Map.fetch!(:path)
-      |> Path.basename()
+      assert to =~ ~r(\A/tickets/T-\d{4}-\d{2}-\d{2}-\d{3}\?socket_token=token-1\z)
 
-    assert File.exists?(Path.join(root, "#{id}.md"))
-    assert {:ok, %{ticket: ticket}} = Api.show_ticket(id, tickets_root: root)
-    assert ticket.title == "UI new ticket"
-    assert ticket.body == "Created from the browser."
-    assert ticket.priority == "high"
+      id =
+        to
+        |> URI.parse()
+        |> Map.fetch!(:path)
+        |> Path.basename()
+
+      assert File.exists?(Path.join(root, "#{id}.md"))
+      assert {:ok, %{ticket: ticket}} = Api.show_ticket(id, tickets_root: root)
+      assert ticket.title == "UI new ticket"
+      assert ticket.body == "Created from the browser."
+      assert ticket.priority == "high"
+      assert ticket.assignee_role == "developer"
+    end)
+  end
+
+  test "new ticket form lists known role labels from non-stale citizens" do
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+      Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", roles: ["developer"]})
+      Babs.Citizens.RepoCase.insert_citizen!(%{slug: "json", roles: ["json-only"]})
+
+      {:ok, _view, html} = live(build_conn(), "/tickets/new")
+
+      assert html =~ ~s(data-testid="ticket-assignee-role")
+      assert html =~ ~s(value="developer")
+      refute html =~ ~s(value="json-only")
+    end)
   end
 
   test "new ticket form renders blank field validation without creating a file", %{root: root} do
@@ -375,6 +396,49 @@ defmodule BabsWeb.TicketsLiveTest do
     assert html =~ ~s(data-icon="undo")
   end
 
+  test "role route action assigns through assignee_role", %{root: root} do
+    parent = self()
+
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "clare",
+        display_name: "Clare",
+        ticket_backend: "hardline",
+        roles: ["developer"]
+      })
+
+      Application.put_env(:babs_citizens, :ticket_runtime_opts,
+        citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+        pane_lookup: fn "clare" -> {:ok, self()} end,
+        pane_injector: fn "clare", prompt ->
+          send(parent, {:role_injected, prompt})
+          :ok
+        end
+      )
+
+      ticket =
+        create_ticket!(root, "Role assignable", "Route this by role.", assignee_role: "developer")
+
+      {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+      assert html =~ ~s(data-testid="ticket-assign-role-developer")
+      assert html =~ ~s(data-icon="route")
+
+      view
+      |> element(~s(button[data-testid="ticket-assign-role-developer"]))
+      |> render_click()
+
+      assert_receive {:role_injected, prompt}
+      assert prompt =~ "Route this by role."
+
+      html = render_async(view, 1_000)
+      assert html =~ "Assigned by role developer"
+      assert html =~ ~s(data-testid="ticket-unassign-clare")
+      assert html =~ "assigned to clare via role developer"
+    end)
+  end
+
   test "ticket assignment options exclude stale SQLite-only citizens", %{root: root} do
     config_root = Babs.Citizens.RepoCase.tmp_root!()
     previous_babs_root = Application.get_env(:babs_citizens, :root)
@@ -604,7 +668,7 @@ defmodule BabsWeb.TicketsLiveTest do
   defp create_ticket!(root, title, body, opts \\ []) do
     attrs =
       opts
-      |> Keyword.take([:state, :assignees, :priority])
+      |> Keyword.take([:state, :assignees, :priority, :assignee_role])
       |> Enum.into(%{title: title, body: body})
 
     api_opts =
@@ -634,5 +698,23 @@ defmodule BabsWeb.TicketsLiveTest do
     File.rm_rf!(root)
     File.mkdir_p!(root)
     root
+  end
+
+  defp with_role_catalog(fun) do
+    config_root = Babs.Citizens.RepoCase.tmp_root!()
+    previous_root = Application.get_env(:babs_citizens, :root)
+    Application.put_env(:babs_citizens, :root, config_root)
+
+    try do
+      fun.(config_root)
+    after
+      File.rm_rf!(config_root)
+
+      if previous_root do
+        Application.put_env(:babs_citizens, :root, previous_root)
+      else
+        Application.delete_env(:babs_citizens, :root)
+      end
+    end
   end
 end

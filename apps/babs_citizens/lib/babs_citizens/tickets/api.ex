@@ -63,6 +63,17 @@ defmodule Babs.Citizens.Tickets.Api do
     end
   end
 
+  @spec assign_ticket_by_role(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def assign_ticket_by_role(id, opts \\ []) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.assign_by_role(pid, id, opts)
+    end
+  end
+
   @spec unassign_ticket(String.t(), String.t(), keyword()) :: {:ok, map()} | {:error, term()}
   def unassign_ticket(id, slug, opts \\ []) when is_binary(slug) do
     with :ok <- TicketId.validate(id),
