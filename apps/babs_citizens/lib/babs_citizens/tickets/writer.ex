@@ -2375,7 +2375,7 @@ defmodule Babs.Citizens.Tickets.Writer do
           trimmed == "" ->
             {:error, {:invalid_comment_author, value}}
 
-          trimmed == "user" or CitizenConfig.valid_slug?(trimmed) ->
+          trimmed == "user" or CitizenConfig.valid_slug?(trimmed) or remote_actor?(trimmed) ->
             {:ok, trimmed}
 
           true ->
@@ -2386,6 +2386,9 @@ defmodule Babs.Citizens.Tickets.Writer do
         {:error, {:invalid_comment_author, fetch_attr(attrs, :by)}}
     end
   end
+
+  defp remote_actor?("remote:" <> peer_id), do: CitizenConfig.valid_slug?(peer_id)
+  defp remote_actor?(_value), do: false
 
   defp reject_feedback(value) when is_binary(value) do
     case String.trim(value) do

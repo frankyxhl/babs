@@ -1,6 +1,9 @@
 defmodule Babs.Citizens.Federation.PeerClient do
   @moduledoc """
-  Read-only HTTP client for configured Babs peers.
+  HTTP client for configured Babs peers.
+
+  Read helpers build remote snapshots for federation UI. Mutating helpers send
+  capability-gated operator requests to the receiving node.
   """
 
   alias Babs.Citizens.Federation.Config
@@ -39,7 +42,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
          peer_name: peer.name,
          peer_url: peer.url,
          status: :fresh,
-         read_only?: true,
+         read_only?: read_only?(peer),
          capabilities: peer.capabilities,
          fetched_at: now,
          node: node,
@@ -53,6 +56,58 @@ defmodule Babs.Citizens.Federation.PeerClient do
       {:error, reason} ->
         {:ok, fallback_snapshot(peer, reason, now, opts)}
     end
+  end
+
+  def comment_ticket(peer, id, body, opts \\ []) when is_binary(id) and is_binary(body) do
+    post_json(peer, "/api/v1/tickets/#{path_segment(id)}/comments", %{"body" => body}, opts)
+  end
+
+  def transition_ticket(peer, id, to_state, opts \\ [])
+      when is_binary(id) and is_binary(to_state) do
+    post_json(
+      peer,
+      "/api/v1/tickets/#{path_segment(id)}/transitions",
+      %{"to" => to_state},
+      opts
+    )
+  end
+
+  def assign_ticket(peer, id, slug, opts \\ [])
+      when is_binary(id) and is_binary(slug) do
+    post_json(
+      peer,
+      "/api/v1/tickets/#{path_segment(id)}/assignments",
+      %{"slug" => slug},
+      opts
+    )
+  end
+
+  def unassign_ticket(peer, id, slug, opts \\ [])
+      when is_binary(id) and is_binary(slug) do
+    delete_json(
+      peer,
+      "/api/v1/tickets/#{path_segment(id)}/assignments/#{path_segment(slug)}",
+      opts
+    )
+  end
+
+  def inject_citizen(peer, slug, data, opts \\ []) when is_binary(slug) and is_binary(data) do
+    post_json(
+      peer,
+      "/api/v1/citizens/#{path_segment(slug)}/injections",
+      %{"data" => data},
+      opts
+    )
+  end
+
+  def lifecycle_citizen(peer, slug, action, opts \\ [])
+      when is_binary(slug) and is_binary(action) do
+    post_json(
+      peer,
+      "/api/v1/citizens/#{path_segment(slug)}/lifecycle",
+      %{"action" => action},
+      opts
+    )
   end
 
   defp node_payload(%{"node" => node}) when is_map(node), do: {:ok, node}
@@ -131,6 +186,53 @@ defmodule Babs.Citizens.Federation.PeerClient do
     end
   end
 
+  defp post_json(peer, path, payload, opts) do
+    with {:ok, body} <- Jason.encode(payload) do
+      request_json(peer, :post, path, body, opts)
+    end
+  end
+
+  defp delete_json(peer, path, opts) do
+    request_json(peer, :delete, path, "", opts)
+  end
+
+  defp request_json(peer, method, path, body, opts) do
+    url = peer.url |> String.trim_trailing("/") |> Kernel.<>(path)
+    timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
+
+    with {:ok, headers} <- request_headers(opts),
+         {:ok, %{status: status, body: response_body}} <-
+           http_request(http_client(opts), method, url, headers, body, timeout: timeout) do
+      if status >= 200 and status < 300 do
+        case Jason.decode(response_body) do
+          {:ok, decoded} when is_map(decoded) -> {:ok, decoded}
+          {:ok, _decoded} -> {:error, :invalid_json_shape}
+          {:error, _reason} -> {:error, :invalid_json}
+        end
+      else
+        {:error, http_status_error(status, response_body)}
+      end
+    else
+      {:error, reason} -> {:error, reason}
+      _other -> {:error, :invalid_http_response}
+    end
+  end
+
+  defp request_headers(opts) do
+    case Config.load(opts) do
+      {:ok, %{node: %{id: id}}} ->
+        {:ok,
+         [
+           {"accept", "application/json"},
+           {"content-type", "application/json"},
+           {"x-babs-peer-id", id}
+         ]}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   defp http_status_error(status, body) do
     case Jason.decode(body) do
       {:ok, %{"error" => %{"code" => code}}} when is_binary(code) ->
@@ -151,6 +253,12 @@ defmodule Babs.Citizens.Federation.PeerClient do
 
   defp http_get(client, url, opts) when is_function(client, 2), do: client.(url, opts)
   defp http_get(client, url, opts) when is_atom(client), do: client.get(url, opts)
+
+  defp http_request(client, method, url, headers, body, opts) when is_function(client, 5),
+    do: client.(method, url, headers, body, opts)
+
+  defp http_request(client, method, url, headers, body, opts) when is_atom(client),
+    do: client.request(method, url, headers, body, opts)
 
   defp fallback_snapshot(peer, reason, now, opts) do
     previous = Keyword.get(opts, :previous_snapshot)
@@ -181,7 +289,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
       peer_name: peer.name,
       peer_url: peer.url,
       status: :unreachable,
-      read_only?: true,
+      read_only?: read_only?(peer),
       capabilities: peer.capabilities,
       fetched_at: nil,
       node: %{"id" => peer.id, "name" => peer.name},
@@ -193,6 +301,12 @@ defmodule Babs.Citizens.Federation.PeerClient do
       error: redacted_error(reason)
     }
   end
+
+  defp read_only?(peer) do
+    not Enum.any?(peer.capabilities, &(&1 in ["write", "control"]))
+  end
+
+  defp path_segment(value), do: URI.encode(value, &URI.char_unreserved?/1)
 
   defp error_snapshot(status, reason, opts) do
     now = Keyword.get_lazy(opts, :now, fn -> DateTime.utc_now(:second) end)

@@ -37,7 +37,7 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
     assert snapshot.peer_id == "alpha"
     assert snapshot.peer_name == "Alpha"
     assert snapshot.status == :fresh
-    assert snapshot.read_only?
+    refute snapshot.read_only?
     assert snapshot.capabilities == ["read", "write"]
     assert snapshot.node == %{"id" => "alpha", "name" => "Alpha"}
     assert [%{"slug" => "remote-clare"}] = snapshot.citizens
@@ -58,6 +58,55 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
                name = "Local"
                """
              )
+  end
+
+  test "marks read-only snapshots only when no write/control capability is configured" do
+    http = fn url, _opts -> {:ok, %{status: 200, body: Jason.encode!(response_for(url))}} end
+
+    assert {:ok, readonly} =
+             PeerClient.fetch_first_peer(toml: read_peer_toml(), http_client: http, now: @now)
+
+    assert readonly.read_only?
+
+    assert {:ok, writable} =
+             PeerClient.fetch_first_peer(toml: write_peer_toml(), http_client: http, now: @now)
+
+    refute writable.read_only?
+  end
+
+  test "mutating helpers send local peer identity and compact JSON bodies" do
+    parent = self()
+
+    http = fn method, url, headers, body, _opts ->
+      send(parent, {:request, method, url, headers, body})
+      {:ok, %{status: 200, body: Jason.encode!(%{"ok" => true})}}
+    end
+
+    peer = peer("alpha", "http://alpha.example")
+
+    assert {:ok, %{"ok" => true}} =
+             PeerClient.comment_ticket(peer, "T-2026-05-09-001", "Remote note",
+               toml: write_peer_toml(),
+               http_client: http
+             )
+
+    assert_receive {:request, :post,
+                    "http://alpha.example/api/v1/tickets/T-2026-05-09-001/comments", headers,
+                    body}
+
+    assert {"x-babs-peer-id", "local"} in headers
+    assert {"content-type", "application/json"} in headers
+    assert Jason.decode!(body) == %{"body" => "Remote note"}
+
+    assert {:ok, %{"ok" => true}} =
+             PeerClient.unassign_ticket(peer, "T-2026-05-09-001", "clare",
+               toml: write_peer_toml(),
+               http_client: http
+             )
+
+    assert_receive {:request, :delete,
+                    "http://alpha.example/api/v1/tickets/T-2026-05-09-001/assignments/clare",
+                    _headers, ""}
   end
 
   test "uses the previous event cursor on refresh" do
@@ -256,6 +305,41 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
     url = "http://alpha.example"
     capabilities = ["read"]
     """
+  end
+
+  defp read_peer_toml do
+    """
+    [node]
+    id = "local"
+    name = "Local"
+
+    [peers.alpha]
+    name = "Alpha"
+    url = "http://alpha.example"
+    capabilities = ["read"]
+    """
+  end
+
+  defp write_peer_toml do
+    """
+    [node]
+    id = "local"
+    name = "Local"
+
+    [peers.alpha]
+    name = "Alpha"
+    url = "http://alpha.example"
+    capabilities = ["write"]
+    """
+  end
+
+  defp peer(id, url) do
+    %Babs.Citizens.Federation.Config.Peer{
+      id: id,
+      name: String.capitalize(id),
+      url: url,
+      capabilities: ["read", "write"]
+    }
   end
 
   defp response_for("http://alpha.example/api/v1/node") do

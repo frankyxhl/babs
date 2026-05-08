@@ -56,6 +56,23 @@ defmodule Babs.Citizens.Tickets.StateMachine do
 
   def transition(%Ticket{}, to_state, _event), do: {:error, {:invalid_state, to_state}}
 
+  defp event_for("open", "cancelled", "remote_transition"), do: {:ok, "remote_transition"}
+
+  defp event_for("in_progress", "pending_approval", "remote_transition"),
+    do: {:ok, "remote_transition"}
+
+  defp event_for("in_progress", "cancelled", "remote_transition"),
+    do: {:ok, "remote_transition"}
+
+  defp event_for("pending_approval", "closed", "remote_transition"),
+    do: {:ok, "remote_transition"}
+
+  defp event_for("pending_approval", "in_progress", "remote_transition"),
+    do: {:ok, "remote_transition"}
+
+  defp event_for("pending_approval", "cancelled", "remote_transition"),
+    do: {:ok, "remote_transition"}
+
   defp event_for("open", "cancelled", event), do: require_event(event, "cancelled")
   defp event_for("in_progress", "pending_approval", nil), do: {:ok, "state_change"}
   defp event_for("in_progress", "pending_approval", "state_change"), do: {:ok, "state_change"}
