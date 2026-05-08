@@ -389,6 +389,17 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            |> Path.wildcard()
            |> length() == 3
 
+    child_ids =
+      root
+      |> Path.join("T-2026-05-08-*.md")
+      |> Path.wildcard()
+      |> Enum.map(&Path.basename(&1, ".md"))
+      |> Enum.reject(&(&1 == ticket.id))
+      |> Enum.sort()
+
+    [first_child_id | _rest] = child_ids
+    File.rm!(TicketMarkdown.history_path(root, first_child_id))
+
     assert {:ok, %{event: approved, children_created: children_created}} =
              Api.approve_mayor_proposal(ticket.id, "prop_recover_marker",
                tickets_root: root,
@@ -405,6 +416,9 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            |> Path.join("T-2026-05-08-*.md")
            |> Path.wildcard()
            |> length() == 3
+
+    assert {:ok, %{history: child_history}} = Api.show_ticket(first_child_id, tickets_root: root)
+    assert Enum.any?(child_history, &(&1["event"] == "created"))
 
     assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
 

@@ -72,5 +72,11 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:mayor_child_tickets, {:invalid_child_title, 1, :multiline}}) ==
              "Mayor proposal child 2 title cannot contain line breaks"
+
+    assert Error.message(
+             {:mayor_child_tickets,
+              {:unrecoverable_child_history, "T-2026-05-08-002", :raw_reason}}
+           ) ==
+             "Mayor proposal child Ticket T-2026-05-08-002 has invalid history and cannot be recovered"
   end
 end

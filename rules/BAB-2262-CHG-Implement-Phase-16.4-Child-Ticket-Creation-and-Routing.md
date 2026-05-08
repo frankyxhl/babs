@@ -337,6 +337,8 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Child Tickets now carry compact Mayor materialization metadata so a retry
     can recover already-written children and repair a missing root marker after
     a transient root-history append failure.
+  - Recovery now requires valid child history, repairing a missing child
+    `created` event before treating a materialized child as recoverable.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children.
   - Ticket detail renders created child Ticket links, role/inspector badges,
@@ -356,6 +358,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - GitHub Codex Review R2 found one additional actionable retry issue after a
     root-history append failure. Fixed by recovering existing materialized
     children from child Ticket metadata before allocating new child IDs.
+  - GitHub Codex Review R3 found one additional child audit-trail issue in the
+    recovery path. Fixed by requiring or repairing child `created` history
+    before recording recovered children in the root marker.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -390,6 +395,15 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Post-Codex-R2 added-line privacy scan: PASS, no matches.
   - Post-Codex-R2 validation also stabilized one test-only temporary-directory
     cleanup path that was failing after test assertions had passed.
+  - Post-Codex-R3 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 55 tests.
+  - Post-Codex-R3 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R3 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R3 `mise exec -- mix test`: PASS, 582 tests.
+  - Post-Codex-R3 `npm run test:js`: PASS, 15 tests.
+  - Post-Codex-R3 `af validate --root .`: PASS, 171 documents checked.
+  - Post-Codex-R3 `git diff --check`: PASS.
+  - Post-Codex-R3 added-line privacy scan: PASS, no matches.
 
 ---
 
@@ -402,3 +416,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Record Trinity implementation R1/R2 PASS and post-review stale-revision fix | Codex |
 | 2026-05-08 | Fix GitHub Codex R1 root-event preflight and multiline child-title findings | Codex |
 | 2026-05-08 | Fix GitHub Codex R2 missing-root-marker retry recovery finding | Codex |
+| 2026-05-08 | Fix GitHub Codex R3 child-history recovery audit finding | Codex |

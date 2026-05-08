@@ -1556,26 +1556,27 @@ defmodule Babs.Citizens.Tickets.Writer do
   end
 
   defp recover_mayor_children(root, plan, opts) do
-    existing = existing_mayor_children(root, plan, opts)
-    expected_count = length(plan.children)
+    with {:ok, existing} <- existing_mayor_children(root, plan, opts) do
+      expected_count = length(plan.children)
 
-    cond do
-      map_size(existing) == 0 ->
-        {:ok, []}
+      cond do
+        map_size(existing) == 0 ->
+          {:ok, []}
 
-      map_size(existing) == expected_count ->
-        {:ok,
-         Enum.map(plan.children, &%{child: &1, ticket: Map.fetch!(existing, &1.child_index)})}
+        map_size(existing) == expected_count ->
+          {:ok,
+           Enum.map(plan.children, &%{child: &1, ticket: Map.fetch!(existing, &1.child_index)})}
 
-      true ->
-        existing_ids =
-          existing
-          |> Map.values()
-          |> Enum.map(& &1.id)
-          |> Enum.sort()
+        true ->
+          existing_ids =
+            existing
+            |> Map.values()
+            |> Enum.map(& &1.id)
+            |> Enum.sort()
 
-        {:error,
-         {:mayor_child_tickets, {:partial_child_write, existing_ids, :missing_root_marker}}}
+          {:error,
+           {:mayor_child_tickets, {:partial_child_write, existing_ids, :missing_root_marker}}}
+      end
     end
   end
 
@@ -1583,17 +1584,40 @@ defmodule Babs.Citizens.Tickets.Writer do
     root
     |> Path.join("T-*.md")
     |> Path.wildcard()
-    |> Enum.reduce(%{}, fn path, acc ->
+    |> Enum.reduce_while({:ok, %{}}, fn path, {:ok, acc} ->
       id = Path.basename(path, ".md")
 
-      case Store.read_ticket(root, id, opts) do
-        {:ok, ticket} -> put_existing_mayor_child(acc, ticket, plan)
-        {:error, _reason} -> acc
+      case existing_mayor_child(root, id, plan, opts) do
+        {:ok, nil} ->
+          {:cont, {:ok, acc}}
+
+        {:ok, ticket} ->
+          {:cont, {:ok, Map.put(acc, materialized_child_index(ticket), ticket)}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
       end
     end)
   end
 
-  defp put_existing_mayor_child(acc, %Ticket{} = ticket, plan) do
+  defp existing_mayor_child(root, id, plan, opts) do
+    with {:ok, ticket} <- Store.read_ticket(root, id, opts),
+         true <- materialized_child?(ticket, plan),
+         :ok <- ensure_materialized_child_history(root, ticket) do
+      {:ok, ticket}
+    else
+      false ->
+        {:ok, nil}
+
+      {:error, {:not_found, _id}} ->
+        {:ok, nil}
+
+      {:error, reason} ->
+        {:error, {:mayor_child_tickets, {:unrecoverable_child_history, id, reason}}}
+    end
+  end
+
+  defp materialized_child?(%Ticket{} = ticket, plan) do
     materialization = metadata_value(ticket.metadata, "mayor_materialization")
 
     with true <- ticket.parent_ticket == plan.root_ticket_id,
@@ -1601,9 +1625,32 @@ defmodule Babs.Citizens.Tickets.Writer do
          true <- metadata_value(materialization, "proposal_id") == plan.proposal_id,
          index when is_integer(index) <- metadata_value(materialization, "child_index"),
          true <- Enum.any?(plan.children, &(&1.child_index == index)) do
-      Map.put(acc, index, ticket)
+      true
     else
-      _not_match -> acc
+      _not_match -> false
+    end
+  end
+
+  defp materialized_child_index(%Ticket{} = ticket) do
+    ticket.metadata
+    |> metadata_value("mayor_materialization")
+    |> metadata_value("child_index")
+  end
+
+  defp ensure_materialized_child_history(root, %Ticket{} = ticket) do
+    case History.read(root, ticket.id) do
+      {:ok, history} ->
+        if Enum.any?(history, &(&1["event"] == "created" and &1["ticket_id"] == ticket.id)) do
+          :ok
+        else
+          {:error, {:invalid_history, {ticket.id, 0, :missing_created_event}}}
+        end
+
+      {:error, {:invalid_history, {id, 0, :missing_history}}} when id == ticket.id ->
+        History.append(root, ticket.id, created_event(ticket))
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

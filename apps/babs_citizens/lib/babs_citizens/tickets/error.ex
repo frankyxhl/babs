@@ -100,6 +100,9 @@ defmodule Babs.Citizens.Tickets.Error do
   def message({:mayor_child_tickets, {:invalid_child_title, index, :multiline}}),
     do: "Mayor proposal child #{index + 1} title cannot contain line breaks"
 
+  def message({:mayor_child_tickets, {:unrecoverable_child_history, id, _reason}}),
+    do: "Mayor proposal child Ticket #{id} has invalid history and cannot be recovered"
+
   def message({:terminal_ticket, id, state}),
     do: "Ticket #{id} is #{state} and cannot be commented on"
 
