@@ -14,7 +14,8 @@ defmodule BabsWeb.NewCitizenLive do
     "description" => "",
     "cli_preset" => "shell",
     "ticket_backend" => "hardline",
-    "cwd" => ""
+    "cwd" => "",
+    "roles" => ""
   }
 
   @impl true
@@ -281,6 +282,16 @@ defmodule BabsWeb.NewCitizenLive do
               Cwd
               <input name="citizen[cwd]" value={@form["cwd"]} data-testid="citizen-cwd" autocomplete="off" />
               <span :if={@errors[:cwd]} class="field-error" data-testid="cwd-error">{@errors[:cwd]}</span>
+            </label>
+
+            <label class="wide">
+              <span class="label-with-icon">
+                <BabsWeb.Icon.icon name="tag" /> Roles
+              </span>
+              <textarea name="citizen[roles]" data-testid="citizen-roles">{@form["roles"]}</textarea>
+              <span :if={@errors[:roles]} class="field-error" data-testid="roles-error">
+                {@errors[:roles]}
+              </span>
             </label>
 
             <label class="wide">

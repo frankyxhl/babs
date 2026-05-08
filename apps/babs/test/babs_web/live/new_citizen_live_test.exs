@@ -41,11 +41,12 @@ defmodule BabsWeb.NewCitizenLiveTest do
     assert html =~ ~s(value="direct_cli")
     refute html =~ ~s(value="lazy_tmux")
     assert html =~ ~s(data-testid="citizen-cwd")
+    assert html =~ ~s(data-testid="citizen-roles")
     assert html =~ ~s(value="copilot-cli")
     assert html =~ "/js/live_boot.js"
   end
 
-  test "successful submit redirects to the new citizen terminal" do
+  test "successful submit sends role text and redirects to the new citizen terminal" do
     parent = self()
 
     Application.put_env(:babs, BabsWeb.NewCitizenLive,
@@ -66,7 +67,8 @@ defmodule BabsWeb.NewCitizenLiveTest do
                  description: "Created from LiveView",
                  cli_preset: "copilot-cli",
                  ticket_backend: "hardline",
-                 cwd: "ui-created"
+                 cwd: "ui-created",
+                 roles: "Developer\nInspector"
                }
              )
              |> render_submit()
@@ -78,7 +80,8 @@ defmodule BabsWeb.NewCitizenLiveTest do
                       "description" => "Created from LiveView",
                       "cli_preset" => "copilot-cli",
                       "ticket_backend" => "hardline",
-                      "cwd" => "ui-created"
+                      "cwd" => "ui-created",
+                      "roles" => "Developer\nInspector"
                     }}
   end
 
@@ -117,7 +120,8 @@ defmodule BabsWeb.NewCitizenLiveTest do
                       "description" => "Created from LiveView",
                       "cli_preset" => "copilot-cli",
                       "ticket_backend" => "direct_cli",
-                      "cwd" => "direct-created"
+                      "cwd" => "direct-created",
+                      "roles" => ""
                     }}
   end
 
@@ -168,6 +172,31 @@ defmodule BabsWeb.NewCitizenLiveTest do
     assert html =~ "is reserved"
     assert html =~ ~s(data-testid="cwd-error")
     assert html =~ "must be relative"
+  end
+
+  test "role validation errors render inline and stay on the form" do
+    Application.put_env(:babs, BabsWeb.NewCitizenLive,
+      spawner: fn _params ->
+        {:error, {:validation_failed, %{roles: "must be valid role labels"}}}
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/new")
+
+    html =
+      view
+      |> form("[data-testid='new-citizen-form']",
+        citizen: %{
+          slug: "role-error",
+          display_name: "Role Error",
+          cli_preset: "shell",
+          roles: "bad/role"
+        }
+      )
+      |> render_submit()
+
+    assert html =~ ~s(data-testid="roles-error")
+    assert html =~ "must be valid role labels"
   end
 
   test "known non-validation errors render status without leaking raw internals" do

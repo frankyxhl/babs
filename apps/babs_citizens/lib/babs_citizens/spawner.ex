@@ -4,7 +4,7 @@ defmodule Babs.Citizens.Spawner do
   """
 
   alias Babs.Citizens.Citizen.TomlWriter
-  alias Babs.Citizens.{Catalog, CitizenConfig, CitizenRecord, Lifecycle, TicketBackend}
+  alias Babs.Citizens.{Catalog, CitizenConfig, CitizenRecord, Lifecycle, Roles, TicketBackend}
 
   @reserved_slugs ~w(new edit index)
   @param_atoms %{
@@ -13,7 +13,8 @@ defmodule Babs.Citizens.Spawner do
     "description" => :description,
     "cli_preset" => :cli_preset,
     "ticket_backend" => :ticket_backend,
-    "cwd" => :cwd
+    "cwd" => :cwd,
+    "roles" => :roles
   }
   @presets %{
     "shell" => {"/bin/zsh", ["-f"], "safe_interactive"},
@@ -57,6 +58,7 @@ defmodule Babs.Citizens.Spawner do
     preset = param(params, "cli_preset") |> trim_to_nil()
     ticket_backend = param(params, "ticket_backend") |> trim_to_nil() || "hardline"
     cwd = param(params, "cwd") |> trim_to_nil()
+    roles_result = normalize_roles_param(param(params, "roles"))
 
     errors =
       %{}
@@ -65,8 +67,11 @@ defmodule Babs.Citizens.Spawner do
       |> validate_preset(preset)
       |> validate_ticket_backend(ticket_backend, preset)
       |> validate_cwd(cwd)
+      |> validate_roles(roles_result)
 
     if map_size(errors) == 0 do
+      {:ok, roles} = roles_result
+
       {:ok,
        %{
          slug: slug,
@@ -74,7 +79,8 @@ defmodule Babs.Citizens.Spawner do
          description: description,
          cli_preset: preset,
          ticket_backend: ticket_backend,
-         cwd: cwd || slug
+         cwd: cwd || slug,
+         roles: roles
        }}
     else
       {:error, {:validation_failed, errors}}
@@ -158,6 +164,37 @@ defmodule Babs.Citizens.Spawner do
       true ->
         errors
     end
+  end
+
+  defp validate_roles(errors, {:ok, _roles}), do: errors
+
+  defp validate_roles(errors, {:error, _reason}),
+    do: Map.put(errors, :roles, "must be valid role labels")
+
+  defp normalize_roles_param(nil), do: {:ok, []}
+
+  defp normalize_roles_param(value) when is_binary(value) do
+    value
+    |> split_role_text()
+    |> Roles.normalize()
+  end
+
+  defp normalize_roles_param(values) when is_list(values) do
+    values
+    |> Enum.flat_map(&split_role_value/1)
+    |> Roles.normalize()
+  end
+
+  defp normalize_roles_param(value), do: Roles.normalize(value)
+
+  defp split_role_value(value) when is_binary(value), do: split_role_text(value)
+  defp split_role_value(value), do: [value]
+
+  defp split_role_text(value) do
+    value
+    |> String.split([",", "\n"], trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp cwd_escapes_workspace?(cwd) do
@@ -249,7 +286,8 @@ defmodule Babs.Citizens.Spawner do
        ticket_backend: attrs.ticket_backend,
        cwd: resolved_cwd,
        env: %{},
-       role: nil,
+       role: Roles.legacy_first_role(attrs.roles),
+       roles: attrs.roles,
        path: toml_path
      }}
   end

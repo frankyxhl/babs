@@ -167,6 +167,26 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ "Reattach"
   end
 
+  test "renders normalized citizen role badges" do
+    insert_configured_citizen!(%{
+      slug: "multi-role",
+      display_name: "Multi Role",
+      roles: [
+        %{"name" => "developer", "skills" => ["elixir", "phoenix"]},
+        %{"name" => "inspector", "skills" => []}
+      ]
+    })
+
+    {:ok, _view, html} = live(build_conn(), "/citizens")
+
+    assert html =~ ~s(data-testid="citizen-roles-multi-role")
+    assert html =~ ~s(data-testid="citizen-role-multi-role-0")
+    assert html =~ "developer"
+    assert html =~ "elixir, phoenix"
+    assert html =~ ~s(data-testid="citizen-role-multi-role-1")
+    assert html =~ "inspector"
+  end
+
   test "hides stale SQLite-only citizens from the normal index" do
     insert_configured_citizen!(%{slug: "clare", display_name: "Clare"})
     insert_citizen!(%{slug: "json", display_name: "Json", status: "stopped"})

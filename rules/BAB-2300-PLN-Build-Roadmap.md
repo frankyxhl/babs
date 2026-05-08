@@ -312,7 +312,8 @@ after migration.
 
 **Planning doc**: `BAB-2242` PRP
 **Current status**: Approved PRP after Trinity fast-review with GLM and
-DeepSeek PASS. Phase 14.1 implementation CHG is `BAB-2251`.
+DeepSeek PASS. Phase 14.1 implementation CHG is `BAB-2251`; Phase 14.2
+implementation CHG is `BAB-2252`.
 **Scope**: Replace the earlier single-role plan with canonical multi-role
 Citizen routing. Add normalized `roles` while preserving legacy `role`
 compatibility, expose role badges and multi-role controls in the UI, and route
@@ -447,6 +448,7 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Add `BAB-2252` Phase 14.2 Citizen Role UI CHG | Codex |
 | 2026-05-08 | Add `BAB-2251` Phase 14.1 Role Model and Persistence CHG | Codex |
 | 2026-05-08 | Add `BAB-2250` Phase 13f.4 Provider Diagnostics and Redaction CHG | Codex |
 | 2026-05-08 | Add `BAB-2249` Phase 13f.3 Hardline Capability Mapping CHG | Codex |
