@@ -334,6 +334,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     cannot leave unmarked child Ticket files behind.
   - Child materialization now rejects multiline child titles before rendering
     Ticket markdown, matching the normal Ticket creation path.
+  - Child Tickets now carry compact Mayor materialization metadata so a retry
+    can recover already-written children and repair a missing root marker after
+    a transient root-history append failure.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children.
   - Ticket detail renders created child Ticket links, role/inspector badges,
@@ -350,6 +353,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     event validation occurred after child writes, and multiline child titles
     could render as truncated Markdown headings. Both were fixed with regression
     tests before the second GitHub review request.
+  - GitHub Codex Review R2 found one additional actionable retry issue after a
+    root-history append failure. Fixed by recovering existing materialized
+    children from child Ticket metadata before allocating new child IDs.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -373,12 +379,16 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added-line privacy scan: PASS after triaging the only match,
     `@socket_token`, as an existing public LiveView parameter name rather than
     a secret.
-  - Post-Codex-R1 focused ExUnit for Mayor child planning/API/Error paths:
-    PASS, 54 tests.
-  - Post-Codex-R1 `mise exec -- mix format --check-formatted`: PASS.
-  - Post-Codex-R1 `mise exec -- mix compile --warnings-as-errors`: PASS.
-  - Post-Codex-R1 `mise exec -- mix test`: PASS, 581 tests.
-  - Post-Codex-R1 validation also stabilized one test-only temporary-directory
+  - Post-Codex-R2 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 55 tests.
+  - Post-Codex-R2 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R2 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R2 `mise exec -- mix test`: PASS, 582 tests.
+  - Post-Codex-R2 `npm run test:js`: PASS, 15 tests.
+  - Post-Codex-R2 `af validate --root .`: PASS, 171 documents checked.
+  - Post-Codex-R2 `git diff --check`: PASS.
+  - Post-Codex-R2 added-line privacy scan: PASS, no matches.
+  - Post-Codex-R2 validation also stabilized one test-only temporary-directory
     cleanup path that was failing after test assertions had passed.
 
 ---
@@ -391,3 +401,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Mark Approved after Trinity plan review and record implementation/validation results | Codex |
 | 2026-05-08 | Record Trinity implementation R1/R2 PASS and post-review stale-revision fix | Codex |
 | 2026-05-08 | Fix GitHub Codex R1 root-event preflight and multiline child-title findings | Codex |
+| 2026-05-08 | Fix GitHub Codex R2 missing-root-marker retry recovery finding | Codex |

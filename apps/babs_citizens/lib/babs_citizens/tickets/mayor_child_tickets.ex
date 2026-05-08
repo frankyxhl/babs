@@ -12,7 +12,8 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
       when is_list(children) do
     assigner = mayor_assigner(state)
 
-    with {:ok, planned_children} <- child_plans(root_ticket, children, assigner) do
+    with {:ok, planned_children} <-
+           child_plans(root_ticket, children, assigner, state.proposal_id) do
       {:ok,
        %{
          proposal_id: state.proposal_id,
@@ -44,11 +45,11 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
     }
   end
 
-  defp child_plans(root_ticket, children, assigner) do
+  defp child_plans(root_ticket, children, assigner, proposal_id) do
     children
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {child, index}, {:ok, acc} ->
-      case child_plan(root_ticket, child, index, assigner) do
+      case child_plan(root_ticket, child, index, assigner, proposal_id) do
         {:ok, planned} -> {:cont, {:ok, [planned | acc]}}
         {:error, reason} -> {:halt, {:error, reason}}
       end
@@ -59,7 +60,7 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
     end
   end
 
-  defp child_plan(root_ticket, child, index, assigner) do
+  defp child_plan(root_ticket, child, index, assigner, proposal_id) do
     assignee_role = child["assignee_role"]
 
     with :ok <- validate_title(child["title"], index) do
@@ -78,7 +79,13 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
            inspector: child["inspector"] || "user",
            priority: child["priority"] || "normal",
            parent_ticket: root_ticket.id,
-           metadata: child["metadata"] || %{}
+           metadata:
+             materialization_metadata(
+               child["metadata"] || %{},
+               root_ticket.id,
+               proposal_id,
+               index
+             )
          }
        }}
     end
@@ -94,6 +101,14 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
 
   defp route?(value) when is_binary(value), do: String.trim(value) not in ["", "any"]
   defp route?(_value), do: false
+
+  defp materialization_metadata(metadata, root_ticket_id, proposal_id, index) do
+    Map.put(metadata, "mayor_materialization", %{
+      "root_ticket_id" => root_ticket_id,
+      "proposal_id" => proposal_id,
+      "child_index" => index
+    })
+  end
 
   defp mayor_assigner(%{policy: %{"mayor" => slug}}) when is_binary(slug) and slug != "",
     do: "mayor:#{slug}"

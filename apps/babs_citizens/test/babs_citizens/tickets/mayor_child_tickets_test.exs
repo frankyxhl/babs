@@ -49,6 +49,11 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
                  "quorum" => "all_pass",
                  "roles" => ["inspector"],
                  "strategy" => "single"
+               },
+               "mayor_materialization" => %{
+                 "root_ticket_id" => @ticket_id,
+                 "proposal_id" => "prop_children",
+                 "child_index" => 0
                }
              }
            }

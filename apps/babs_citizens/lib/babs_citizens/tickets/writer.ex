@@ -1494,20 +1494,43 @@ defmodule Babs.Citizens.Tickets.Writer do
          preflight_children_created <-
            MayorChildTickets.preflight_children_created_event(ticket, plan, event_opts),
          :ok <- validate_events(ticket.id, [preflight_children_created, approval]),
-         {:ok, created_children} <- create_mayor_children(root, plan, opts),
-         routed_children <- route_mayor_children(root, created_children, opts),
-         children_created <-
-           MayorChildTickets.children_created_event(ticket, plan, routed_children, event_opts),
-         events <- [children_created, approval],
-         :ok <- validate_events(ticket.id, events),
-         :ok <- append_events(root, ticket.id, events) do
-      {:ok, %{event: approval, children_created: children_created}}
+         {:ok, created_children} <- create_or_recover_mayor_children(root, plan, opts) do
+      append_materialized_mayor_children(
+        root,
+        ticket,
+        plan,
+        created_children,
+        approval,
+        event_opts,
+        opts
+      )
     else
       {:error, {:mayor_child_tickets, _reason}} = error ->
         error
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  defp append_materialized_mayor_children(
+         root,
+         ticket,
+         plan,
+         created_children,
+         approval,
+         event_opts,
+         opts
+       ) do
+    routed_children = route_mayor_children(root, created_children, opts)
+
+    children_created =
+      MayorChildTickets.children_created_event(ticket, plan, routed_children, event_opts)
+
+    events = [children_created, approval]
+
+    with :ok <- append_events(root, ticket.id, events) do
+      {:ok, %{event: approval, children_created: children_created}}
     end
   end
 
@@ -1523,6 +1546,79 @@ defmodule Babs.Citizens.Tickets.Writer do
       actual -> {:error, {:mayor_proposal_review, {:stale_proposal_revision, expected, actual}}}
     end
   end
+
+  defp create_or_recover_mayor_children(root, plan, opts) do
+    case recover_mayor_children(root, plan, opts) do
+      {:ok, []} -> create_mayor_children(root, plan, opts)
+      {:ok, children} -> {:ok, children}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp recover_mayor_children(root, plan, opts) do
+    existing = existing_mayor_children(root, plan, opts)
+    expected_count = length(plan.children)
+
+    cond do
+      map_size(existing) == 0 ->
+        {:ok, []}
+
+      map_size(existing) == expected_count ->
+        {:ok,
+         Enum.map(plan.children, &%{child: &1, ticket: Map.fetch!(existing, &1.child_index)})}
+
+      true ->
+        existing_ids =
+          existing
+          |> Map.values()
+          |> Enum.map(& &1.id)
+          |> Enum.sort()
+
+        {:error,
+         {:mayor_child_tickets, {:partial_child_write, existing_ids, :missing_root_marker}}}
+    end
+  end
+
+  defp existing_mayor_children(root, plan, opts) do
+    root
+    |> Path.join("T-*.md")
+    |> Path.wildcard()
+    |> Enum.reduce(%{}, fn path, acc ->
+      id = Path.basename(path, ".md")
+
+      case Store.read_ticket(root, id, opts) do
+        {:ok, ticket} -> put_existing_mayor_child(acc, ticket, plan)
+        {:error, _reason} -> acc
+      end
+    end)
+  end
+
+  defp put_existing_mayor_child(acc, %Ticket{} = ticket, plan) do
+    materialization = metadata_value(ticket.metadata, "mayor_materialization")
+
+    with true <- ticket.parent_ticket == plan.root_ticket_id,
+         %{} <- materialization,
+         true <- metadata_value(materialization, "proposal_id") == plan.proposal_id,
+         index when is_integer(index) <- metadata_value(materialization, "child_index"),
+         true <- Enum.any?(plan.children, &(&1.child_index == index)) do
+      Map.put(acc, index, ticket)
+    else
+      _not_match -> acc
+    end
+  end
+
+  defp metadata_value(map, key) when is_map(map) do
+    atom_key =
+      try do
+        String.to_existing_atom(key)
+      rescue
+        ArgumentError -> nil
+      end
+
+    Map.get(map, key) || (atom_key && Map.get(map, atom_key))
+  end
+
+  defp metadata_value(_value, _key), do: nil
 
   defp create_mayor_children(root, plan, opts) do
     plan.children
@@ -1631,6 +1727,11 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   defp route_mayor_child(_root, _ticket, %{route?: false}, _opts) do
     %{"status" => "not_requested"}
+  end
+
+  defp route_mayor_child(_root, %Ticket{assignees: assignees}, %{route?: true}, _opts)
+       when is_list(assignees) and assignees != [] do
+    %{"status" => "assigned", "assignees" => assignees}
   end
 
   defp route_mayor_child(root, ticket, %{route?: true}, opts) do
