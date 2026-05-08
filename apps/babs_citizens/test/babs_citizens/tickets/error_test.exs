@@ -60,5 +60,11 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:comment_notification_failed, "T-2026-05-06-001", []}) ==
              "Ticket T-2026-05-06-001 comment notification failed for one or more assignees"
+
+    assert Error.message({:mayor_proposal_review, {:invalid_policy, {:invalid_mayor, 42}}}) ==
+             "Invalid Mayor policy: {:invalid_mayor, 42}"
+
+    assert Error.message({:mayor_proposal_review, {:stale_proposal_revision, "new", "old"}}) ==
+             "Mayor proposal changed; refresh before editing again"
   end
 end

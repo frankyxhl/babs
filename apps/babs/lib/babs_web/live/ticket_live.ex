@@ -97,6 +97,72 @@ defmodule BabsWeb.TicketLive do
     end
   end
 
+  def handle_event(
+        "proposal_edit_child",
+        %{"proposal_id" => proposal_id, "child_index" => child_index, "child" => attrs} = params,
+        socket
+      ) do
+    case parse_index(child_index) do
+      {:ok, index} ->
+        {:noreply,
+         start_ticket_action(socket, {:proposal_edit_child, index}, fn ->
+           Api.revise_mayor_proposal_child(socket.assigns.id, proposal_id, index, attrs,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
+         end)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Invalid proposal child index")}
+    end
+  end
+
+  def handle_event(
+        "proposal_remove_child",
+        %{"proposal_id" => proposal_id, "child_index" => child_index} = params,
+        socket
+      ) do
+    case parse_index(child_index) do
+      {:ok, index} ->
+        {:noreply,
+         start_ticket_action(socket, {:proposal_remove_child, index}, fn ->
+           Api.remove_mayor_proposal_child(socket.assigns.id, proposal_id, index,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
+         end)}
+
+      :error ->
+        {:noreply, put_flash(socket, :error, "Invalid proposal child index")}
+    end
+  end
+
+  def handle_event("proposal_approve", %{"proposal_id" => proposal_id} = params, socket) do
+    {:noreply,
+     start_ticket_action(socket, :proposal_approve, fn ->
+       Api.approve_mayor_proposal(socket.assigns.id, proposal_id,
+         proposal_revision: Map.get(params, "proposal_revision")
+       )
+     end)}
+  end
+
+  def handle_event(
+        "proposal_reject",
+        %{"proposal_id" => proposal_id, "feedback" => feedback} = params,
+        socket
+      ) do
+    case String.trim(feedback || "") do
+      "" ->
+        {:noreply, put_flash(socket, :error, "Proposal rejection feedback is required")}
+
+      value ->
+        {:noreply,
+         start_ticket_action(socket, :proposal_reject, fn ->
+           Api.reject_mayor_proposal(socket.assigns.id, proposal_id, value,
+             proposal_revision: Map.get(params, "proposal_revision")
+           )
+         end)}
+    end
+  end
+
   @impl true
   def handle_async({:ticket_action, action}, {:ok, result}, socket) do
     {:noreply, apply_ticket_action_result(socket, action, result)}
@@ -375,6 +441,208 @@ defmodule BabsWeb.TicketLive do
             </section>
           </aside>
 
+          <div class="ticket-main-stack">
+          <section
+            :if={proposal_panel_visible?(@proposal_panel)}
+            class="ks-card proposal-panel"
+            data-testid="ticket-proposal-panel"
+          >
+            <header class="proposal-head">
+              <div>
+                <h2><BabsWeb.Icon.icon name="git-branch" /> Mayor Proposal</h2>
+                <p>Human-gated child Ticket proposal.</p>
+              </div>
+              <span class={proposal_status_badge_class(@proposal_panel.status)}>
+                <span class="dot"></span>{@proposal_panel.status}
+              </span>
+            </header>
+
+            <div :if={@proposal_panel.kind == :awaiting} class="proposal-awaiting" data-testid="ticket-proposal-awaiting">
+              <BabsWeb.Icon.icon name="clock" />
+              <div>
+                <strong>Awaiting Mayor proposal</strong>
+                <p>Mayor: {@proposal_panel.mayor}</p>
+                <ul :if={@proposal_panel.rules_refs != []} class="proposal-inline-list">
+                  <li :for={ref <- @proposal_panel.rules_refs}>{ref}</li>
+                </ul>
+              </div>
+            </div>
+
+            <div :if={@proposal_panel.kind == :invalid} class="proposal-invalid" data-testid="ticket-proposal-invalid">
+              <BabsWeb.Icon.icon name="triangle-alert" />
+              <p>{@proposal_panel.error}</p>
+            </div>
+
+            <div :if={@proposal_panel.kind == :proposal} class="proposal-review">
+              <p class="proposal-summary" data-testid="ticket-proposal-summary">
+                {@proposal_panel.summary}
+              </p>
+
+              <dl class="proposal-facts">
+                <div>
+                  <dt>Proposal</dt>
+                  <dd>{@proposal_panel.proposal_id}</dd>
+                </div>
+                <div :if={@proposal_panel.roles != []}>
+                  <dt>Roles</dt>
+                  <dd>{join_values(@proposal_panel.roles)}</dd>
+                </div>
+              </dl>
+
+              <div class="proposal-tree" data-testid="ticket-proposal-tree">
+                <div class="proposal-tree-root">
+                  <BabsWeb.Icon.icon name="git-branch" />
+                  <strong>{@ticket.id}</strong>
+                  <span>{@ticket.title}</span>
+                </div>
+                <ol>
+                  <li :for={child <- @proposal_panel.children}>
+                    <span>{child.title}</span>
+                    <span class="badge">{child.assignee_role}</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="proposal-lists">
+                <div :if={@proposal_panel.rules_refs != []}>
+                  <h3>Rule Refs</h3>
+                  <ul><li :for={ref <- @proposal_panel.rules_refs}>{ref}</li></ul>
+                </div>
+                <div :if={@proposal_panel.risks != []}>
+                  <h3>Risks</h3>
+                  <ul><li :for={risk <- @proposal_panel.risks}>{risk}</li></ul>
+                </div>
+                <div :if={@proposal_panel.questions != []}>
+                  <h3>Questions</h3>
+                  <ul><li :for={question <- @proposal_panel.questions}>{question}</li></ul>
+                </div>
+              </div>
+
+              <ol class="proposal-child-list">
+                <li
+                  :for={child <- @proposal_panel.children}
+                  class="proposal-child"
+                  data-testid={"ticket-proposal-child-#{child.index}"}
+                >
+                  <div class="proposal-child-head">
+                    <div>
+                      <strong>{child.number}. {child.title}</strong>
+                      <p>{child.body}</p>
+                    </div>
+                    <div class="proposal-child-badges">
+                      <span class="badge">{child.priority}</span>
+                      <span class="badge">{child.assignee_role}</span>
+                      <span class="badge">{child.inspector}</span>
+                    </div>
+                  </div>
+
+                  <form
+                    :if={proposal_actionable?(@proposal_panel)}
+                    class="proposal-edit-form"
+                    phx-submit="proposal_edit_child"
+                    data-testid={"ticket-proposal-edit-#{child.index}"}
+                  >
+                    <input type="hidden" name="proposal_id" value={@proposal_panel.proposal_id} />
+                    <input type="hidden" name="proposal_revision" value={@proposal_panel.revision_token} />
+                    <input type="hidden" name="child_index" value={child.index} />
+                    <label>
+                      Title
+                      <input name="child[title]" value={child.title} data-testid={"ticket-proposal-title-#{child.index}"} />
+                    </label>
+                    <label>
+                      Body
+                      <textarea name="child[body]" rows="3">{child.body}</textarea>
+                    </label>
+                    <div class="proposal-edit-grid">
+                      <label>
+                        Role
+                        <input name="child[assignee_role]" value={child.assignee_role} />
+                      </label>
+                      <label>
+                        Priority
+                        <select name="child[priority]">
+                          <option :for={priority <- ~w(low normal high urgent)} value={priority} selected={child.priority == priority}>
+                            {priority}
+                          </option>
+                        </select>
+                      </label>
+                      <label>
+                        Inspector
+                        <select name="child[inspector]">
+                          <option value="user" selected={child.inspector == "user"}>user</option>
+                          <option value="auto" selected={child.inspector == "auto"}>auto</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div class="proposal-child-actions">
+                      <button
+                        type="submit"
+                        class="ks-button"
+                        disabled={ticket_action_busy?(@ticket_action_inflight)}
+                        aria-label={"Save proposed child #{child.number}"}
+                        title={"Save proposed child #{child.number}"}
+                      >
+                        <BabsWeb.Icon.icon name="edit" /> Save
+                      </button>
+                      <button
+                        type="button"
+                        class="ks-button danger"
+                        phx-click="proposal_remove_child"
+                        phx-value-proposal_id={@proposal_panel.proposal_id}
+                        phx-value-proposal_revision={@proposal_panel.revision_token}
+                        phx-value-child_index={child.index}
+                        disabled={ticket_action_busy?(@ticket_action_inflight)}
+                        data-testid={"ticket-proposal-remove-#{child.index}"}
+                        aria-label={"Remove proposed child #{child.number}"}
+                        title={"Remove proposed child #{child.number}"}
+                      >
+                        <BabsWeb.Icon.icon name="trash" /> Remove
+                      </button>
+                    </div>
+                  </form>
+                </li>
+              </ol>
+
+              <div :if={proposal_actionable?(@proposal_panel)} class="proposal-actions">
+                <form
+                  class="proposal-reject-form"
+                  phx-submit="proposal_reject"
+                  data-testid="ticket-proposal-reject-form"
+                >
+                  <input type="hidden" name="proposal_id" value={@proposal_panel.proposal_id} />
+                  <input type="hidden" name="proposal_revision" value={@proposal_panel.revision_token} />
+                  <textarea name="feedback" rows="3" required placeholder="Why reject this proposal?"></textarea>
+                  <button
+                    type="submit"
+                    class="ks-button danger"
+                    disabled={ticket_action_busy?(@ticket_action_inflight)}
+                    aria-label="Reject proposal"
+                    title="Reject proposal"
+                  >
+                    <BabsWeb.Icon.icon name="x" /> Reject
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  class="ks-button primary"
+                  phx-click="proposal_approve"
+                  phx-value-proposal_id={@proposal_panel.proposal_id}
+                  phx-value-proposal_revision={@proposal_panel.revision_token}
+                  disabled={ticket_action_busy?(@ticket_action_inflight)}
+                  data-testid="ticket-proposal-approve"
+                  aria-label="Approve proposal"
+                  title="Approve proposal"
+                >
+                  <BabsWeb.Icon.icon name="check" /> Approve
+                </button>
+              </div>
+
+              <p :if={@proposal_panel.feedback} class="proposal-feedback">
+                {@proposal_panel.feedback}
+              </p>
+            </div>
+          </section>
+
           <article class="chat-card" data-testid="ticket-detail-chat">
             <header class="chat-head">
             <div>
@@ -438,6 +706,7 @@ defmodule BabsWeb.TicketLive do
             </button>
           </form>
           </article>
+          </div>
         </section>
 
         <section class="ks-card">
@@ -502,6 +771,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:history, history)
         |> assign(:conversation, Conversation.from_history(history))
         |> assign(:inspection_panel, TicketPresenter.inspection_panel(ticket, history))
+        |> assign(:proposal_panel, TicketPresenter.proposal_panel(ticket, history))
         |> assign(:citizens, citizens)
         |> assign(:error, nil)
 
@@ -511,6 +781,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:history, [])
         |> assign(:conversation, Conversation.from_history([]))
         |> assign(:inspection_panel, nil)
+        |> assign(:proposal_panel, %{kind: :hidden})
         |> assign(:citizens, citizens)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
@@ -567,6 +838,15 @@ defmodule BabsWeb.TicketLive do
        when is_binary(feedback) and feedback != "",
        do: feedback
 
+  defp history_event_text(%{"event" => event, "proposal" => %{"summary" => summary}})
+       when event in [
+              "mayor_proposal_received",
+              "mayor_proposal_revised",
+              "mayor_proposal_approved",
+              "mayor_proposal_rejected"
+            ] and is_binary(summary) and summary != "",
+       do: summary
+
   defp history_event_text(_event), do: nil
 
   defp state_badge_class("open"), do: "badge open"
@@ -593,6 +873,19 @@ defmodule BabsWeb.TicketLive do
   defp inspection_badge_class("delivered"), do: "badge delivered"
   defp inspection_badge_class("pending"), do: "badge queued"
   defp inspection_badge_class(_status), do: "badge"
+
+  defp proposal_status_badge_class(:pending), do: "badge pending"
+  defp proposal_status_badge_class(:approved), do: "badge captured"
+  defp proposal_status_badge_class(:rejected), do: "badge failed"
+  defp proposal_status_badge_class(:awaiting), do: "badge queued"
+  defp proposal_status_badge_class(:invalid), do: "badge failed"
+  defp proposal_status_badge_class(_status), do: "badge"
+
+  defp proposal_panel_visible?(%{kind: :hidden}), do: false
+  defp proposal_panel_visible?(_panel), do: true
+
+  defp proposal_actionable?(%{actionable?: true}), do: true
+  defp proposal_actionable?(_panel), do: false
 
   defp join_values(values), do: Enum.join(values, ", ")
 
@@ -680,6 +973,15 @@ defmodule BabsWeb.TicketLive do
   defp ticket_action_success({:transition, to_state, _event}), do: "Moved to #{to_state}"
   defp ticket_action_success({:unassign, slug}), do: "Unassigned #{slug}"
   defp ticket_action_success({:comment, _body}), do: "Comment stored"
+
+  defp ticket_action_success({:proposal_edit_child, index}),
+    do: "Updated proposed child #{index + 1}"
+
+  defp ticket_action_success({:proposal_remove_child, index}),
+    do: "Removed proposed child #{index + 1}"
+
+  defp ticket_action_success(:proposal_approve), do: "Approved proposal"
+  defp ticket_action_success(:proposal_reject), do: "Rejected proposal"
   defp ticket_action_success(:approve), do: "Approved ticket"
   defp ticket_action_success(:reject), do: "Rejected ticket"
 
@@ -692,4 +994,14 @@ defmodule BabsWeb.TicketLive do
   defp blank_to_nil(nil), do: nil
   defp blank_to_nil(""), do: nil
   defp blank_to_nil(value), do: value
+
+  defp parse_index(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {index, ""} when index >= 0 -> {:ok, index}
+      _other -> :error
+    end
+  end
+
+  defp parse_index(value) when is_integer(value) and value >= 0, do: {:ok, value}
+  defp parse_index(_value), do: :error
 end

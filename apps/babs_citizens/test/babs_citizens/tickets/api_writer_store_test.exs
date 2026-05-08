@@ -6,6 +6,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.InspectionEvents
+  alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
 
@@ -128,6 +129,188 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
     assert Enum.map(history, & &1["event"]) == ["created", "inspection_requested"]
     assert List.last(history)["inspection_id"] == "insp_20260508000000_42"
+  end
+
+  test "mayor proposal review actions append history through the writer path" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_review", ["Build backend", "Build frontend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    first_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: revised}} =
+             Api.revise_mayor_proposal_child(
+               ticket.id,
+               "prop_review",
+               0,
+               %{title: "Build API", inspector: "auto"},
+               tickets_root: root,
+               proposal_revision: first_revision,
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert revised["event"] == "mayor_proposal_revised"
+    assert revised["proposal"]["children"] |> hd() |> Map.fetch!("title") == "Build API"
+
+    second_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: removed}} =
+             Api.remove_mayor_proposal_child(ticket.id, "prop_review", 1,
+               tickets_root: root,
+               proposal_revision: second_revision,
+               now: "2026-05-08T00:03:00Z"
+             )
+
+    assert removed["action"] == "remove_child"
+    assert length(removed["proposal"]["children"]) == 1
+
+    third_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: approved}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_review",
+               tickets_root: root,
+               proposal_revision: third_revision,
+               now: "2026-05-08T00:04:00Z"
+             )
+
+    assert approved["event"] == "mayor_proposal_approved"
+
+    assert {:error, {:mayor_proposal_review, {:already_decided, :approved}}} =
+             Api.reject_mayor_proposal(ticket.id, "prop_review", "Too broad.",
+               tickets_root: root,
+               now: "2026-05-08T00:05:00Z"
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.map(history, & &1["event"]) == [
+             "created",
+             "mayor_proposal_received",
+             "mayor_proposal_revised",
+             "mayor_proposal_revised",
+             "mayor_proposal_approved"
+           ]
+
+    assert [markdown_file] = Path.wildcard(Path.join(root, "*.md"))
+    assert Path.basename(markdown_file) == "#{ticket.id}.md"
+  end
+
+  test "mayor proposal API rejects invalid and terminal actions without appending history" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_review", ["Build backend"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    assert {:error, {:mayor_proposal_review, {:invalid_edit, _reason}}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_review", 0, %{title: " "},
+               tickets_root: root
+             )
+
+    assert {:error, {:mayor_proposal_review, {:invalid_edit, :empty_children}}} =
+             Api.remove_mayor_proposal_child(ticket.id, "prop_review", 0, tickets_root: root)
+
+    assert {:error, {:mayor_proposal_review, {:stale_proposal_id, "prop_review", "old"}}} =
+             Api.approve_mayor_proposal(ticket.id, "old", tickets_root: root)
+
+    stale_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: _revised}} =
+             Api.revise_mayor_proposal_child(ticket.id, "prop_review", 0, %{title: "Build API"},
+               tickets_root: root,
+               proposal_revision: stale_revision
+             )
+
+    assert {:error,
+            {:mayor_proposal_review,
+             {:stale_proposal_revision, _current_revision, ^stale_revision}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_review",
+               tickets_root: root,
+               proposal_revision: stale_revision
+             )
+
+    fresh_revision = proposal_revision(root, ticket.id)
+
+    assert {:ok, %{event: approved}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_review",
+               tickets_root: root,
+               proposal_revision: fresh_revision
+             )
+
+    assert approved["event"] == "mayor_proposal_approved"
+
+    assert {:error, {:mayor_proposal_review, {:already_decided, :approved}}} =
+             Api.remove_mayor_proposal_child(ticket.id, "prop_review", 0, tickets_root: root)
+
+    assert {:ok, closed} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Closed mission",
+                 body: "Already closed.",
+                 state: "closed",
+                 assignees: ["clare"],
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:01:00Z"
+             )
+
+    closed_proposal = proposal(closed.id, "prop_closed", ["Build closed"])
+
+    assert :ok =
+             Api.append_ticket_events(closed.id, [proposal_received(closed.id, closed_proposal)],
+               tickets_root: root
+             )
+
+    assert {:error, {:mayor_proposal_review, {:terminal_ticket, closed_id, "closed"}}} =
+             Api.approve_mayor_proposal(closed.id, "prop_closed", tickets_root: root)
+
+    assert closed_id == closed.id
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    assert Enum.map(history, & &1["event"]) == [
+             "created",
+             "mayor_proposal_received",
+             "mayor_proposal_revised",
+             "mayor_proposal_approved"
+           ]
   end
 
   test "create_ticket persists normalized inspection metadata" do
@@ -1591,6 +1774,61 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     File.rm_rf!(root)
     File.mkdir_p!(root)
     root
+  end
+
+  defp mayor_metadata do
+    %{
+      "mayor" => %{
+        "mode" => "propose",
+        "mayor" => "flora",
+        "rules_refs" => ["BAB-1503", "COR-1616"],
+        "max_children" => 5,
+        "allowed_roles" => ["developer", "inspector"],
+        "require_human_approval" => true
+      }
+    }
+  end
+
+  defp proposal(ticket_id, proposal_id, titles) do
+    %{
+      "proposal_id" => proposal_id,
+      "root_ticket_id" => ticket_id,
+      "summary" => "Split the work.",
+      "rules_refs_used" => ["BAB-1503"],
+      "children" =>
+        Enum.map(titles, fn title ->
+          %{
+            "title" => title,
+            "body" => "Complete #{title}.",
+            "type" => "assignment",
+            "priority" => "normal",
+            "assignee_role" => "developer",
+            "inspector" => "user",
+            "metadata" => %{}
+          }
+        end),
+      "risks" => ["Keep slices small."],
+      "questions" => []
+    }
+  end
+
+  defp proposal_received(ticket_id, proposal) do
+    %{
+      "ts" => "2026-05-08T00:01:00Z",
+      "event" => "mayor_proposal_received",
+      "by" => "flora",
+      "ticket_id" => ticket_id,
+      "proposal_id" => proposal["proposal_id"],
+      "proposal" => proposal
+    }
+  end
+
+  defp proposal_revision(root, ticket_id) do
+    assert {:ok, %{ticket: ticket, history: history}} =
+             Api.show_ticket(ticket_id, tickets_root: root)
+
+    assert {:ok, state} = MayorProposalReview.from_history(ticket, history)
+    state.revision_token
   end
 
   defp with_role_catalog(fun) do
