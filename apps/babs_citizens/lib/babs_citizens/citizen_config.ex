@@ -3,6 +3,8 @@ defmodule Babs.Citizens.CitizenConfig do
   Runtime configuration for one Phase 1 Citizen seed.
   """
 
+  @type role :: %{required(String.t()) => String.t() | [String.t()]}
+
   @enforce_keys [:id, :slug, :display_name, :cli, :cwd]
   @type t :: %__MODULE__{
           id: String.t(),
@@ -16,6 +18,7 @@ defmodule Babs.Citizens.CitizenConfig do
           ticket_backend: String.t(),
           env: %{optional(String.t()) => String.t()},
           role: map() | String.t() | nil,
+          roles: [role()],
           path: String.t() | nil
         }
 
@@ -31,6 +34,7 @@ defmodule Babs.Citizens.CitizenConfig do
     ticket_backend: "hardline",
     env: %{},
     role: nil,
+    roles: [],
     path: nil
   ]
 end

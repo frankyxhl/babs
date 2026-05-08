@@ -19,6 +19,7 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
       ticket_backend: "direct_cli",
       cwd: Path.join(workspace_root, "toml-cwd"),
       env: %{},
+      roles: [],
       role: nil
     }
 
@@ -45,6 +46,40 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
     assert loaded.cli_args == []
     assert loaded.ticket_backend == "direct_cli"
     assert loaded.cwd == Path.join(workspace_root, "toml-cwd")
+    assert loaded.roles == []
+  end
+
+  test "writes canonical roles and legacy first-role compatibility" do
+    root = tmp_root()
+    workspace_root = Path.join(root, "workspaces")
+
+    config = %CitizenConfig{
+      id: "BAB-CIT-ROLES",
+      slug: "roles",
+      display_name: "Roles",
+      cli: "/bin/zsh",
+      cli_args: [],
+      cwd: Path.join(workspace_root, "roles"),
+      env: %{},
+      roles: [
+        %{"name" => "developer", "skills" => ["elixir"]},
+        %{"name" => "inspector", "skills" => []}
+      ],
+      role: %{"name" => "developer", "skills" => ["elixir"]}
+    }
+
+    assert {:ok, path} = TomlWriter.write(config, root: root, toml_cwd: "roles")
+    content = File.read!(path)
+
+    assert content =~ "[role]"
+    assert content =~ ~s(name = "developer")
+    assert content =~ ~s(skills = ["elixir"])
+    assert content =~ "[[roles]]"
+    assert content =~ ~s(name = "inspector")
+
+    assert {:ok, loaded} = Config.load_file(path, root: root, workspace_root: workspace_root)
+    assert loaded.role == %{"name" => "developer", "skills" => ["elixir"]}
+    assert loaded.roles == config.roles
   end
 
   test "removes stale temp files and refuses to overwrite an existing final TOML" do
@@ -61,7 +96,8 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       cwd: Path.join(root, "workspaces/existing"),
-      env: %{}
+      env: %{},
+      roles: []
     }
 
     assert {:ok, path} = TomlWriter.write(config, root: root, toml_cwd: "existing")
@@ -83,7 +119,8 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       cwd: Path.join(root, "workspaces/race"),
-      env: %{}
+      env: %{},
+      roles: []
     }
 
     assert {:error, {:toml_already_exists, ^final_path}} =
@@ -111,7 +148,8 @@ defmodule Babs.Citizens.Citizen.TomlWriterTest do
       cli: "/bin/zsh",
       cli_args: ["-f"],
       cwd: Path.join(root, "workspaces/list-fail"),
-      env: %{}
+      env: %{},
+      roles: []
     }
 
     assert {:error, {:toml_temp_cleanup_failed, ^dir, :eacces}} =

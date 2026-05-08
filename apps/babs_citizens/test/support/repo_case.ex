@@ -85,7 +85,8 @@ defmodule Babs.Citizens.RepoCase do
           ticket_backend: "hardline",
           cwd: slug,
           env: %{},
-          role: nil
+          role: nil,
+          roles: nil
         },
         attrs
       )
@@ -112,7 +113,8 @@ defmodule Babs.Citizens.RepoCase do
       ~s(ticket_backend = "#{attrs.ticket_backend}"),
       ~s(cwd = "#{attrs.cwd}"),
       env_table(attrs.env),
-      role_table(attrs.role)
+      role_table(attrs.role),
+      roles_value(attrs.roles)
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
@@ -146,5 +148,27 @@ defmodule Babs.Citizens.RepoCase do
       end
 
     Enum.join(["[role]" | rows], "\n")
+  end
+
+  defp roles_value(nil), do: nil
+
+  defp roles_value(roles) when is_list(roles) do
+    if Enum.all?(roles, &is_binary/1) do
+      "roles = #{inspect(roles)}"
+    else
+      roles
+      |> Enum.map(fn %{"name" => name} = role ->
+        rows = ["name = #{inspect(name)}"]
+
+        rows =
+          case Map.fetch(role, "skills") do
+            {:ok, skills} -> rows ++ ["skills = #{inspect(skills)}"]
+            :error -> rows
+          end
+
+        Enum.join(["[[roles]]" | rows], "\n")
+      end)
+      |> Enum.join("\n")
+    end
   end
 end

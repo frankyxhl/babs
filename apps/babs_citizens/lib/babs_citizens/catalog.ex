@@ -8,7 +8,7 @@ defmodule Babs.Citizens.Catalog do
   require Logger
 
   alias Babs.Citizens.Citizen.Config, as: TomlConfig
-  alias Babs.Citizens.{CitizenConfig, CitizenRecord, ImportedHardline, Repo}
+  alias Babs.Citizens.{CitizenConfig, CitizenRecord, ImportedHardline, Repo, Roles}
 
   @sensitive_key_value ~r/("[a-z0-9_]*(?:secret|token)[a-z0-9_]*"|\b[a-z0-9_]*(?:secret|token)[a-z0-9_]*\b)(\s*(?:=>|:)\s*)("[^"]*"|[^\s,\]}]+)/i
   @sensitive_assignment ~r/\b([a-z0-9_]*(?:secret|token)[a-z0-9_]*=)([^\s,\]}]+)/i
@@ -106,7 +106,8 @@ defmodule Babs.Citizens.Catalog do
         cwd: existing.cwd,
         status: existing.status,
         metadata: existing.metadata || %{},
-        role: incoming.role,
+        role: legacy_role(incoming),
+        roles: canonical_roles(incoming),
         ticket_backend: incoming.ticket_backend || "hardline",
         is_mayor: existing.is_mayor || false,
         last_error: existing.last_error
@@ -167,7 +168,8 @@ defmodule Babs.Citizens.Catalog do
       ticket_backend: record.ticket_backend || "hardline",
       cwd: record.cwd,
       env: record.env || %{},
-      role: record.role,
+      role: record.role || Roles.legacy_first_role(record_roles(record)),
+      roles: record_roles(record),
       path: nil
     }
   end
@@ -220,8 +222,38 @@ defmodule Babs.Citizens.Catalog do
       launch_profile: config.launch_profile || "safe_interactive",
       ticket_backend: config.ticket_backend || "hardline",
       env: config.env || %{},
-      role: config.role
+      role: legacy_role(config),
+      roles: canonical_roles(config)
     }
+  end
+
+  defp canonical_roles(%CitizenConfig{} = config) do
+    case Roles.normalize(config.roles || []) do
+      {:ok, roles} when roles != [] ->
+        roles
+
+      _other ->
+        case Roles.normalize(config.role) do
+          {:ok, roles} -> roles
+          {:error, _reason} -> []
+        end
+    end
+  end
+
+  defp legacy_role(%CitizenConfig{} = config),
+    do: config.role || Roles.legacy_first_role(canonical_roles(config))
+
+  defp record_roles(%CitizenRecord{} = record) do
+    case Roles.normalize(record.roles || []) do
+      {:ok, roles} when roles != [] ->
+        roles
+
+      _other ->
+        case Roles.normalize(record.role) do
+          {:ok, roles} -> roles
+          {:error, _reason} -> []
+        end
+    end
   end
 
   defp update_status(slug_or_record, status, last_error) do

@@ -3,7 +3,7 @@ defmodule Babs.Citizens.Citizen.TomlWriter do
   Writes the flat Citizen TOML shape used by Phase 1/3 configs.
   """
 
-  alias Babs.Citizens.CitizenConfig
+  alias Babs.Citizens.{CitizenConfig, Roles}
 
   @spec write(CitizenConfig.t(), keyword()) :: {:ok, String.t()} | {:error, term()}
   def write(%CitizenConfig{} = config, opts \\ []) do
@@ -103,6 +103,9 @@ defmodule Babs.Citizens.Citizen.TomlWriter do
   end
 
   defp content(config, toml_cwd) do
+    roles = roles_for_write(config)
+    legacy_role = Roles.legacy_first_role(roles)
+
     [
       line("id", config.id),
       line("slug", config.slug),
@@ -113,8 +116,9 @@ defmodule Babs.Citizens.Citizen.TomlWriter do
       line("launch_profile", config.launch_profile || "safe_interactive"),
       line("ticket_backend", config.ticket_backend || "hardline"),
       line("cwd", toml_cwd),
-      env_table(config.env || %{}),
-      role_value(config.role)
+      role_value(legacy_role),
+      roles_value(roles),
+      env_table(config.env || %{})
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("\n")
@@ -160,6 +164,36 @@ defmodule Babs.Citizens.Citizen.TomlWriter do
       end
 
     Enum.join(["[role]" | rows], "\n")
+  end
+
+  defp roles_value([]), do: nil
+
+  defp roles_value(roles) do
+    roles
+    |> Enum.map(fn %{"name" => name, "skills" => skills} ->
+      rows = ["name = #{basic_string(name)}"]
+
+      rows =
+        case skills do
+          [] -> rows
+          skills -> rows ++ ["skills = #{array(skills)}"]
+        end
+
+      Enum.join(["[[roles]]" | rows], "\n")
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp roles_for_write(config) do
+    with {:ok, roles} when roles != [] <- Roles.normalize(config.roles || []) do
+      roles
+    else
+      _other ->
+        case Roles.normalize(config.role) do
+          {:ok, roles} -> roles
+          {:error, _reason} -> []
+        end
+    end
   end
 
   defp basic_string(value) when is_binary(value) do
