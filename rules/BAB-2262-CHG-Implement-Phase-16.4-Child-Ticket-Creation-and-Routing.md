@@ -350,6 +350,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Child recovery scans now prefilter raw Ticket frontmatter for matching
     Mayor materialization metadata, so unrelated malformed `T-*.md` files do
     not block approval.
+  - Recovered child routes now inspect child history before recording
+    `assigned`; a previous durable assignment with failed prompt delivery stays
+    a failed route in the root marker.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children; the root
     marker preserves assigned Citizen slugs and stable routing failure reasons.
@@ -381,9 +384,10 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     materialization lock issue. Fixed locally by making Writer mutation actions
     scan child materialization metadata before edit/remove/reject.
   - GitHub Codex Review R6 was explicitly allowed by the operator and found
-    two additional edge cases: root child summaries stripped routing details,
-    and unrelated malformed Ticket files could block child recovery scans.
-    Both were fixed with regression coverage.
+    three additional edge cases: root child summaries stripped routing details,
+    unrelated malformed Ticket files could block child recovery scans, and
+    recovered child routes could be marked assigned after prompt delivery
+    failed. All were fixed with regression coverage.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -448,8 +452,8 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Post-Codex-R6 `mise exec -- mix format --check-formatted`: PASS.
   - Post-Codex-R6 `mise exec -- mix compile --warnings-as-errors`: PASS.
   - Post-Codex-R6 focused ExUnit for Mayor child planning/API/Error paths:
-    PASS, 57 tests.
-  - Post-Codex-R6 `mise exec -- mix test`: PASS, 584 tests.
+    PASS, 58 tests.
+  - Post-Codex-R6 `mise exec -- mix test`: PASS, 585 tests.
   - Post-Codex-R6 `npm run test:js`: PASS, 15 tests.
   - Post-Codex-R6 `af validate --root .`: PASS, 171 documents checked.
   - Post-Codex-R6 `git diff --check`: PASS.
@@ -469,4 +473,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Fix GitHub Codex R3 child-history recovery audit finding | Codex |
 | 2026-05-08 | Fix GitHub Codex R4 materialization edit lock and stale recovery findings | Codex |
 | 2026-05-09 | Fix GitHub Codex R5 partial-materialization mutation lock finding | Codex |
-| 2026-05-09 | Fix GitHub Codex R6 routing detail persistence and unrelated invalid Ticket scan findings | Codex |
+| 2026-05-09 | Fix GitHub Codex R6 routing detail persistence, unrelated invalid Ticket scan, and recovered failed-route findings | Codex |

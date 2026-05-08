@@ -1934,9 +1934,9 @@ defmodule Babs.Citizens.Tickets.Writer do
     %{"status" => "not_requested"}
   end
 
-  defp route_mayor_child(_root, %Ticket{assignees: assignees}, %{route?: true}, _opts)
+  defp route_mayor_child(root, %Ticket{assignees: assignees} = ticket, %{route?: true}, _opts)
        when is_list(assignees) and assignees != [] do
-    %{"status" => "assigned", "assignees" => assignees}
+    recovered_route_status(root, ticket, assignees)
   end
 
   defp route_mayor_child(root, ticket, %{route?: true}, opts) do
@@ -1948,6 +1948,54 @@ defmodule Babs.Citizens.Tickets.Writer do
       {:error, reason} -> %{"status" => "failed", "reason" => error_text(reason)}
     end
   end
+
+  defp recovered_route_status(root, ticket, assignees) do
+    case History.read(root, ticket.id) do
+      {:ok, history} ->
+        case latest_recovered_route_history_status(history, assignees) do
+          {:assigned, assignees} ->
+            %{"status" => "assigned", "assignees" => assignees}
+
+          {:failed, reason} ->
+            %{"status" => "failed", "reason" => reason}
+
+          nil ->
+            %{
+              "status" => "failed",
+              "reason" => error_text({:role_route_already_assigned, ticket.id})
+            }
+        end
+
+      {:error, reason} ->
+        %{"status" => "failed", "reason" => error_text(reason)}
+    end
+  end
+
+  defp latest_recovered_route_history_status(history, assignees) do
+    history
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %{"event" => "injected", "injected_to" => injected_to} ->
+        if route_history_matches_assignee?(injected_to, assignees), do: {:assigned, assignees}
+
+      %{"event" => "injection_failed", "injected_to" => injected_to, "error" => reason}
+      when is_binary(reason) ->
+        if route_history_matches_assignee?(injected_to, assignees), do: {:failed, reason}
+
+      %{"event" => "assignment_failed", "to" => assigned_to, "error" => reason}
+      when is_binary(reason) ->
+        if route_history_matches_assignee?(assigned_to, assignees), do: {:failed, reason}
+
+      _event ->
+        nil
+    end)
+  end
+
+  defp route_history_matches_assignee?(values, assignees) when is_list(values) do
+    Enum.any?(values, &(&1 in assignees))
+  end
+
+  defp route_history_matches_assignee?(_values, _assignees), do: false
 
   defp proposal_event_opts(opts) do
     [now: now(opts), by: by(opts)]

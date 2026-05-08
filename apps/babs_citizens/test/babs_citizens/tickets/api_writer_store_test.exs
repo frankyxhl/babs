@@ -507,6 +507,85 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
            ]
   end
 
+  test "mayor proposal retry preserves failed child route after assignment injection failure" do
+    root = tmp_root()
+
+    with_role_catalog(fn config_root ->
+      Babs.Citizens.RepoCase.write_citizen_toml!(config_root, "clare")
+
+      Babs.Citizens.RepoCase.insert_citizen!(%{
+        slug: "clare",
+        display_name: "Clare",
+        roles: ["developer"]
+      })
+
+      assert {:ok, ticket} =
+               Api.create_ticket(
+                 %{
+                   type: "mission",
+                   title: "Mission root",
+                   body: "Split this mission.",
+                   metadata: mayor_metadata()
+                 },
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:00:00Z"
+               )
+
+      proposal = proposal(ticket.id, "prop_recover_failed_route", ["Build backend"])
+
+      assert :ok =
+               Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+                 tickets_root: root
+               )
+
+      history_path = TicketMarkdown.history_path(root, ticket.id)
+      File.chmod!(history_path, 0o444)
+
+      try do
+        assert {:error, {:redacted_io_error, {:append_history, _reason}}} =
+                 Api.approve_mayor_proposal(ticket.id, "prop_recover_failed_route",
+                   tickets_root: root,
+                   date: ~D[2026-05-08],
+                   now: "2026-05-08T00:02:00Z",
+                   citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+                   pane_lookup: fn "clare" -> {:ok, self()} end,
+                   pane_injector: fn "clare", _prompt -> {:error, :offline} end
+                 )
+      after
+        File.chmod!(history_path, 0o644)
+      end
+
+      [child_id] =
+        root
+        |> Path.join("T-2026-05-08-*.md")
+        |> Path.wildcard()
+        |> Enum.map(&Path.basename(&1, ".md"))
+        |> Enum.reject(&(&1 == ticket.id))
+
+      assert {:ok, %{ticket: child_ticket, history: child_history}} =
+               Api.show_ticket(child_id, tickets_root: root)
+
+      assert child_ticket.assignees == ["clare"]
+      assert Enum.any?(child_history, &match?(%{"event" => "injection_failed"}, &1))
+      refute Enum.any?(child_history, &match?(%{"event" => "injected"}, &1))
+
+      assert {:ok, %{children_created: children_created}} =
+               Api.approve_mayor_proposal(ticket.id, "prop_recover_failed_route",
+                 tickets_root: root,
+                 date: ~D[2026-05-08],
+                 now: "2026-05-08T00:03:00Z",
+                 pane_injector: fn "clare", _prompt ->
+                   flunk("failed recovered route should not be reinjected")
+                 end
+               )
+
+      assert [child] = children_created["children"]
+      assert child["routing"]["status"] == "failed"
+      assert child["routing"]["reason"] == "Ticket prompt could not be injected into clare"
+    end)
+  end
+
   test "mayor proposal approval rejects stale recovered child tickets" do
     root = tmp_root()
 
