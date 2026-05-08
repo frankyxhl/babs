@@ -5,8 +5,8 @@ defmodule Babs.Citizens.ProviderSessions do
 
   import Ecto.Query, except: [update: 2]
 
+  alias Babs.Citizens.ProviderRuntime.Diagnostics
   alias Babs.Citizens.{ProviderSession, Repo}
-  alias Babs.Citizens.DirectCli.Redactor
 
   @active_statuses ["active", "non_resumable"]
   @attr_key_map %{
@@ -92,23 +92,23 @@ defmodule Babs.Citizens.ProviderSessions do
     )
   end
 
-  def mark_non_resumable(%ProviderSession{} = session, reason) do
+  def mark_non_resumable(%ProviderSession{} = session, reason, opts \\ []) do
     update(session, %{
       status: "non_resumable",
       os_pid: nil,
       os_pgid: nil,
       started_at: nil,
-      last_error: Redactor.redact_text(inspect(reason))
+      last_error: Diagnostics.summary(reason, opts)
     })
   end
 
-  def mark_failed(%ProviderSession{} = session, reason) do
+  def mark_failed(%ProviderSession{} = session, reason, opts \\ []) do
     update(session, %{
       status: "failed",
       os_pid: nil,
       os_pgid: nil,
       started_at: nil,
-      last_error: Redactor.redact_text(inspect(reason))
+      last_error: Diagnostics.summary(reason, opts)
     })
   end
 

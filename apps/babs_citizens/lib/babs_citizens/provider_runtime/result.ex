@@ -9,6 +9,8 @@ defmodule Babs.Citizens.ProviderRuntime.Result do
   @direct_backend "direct_cli"
   @default_diagnostics %{redacted: true, summary: nil}
 
+  alias Babs.Citizens.ProviderRuntime.Diagnostics
+
   def direct_success(provider, reply, opts \\ []) when is_binary(provider) and is_binary(reply) do
     capabilities = Keyword.get(opts, :capabilities, %{"direct" => true})
 
@@ -20,6 +22,22 @@ defmodule Babs.Citizens.ProviderRuntime.Result do
       reply: reply,
       text: reply,
       diagnostics: Keyword.get(opts, :diagnostics, @default_diagnostics),
+      capabilities: capabilities,
+      raw_artifact_refs: []
+    }
+  end
+
+  def direct_failure(provider, reason, opts \\ []) when is_binary(provider) do
+    capabilities = Keyword.get(opts, :capabilities, %{"direct" => true})
+
+    %{
+      status: Diagnostics.status(reason),
+      provider: provider,
+      backend: @direct_backend,
+      provider_session_id: Keyword.get(opts, :provider_session_id),
+      reply: nil,
+      text: nil,
+      diagnostics: Diagnostics.failure(reason, opts),
       capabilities: capabilities,
       raw_artifact_refs: []
     }

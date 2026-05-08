@@ -60,6 +60,41 @@ defmodule Babs.Citizens.ProviderSessionsRepoTest do
     assert failed.last_error =~ "[REDACTED"
   end
 
+  test "mark_failed can persist standardized diagnostic summaries" do
+    assert {:ok, session} = insert_session("session-diagnostic")
+
+    assert {:ok, failed} =
+             ProviderSessions.mark_failed(
+               session,
+               {:exit_status, 2,
+                %{
+                  stdout: "raw stdout with sk-test-secret-value",
+                  stderr: "raw stderr at /home/operator/work"
+                }},
+               secret_values: ["sk-test-secret-value"]
+             )
+
+    assert failed.status == "failed"
+    assert failed.last_error == "provider exited with status 2"
+    refute failed.last_error =~ "raw stdout"
+    refute failed.last_error =~ "sk-test-secret-value"
+    refute failed.last_error =~ "/home/operator"
+  end
+
+  test "mark_non_resumable uses standardized diagnostic summaries" do
+    assert {:ok, session} = insert_session("session-non-resumable")
+
+    assert {:ok, non_resumable} =
+             ProviderSessions.mark_non_resumable(
+               session,
+               {:exit_status, 2, %{stdout: "raw stdout", stderr: "raw stderr"}}
+             )
+
+    assert non_resumable.status == "non_resumable"
+    assert non_resumable.last_error == "provider exited with status 2"
+    refute non_resumable.last_error =~ "raw stdout"
+  end
+
   test "marks stale in-flight executions failed during boot cleanup" do
     assert {:ok, session} = insert_session("session-a")
     assert {:ok, _started} = ProviderSessions.mark_started(session, %{os_pid: 12_345})

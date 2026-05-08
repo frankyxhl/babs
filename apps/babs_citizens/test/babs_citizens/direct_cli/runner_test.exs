@@ -434,6 +434,46 @@ defmodule Babs.Citizens.DirectCli.RunnerTest do
     assert failed_session.started_at == nil
   end
 
+  test "direct failure events and provider session errors share redacted diagnostics" do
+    root = tmp_root!()
+    config = %{fake_config("clare") | env: %{"OPENAI_API_KEY" => "sk-test-secret-value"}}
+    ticket = create_ticket!(root)
+
+    executor = fn _command ->
+      {:error,
+       {:exit_status, 2,
+        %{
+          stdout: "raw provider stdout sk-test-secret-value",
+          stderr: "raw provider stderr at /home/operator/work"
+        }}}
+    end
+
+    assert :ok =
+             Runner.run_turn(turn(root, ticket.id, config),
+               adapter: Fake,
+               executor: executor,
+               hardline_injector: fn _slug, _prompt, _opts -> :ok end,
+               reply_capture: fn _turn -> :ok end
+             )
+
+    failed_session = Repo.one!(ProviderSession)
+    assert failed_session.status == "failed"
+    assert failed_session.last_error == "provider exited with status 2"
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+
+    failure =
+      Enum.find(
+        history,
+        &match?(%{"event" => "turn_delivery_failed", "backend" => "direct_cli"}, &1)
+      )
+
+    assert failure["error"] == failed_session.last_error
+    refute inspect(history) =~ "sk-test-secret-value"
+    refute inspect(history) =~ "raw provider stdout"
+    refute inspect(history) =~ "/home/operator"
+  end
+
   test "falls back to hardline when direct executor exits" do
     root = tmp_root!()
     config = fake_config("dylan")

@@ -28,4 +28,21 @@ defmodule Babs.Citizens.ProviderRuntime.ResultTest do
     assert result.diagnostics == %{redacted: true, summary: nil}
     assert result.raw_artifact_refs == []
   end
+
+  test "builds normalized direct CLI failure results" do
+    result =
+      Result.direct_failure("codex", {:exit_status, 2, %{stdout: "raw", stderr: "err"}},
+        provider_session_id: "codex-thread"
+      )
+
+    assert result.status == :failed
+    assert result.provider == "codex"
+    assert result.backend == "direct_cli"
+    assert result.provider_session_id == "codex-thread"
+    assert result.reply == nil
+    assert result.text == nil
+    assert result.diagnostics.summary == "provider exited with status 2"
+    assert result.diagnostics.category == "failed"
+    assert result.raw_artifact_refs == []
+  end
 end
