@@ -9,6 +9,7 @@ defmodule Babs.Citizens.StatusSnapshot do
   """
 
   alias Babs.Citizens.{Catalog, CitizenRecord, ImportedHardline, Lifecycle, TicketBackend}
+  alias Babs.Citizens.ProviderRuntime.Inventory
 
   @known_cli_labels ~w(claude codex copilot droid pi)
 
@@ -33,6 +34,7 @@ defmodule Babs.Citizens.StatusSnapshot do
 
   defp from_record(%CitizenRecord{} = record, lookup, workspace_root) do
     {live_status, visual_state} = status(record, lookup)
+    provider_runtime = provider_runtime(record)
 
     %{
       id: record.id,
@@ -47,6 +49,11 @@ defmodule Babs.Citizens.StatusSnapshot do
       live_status: live_status,
       visual_state: visual_state,
       actions: actions(live_status),
+      provider_runtime: provider_runtime.summary,
+      provider_runtime_capabilities: provider_runtime.capabilities,
+      interactive_attach?: capability?(provider_runtime.capabilities, "interactive_attach"),
+      kill_authority?: capability?(provider_runtime.capabilities, "kill_authority"),
+      detach_authority?: capability?(provider_runtime.capabilities, "detach_authority"),
       ownership: ImportedHardline.ownership(record),
       imported?: ImportedHardline.external?(record),
       ownership_badge: ImportedHardline.badge(record),
@@ -73,6 +80,57 @@ defmodule Babs.Citizens.StatusSnapshot do
   defp actions(:stopped), do: [:start]
   defp actions(:failed), do: [:start]
   defp actions(_status), do: []
+
+  defp provider_runtime(%CitizenRecord{} = record) do
+    record
+    |> provider_runtime_config()
+    |> Inventory.for_config()
+    |> case do
+      {:ok, contract} ->
+        %{
+          summary: %{
+            provider: contract.provider,
+            backend: contract.backend,
+            ownership: contract.ownership,
+            status: contract.status
+          },
+          capabilities: contract.capabilities || %{}
+        }
+
+      {:error, _reason} ->
+        fallback_provider_runtime(record)
+    end
+  end
+
+  defp provider_runtime_config(%CitizenRecord{} = record) do
+    %{
+      ticket_backend: record.ticket_backend || "hardline",
+      cli: record.cli,
+      cli_args: record.cli_args || [],
+      metadata: record.metadata || %{}
+    }
+  end
+
+  defp fallback_provider_runtime(%CitizenRecord{} = record) do
+    %{
+      summary: %{
+        provider: nil,
+        backend: record.ticket_backend || "hardline",
+        ownership: ImportedHardline.ownership(record),
+        status: "unsupported"
+      },
+      capabilities: %{
+        "execute" => false,
+        "direct_turn" => false,
+        "resume" => false,
+        "interactive_attach" => false,
+        "kill_authority" => false,
+        "detach_authority" => false
+      }
+    }
+  end
+
+  defp capability?(capabilities, key), do: Map.get(capabilities, key) == true
 
   defp cli_label(cli, ["-f"]) when is_binary(cli) do
     if Path.basename(cli) == "zsh", do: "shell", else: custom_cli_label(cli)

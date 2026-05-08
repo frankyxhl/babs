@@ -445,6 +445,8 @@ defmodule BabsWeb.TerminalLive do
       cwd_label: "",
       last_error: nil,
       imported?: false,
+      kill_authority?: true,
+      detach_authority?: true,
       ownership_badge: nil,
       lifecycle_reminder: nil
     }
@@ -466,16 +468,14 @@ defmodule BabsWeb.TerminalLive do
   defp ownership_badge(citizen), do: Map.get(citizen, :ownership_badge)
   defp lifecycle_reminder(citizen), do: Map.get(citizen, :lifecycle_reminder)
 
-  defp button_label(citizen, :start) do
-    if Map.get(citizen, :imported?), do: "Attach", else: "Start"
-  end
+  defp button_label(citizen, :start), do: if(detach_only?(citizen), do: "Attach", else: "Start")
+  defp button_label(citizen, :stop), do: if(detach_only?(citizen), do: "Detach", else: "Stop")
 
-  defp button_label(citizen, :stop) do
-    if Map.get(citizen, :imported?), do: "Detach", else: "Stop"
-  end
+  defp button_label(citizen, :restart),
+    do: if(detach_only?(citizen), do: "Reattach", else: "Restart")
 
-  defp button_label(citizen, :restart) do
-    if Map.get(citizen, :imported?), do: "Reattach", else: "Restart"
+  defp detach_only?(citizen) do
+    Map.get(citizen, :detach_authority?) == true and Map.get(citizen, :kill_authority?) != true
   end
 
   defp lifecycle_click(slug, action) do

@@ -536,12 +536,15 @@ defmodule BabsWeb.CitizensLive do
 
   defp action?(citizen, action), do: Enum.member?(Map.get(citizen, :actions, []), action)
 
-  defp button_label(%{imported?: true}, :start), do: "Attach"
-  defp button_label(%{imported?: true}, :stop), do: "Detach"
-  defp button_label(%{imported?: true}, :restart), do: "Reattach"
-  defp button_label(_citizen, :start), do: "Start"
-  defp button_label(_citizen, :stop), do: "Stop"
-  defp button_label(_citizen, :restart), do: "Restart"
+  defp button_label(citizen, :start), do: if(detach_only?(citizen), do: "Attach", else: "Start")
+  defp button_label(citizen, :stop), do: if(detach_only?(citizen), do: "Detach", else: "Stop")
+
+  defp button_label(citizen, :restart),
+    do: if(detach_only?(citizen), do: "Reattach", else: "Restart")
+
+  defp detach_only?(citizen) do
+    Map.get(citizen, :detach_authority?) == true and Map.get(citizen, :kill_authority?) != true
+  end
 
   defp lifecycle_click(slug, action) do
     selector = lifecycle_button_selector(slug)

@@ -292,7 +292,7 @@ reply capture, restart, and imported tmux validations still pass.
 **Current status**: Approved PRP after Trinity fast-review with GLM and
 DeepSeek PASS. Phase 13f.1 implementation CHG is `BAB-2246`; the public
 provider inventory reference is `BAB-2247`; Phase 13f.2 implementation CHG is
-`BAB-2248`.
+`BAB-2248`; Phase 13f.3 implementation CHG is `BAB-2249`.
 **Scope**: Formalize the provider runtime contract before Phase 14-17 automation
 depends on provider-specific launch, resume, parsing, and capability behavior.
 The OpenClaw wrapping research is used as architecture inspiration only; Babs
@@ -446,6 +446,7 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Add `BAB-2249` Phase 13f.3 Hardline Capability Mapping CHG | Codex |
 | 2026-05-08 | Add `BAB-2248` Phase 13f.2 Direct CLI Normalized Result CHG | Codex |
 | 2026-05-08 | Add `BAB-2247` Provider Runtime Inventory reference for Phase 13f.1 | Codex |
 | 2026-05-03 | Full rewrite from earlier 5-phase plan; new 17-phase (with 6.5) Bootstrap → Flywheel structure; incorporates Trinity review (`BAB-1006`); β + γ (`BAB-1110`); ticket-everything (`BAB-1111`); multi-CLI (`BAB-1112`); v0.1 scope narrowing (`BAB-1109`) | Claude Code |
