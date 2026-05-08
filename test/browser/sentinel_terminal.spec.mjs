@@ -536,9 +536,6 @@ test("ticket role routing can be set and triggered from the browser", async ({ p
 
     await page.getByTestId("ticket-assign-role-developer").click();
 
-    await expect(page.getByTestId("ticket-flash-info")).toContainText(
-      "Assigned by role developer"
-    );
     await expect(page.getByTestId(`ticket-unassign-${slug}`)).toBeVisible();
     await expect(page.getByTestId("ticket-detail")).toContainText(
       `assigned to ${slug} via role developer`

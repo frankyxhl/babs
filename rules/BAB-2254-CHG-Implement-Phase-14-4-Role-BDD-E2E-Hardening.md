@@ -208,6 +208,15 @@ scenario command as the primary local reproduction.
     on the default port.
   - Focused E2E passed with only `BABS_E2E_BASE_URL` set:
     `BABS_CITIZENS_DB_PATH=$(mktemp ...) BABS_E2E_BASE_URL=http://127.0.0.1:4029 npm run test:e2e -- --grep "role routing"`.
+- 2026-05-08 GitHub Codex review R2:
+  - Fixed P2 Playwright config bug: an explicit non-local `BABS_E2E_BASE_URL`
+    now skips local Phoenix `webServer` startup instead of trying to bind a
+    local `80` or `443` port while waiting on the external URL.
+  - Stabilized the role-routing E2E assertion to wait on durable assignee and
+    history UI state rather than short-lived flash text.
+  - Verified explicit external base URL config does not define a local
+    `webServer`.
+  - Focused E2E passed again with only local `BABS_E2E_BASE_URL` set.
 
 ## Change History
 
@@ -218,3 +227,4 @@ scenario command as the primary local reproduction.
 | 2026-05-08 | Implemented role-flow BDD/E2E hardening with local validation results | Codex |
 | 2026-05-08 | Trinity implementation fast-review passed GLM and DeepSeek | Codex |
 | 2026-05-08 | Fixed GitHub Codex R1 P2 around `BABS_E2E_BASE_URL` port synchronization | Codex |
+| 2026-05-08 | Fixed GitHub Codex R2 P2 around explicit external E2E base URLs | Codex |

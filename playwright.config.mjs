@@ -13,8 +13,27 @@ function portFromBaseURL(url) {
   }
 }
 
+function isLocalBaseURL(url) {
+  if (!url) return true;
+
+  try {
+    const { hostname } = new URL(url);
+    return ["localhost", "127.0.0.1", "::1", "0.0.0.0"].includes(hostname);
+  } catch {
+    return true;
+  }
+}
+
 const e2ePort = process.env.BABS_E2E_PORT || portFromBaseURL(configuredBaseURL) || "4000";
 const baseURL = configuredBaseURL || `http://127.0.0.1:${e2ePort}`;
+const webServer = isLocalBaseURL(configuredBaseURL)
+  ? {
+      command: `env BABS_HTTP_PORT=${e2ePort} PORT=${e2ePort} mise exec -- mix phx.server`,
+      url: `${baseURL}/citizens/sentinel`,
+      reuseExistingServer: !process.env.CI && !process.env.BABS_E2E_PORT,
+      timeout: 30_000
+    }
+  : undefined;
 
 export default defineConfig({
   testDir: "./test/browser",
@@ -27,10 +46,5 @@ export default defineConfig({
     baseURL,
     trace: "on-first-retry"
   },
-  webServer: {
-    command: `env BABS_HTTP_PORT=${e2ePort} PORT=${e2ePort} mise exec -- mix phx.server`,
-    url: `${baseURL}/citizens/sentinel`,
-    reuseExistingServer: !process.env.CI && !process.env.BABS_E2E_PORT,
-    timeout: 30_000
-  }
+  webServer
 });
