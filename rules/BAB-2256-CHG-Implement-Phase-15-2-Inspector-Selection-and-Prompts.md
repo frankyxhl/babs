@@ -182,7 +182,7 @@ Citizens were prompted, while all actual decisions still require later Phase
 ```bash
 mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/inspector_selector_test.exs
 mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/prompt_assembler_test.exs
-mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/api_writer_store_test.exs
+mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/inspection_request_test.exs
 mise exec -- mix format --check-formatted
 mise exec -- mix compile --warnings-as-errors
 mise exec -- mix test --max-cases 1
@@ -190,7 +190,7 @@ mise exec -- mix test
 mise exec -- mix test --cover --export-coverage phase15_2 && mise exec -- mix cmd mix test.coverage
 af validate --root .
 git diff --check
-git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)'
+git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)' || true
 ```
 
 ## Results
@@ -203,6 +203,41 @@ git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)
     message scope, self-inspection behavior across explicit and role-matched
     paths, all-history `inspection_requested` tie-breaking, prompt helper
     contract, and private sanitizer reuse.
+- 2026-05-08 implementation:
+  - Added `Babs.Citizens.Tickets.InspectorSelector` for explicit and
+    role-based Inspector Citizen selection.
+  - Added `PromptAssembler.inspection_prompt/4` with visible-chat filtering,
+    structured decision contract, and private-host redaction.
+  - Added `Api.request_inspection/2` and the per-ticket Writer request path to
+    append `inspection_requested` before one `inspection_prompt_delivered` event
+    per selected inspector.
+  - The request path returns selected inspectors and generated prompt payloads
+    without parsing replies or changing Ticket state.
+- 2026-05-08 Trinity implementation review:
+  - Trinity fast-review packet:
+    `.trinity/reviews/20260508-150950-Phase-15.2-inspector-selection-implementation-diff`.
+  - GLM PASS and DeepSeek PASS; no blocking findings.
+  - Folded cheap advisories by adding regression coverage for non-`pending_approval`
+    request rejection and cross-file inspection-history tie-breaking.
+- 2026-05-08 GitHub Codex review round 1:
+  - Reviewed commit `5a0dc6fc2d`.
+  - Fixed P2 "Return sanitized inspector selections" by removing raw
+    `%CitizenRecord{}` values from returned inspector maps and adding request
+    regression coverage for records with env/metadata.
+- 2026-05-08 local validation:
+  - Focused selector, prompt, and request tests passed with 15 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed: 409 `:babs_citizens` tests
+    and 88 `:babs` tests.
+  - `mise exec -- mix test` passed: 409 `:babs_citizens` tests and 88 `:babs`
+    tests.
+  - `mise exec -- mix test --cover --export-coverage phase15_2 && mise exec -- mix cmd mix test.coverage`
+    passed: `:babs_citizens` 85.21%, `:babs` 89.27%.
+  - `af validate --root .` passed: 165 documents checked, 0 issues found.
+  - `git diff --check` passed.
+  - Added-line privacy scan found no private hostnames, private IPs, local
+    checkout paths, tokens, or secrets.
 
 ## Change History
 
@@ -210,3 +245,6 @@ git diff -U0 | rg -n '^\+.*(100\.122|wukong|/Users/frank|api_token|secret|token)
 |------|--------|----|
 | 2026-05-08 | Initial Phase 15.2 inspector selection and prompt CHG | Codex |
 | 2026-05-08 | Mark Approved after Trinity fast-review GLM and DeepSeek PASS; fold non-blocking advisories | Codex |
+| 2026-05-08 | Implement inspector selection, prompt assembly, request history path, and local validation | Codex |
+| 2026-05-08 | Record Trinity implementation review, folded advisory tests, and refreshed validation results | Codex |
+| 2026-05-08 | Record Codex P2 sanitized-inspector fix and regression coverage | Codex |

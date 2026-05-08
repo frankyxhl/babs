@@ -130,6 +130,17 @@ defmodule Babs.Citizens.Tickets.Api do
     end
   end
 
+  @spec request_inspection(String.t(), keyword()) :: {:ok, map()} | {:error, term()}
+  def request_inspection(id, opts \\ []) when is_binary(id) do
+    with :ok <- TicketId.validate(id),
+         opts <- runtime_opts(opts),
+         {:ok, root} <- Config.ensure_root(opts),
+         opts <- Keyword.put(opts, :tickets_root, root),
+         {:ok, pid} <- WriterSupervisor.start_writer(id, opts) do
+      Writer.request_inspection(pid, id, opts)
+    end
+  end
+
   defp new_ticket(id, title, body, path, attrs, opts) do
     now = Keyword.get(opts, :now, DateTime.utc_now(:second) |> DateTime.to_iso8601())
 
