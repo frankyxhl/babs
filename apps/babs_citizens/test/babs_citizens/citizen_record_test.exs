@@ -104,6 +104,20 @@ defmodule Babs.Citizens.CitizenRecordTest do
     assert record.roles == [%{"name" => "developer", "skills" => []}]
   end
 
+  test "returns normalized role names with canonical roles preferred over legacy role" do
+    record = %CitizenRecord{
+      role: "developer",
+      roles: [
+        %{"name" => "inspector", "skills" => []},
+        %{"name" => "planner", "skills" => ["triage"]}
+      ]
+    }
+
+    assert CitizenRecord.role_names(record) == ["inspector", "planner"]
+    assert CitizenRecord.role_names(%CitizenRecord{role: "Developer", roles: []}) == ["developer"]
+    assert CitizenRecord.role_names(%CitizenRecord{role: nil, roles: ["bad/role"]}) == []
+  end
+
   test "does not revalidate persisted roles on unrelated updates" do
     record = struct(CitizenRecord, %{valid_attrs() | roles: ["bad/role"]})
 

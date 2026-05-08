@@ -61,14 +61,7 @@ defmodule Babs.Citizens.Tickets.RoleRouter do
   end
 
   defp record_role_names(%CitizenRecord{} = record) do
-    record
-    |> Catalog.to_config()
-    |> Map.get(:roles, [])
-    |> Roles.normalize()
-    |> case do
-      {:ok, roles} -> Enum.map(roles, & &1["name"])
-      {:error, _reason} -> []
-    end
+    CitizenRecord.role_names(record)
   end
 
   defp execution_busy?(slug) do

@@ -3,10 +3,12 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   Builds provider-neutral, sanitized prompts for multi-turn Ticket follow-ups.
   """
 
+  alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Ticket
 
   @default_max_messages 12
+  @default_max_children 5
 
   @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
   def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
@@ -125,9 +127,175 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     |> String.trim()
   end
 
+  @spec mayor_proposal_prompt(
+          Ticket.t(),
+          [map()] | Conversation.t(),
+          map(),
+          map(),
+          [
+            CitizenRecord.t()
+          ],
+          keyword()
+        ) :: String.t()
+  def mayor_proposal_prompt(ticket, history_or_conversation, mayor, policy, citizens, opts \\ [])
+
+  def mayor_proposal_prompt(%Ticket{} = ticket, history, mayor, policy, citizens, opts)
+      when is_list(history) do
+    mayor_proposal_prompt(
+      ticket,
+      Conversation.from_history(history),
+      mayor,
+      policy,
+      citizens,
+      opts
+    )
+  end
+
+  def mayor_proposal_prompt(
+        %Ticket{} = ticket,
+        %Conversation{} = conversation,
+        mayor,
+        policy,
+        citizens,
+        opts
+      )
+      when is_map(mayor) and is_map(policy) and is_list(citizens) do
+    max_messages = Keyword.get(opts, :max_messages, @default_max_messages)
+    mayor_slug = sanitize(Map.get(mayor, :slug) || Map.get(mayor, "slug"))
+    rules_refs = string_list(policy, "rules_refs")
+    allowed_roles = string_list(policy, "allowed_roles")
+    max_children = policy_value(policy, "max_children", @default_max_children)
+
+    messages =
+      conversation.messages
+      |> Enum.reject(&(&1.role == :system))
+      |> Enum.take(-max_messages)
+      |> Enum.map_join("\n", &format_message/1)
+
+    """
+    You are #{mayor_slug}, a Babs Mayor Citizen.
+    Propose a human-reviewed child Ticket plan. Do not execute the work and do not create files.
+
+    Ticket: #{ticket.id}
+    Title: #{sanitize(ticket.title)}
+    Type: #{ticket.type}
+    State: #{ticket.state}
+    Priority: #{ticket.priority}
+    Assignees: #{Enum.join(ticket.assignees, ", ")}
+    Mayor: #{mayor_slug}
+    Max children: #{max_children}
+
+    Ticket body:
+    #{sanitize(ticket.body)}
+
+    Recent visible chat messages:
+    #{messages}
+
+    Rules refs:
+    #{format_lines(rules_refs)}
+
+    You may run `af read` or `af plan` for the rule refs when useful. Babs has not embedded full Alfred SOP bodies in this prompt.
+
+    Allowed assignee role labels:
+    #{format_lines(assignee_roles_for_prompt(allowed_roles, citizens))}
+
+    Eligible Citizens:
+    #{format_lines(Enum.map(citizens, &citizen_summary/1))}
+
+    Inspection options:
+    - user: human review
+    - auto: Inspector Council review through metadata.inspection.mode = "auto"
+
+    Reply with exactly one fenced JSON object using this shape:
+    ```json
+    {
+      "proposal_id": "prop_short_lowercase_id",
+      "root_ticket_id": "#{ticket.id}",
+      "summary": "One concise proposal summary.",
+      "rules_refs_used": [],
+      "children": [
+        {
+          "title": "Child Ticket title",
+          "body": "Child Ticket body with acceptance criteria.",
+          "type": "assignment",
+          "priority": "normal",
+          "assignee_role": "developer",
+          "metadata": {
+            "inspection": {"mode": "human"}
+          }
+        }
+      ],
+      "risks": [],
+      "questions": []
+    }
+    ```
+    """
+    |> String.trim()
+  end
+
   defp format_message(message) do
     "- #{message.ts || "unknown"} #{message.author}: #{sanitize(message.body)}"
   end
+
+  defp format_lines([]), do: "- none"
+  defp format_lines(values), do: Enum.map_join(values, "\n", &"- #{sanitize(&1)}")
+
+  defp string_list(map, key) do
+    case policy_value(map, key, []) do
+      values when is_list(values) -> values
+      _other -> []
+    end
+  end
+
+  defp policy_atom_field("rules_refs"), do: :rules_refs
+  defp policy_atom_field("allowed_roles"), do: :allowed_roles
+  defp policy_atom_field("max_children"), do: :max_children
+  defp policy_atom_field(_key), do: nil
+
+  defp policy_value(map, key, default) do
+    Map.get(map, key, Map.get(map, policy_atom_field(key), default))
+  end
+
+  defp assignee_roles_for_prompt([], citizens) do
+    citizens
+    |> Enum.flat_map(&citizen_roles/1)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp assignee_roles_for_prompt(allowed_roles, _citizens) do
+    allowed_roles
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp citizen_summary(%CitizenRecord{} = citizen) do
+    roles =
+      citizen
+      |> citizen_roles()
+      |> Enum.join(", ")
+
+    [
+      citizen.slug,
+      " (roles: ",
+      if(roles == "", do: "none", else: roles),
+      "; status: ",
+      citizen.status || "unknown",
+      "; backend: ",
+      citizen.ticket_backend || "unknown",
+      ")",
+      description(citizen.description)
+    ]
+    |> IO.iodata_to_binary()
+  end
+
+  defp citizen_summary(_citizen), do: "unknown"
+
+  defp description(nil), do: ""
+  defp description(""), do: ""
+  defp description(value), do: " - " <> sanitize(value)
+
+  defp citizen_roles(%CitizenRecord{} = citizen), do: CitizenRecord.role_names(citizen)
 
   defp drop_latest_operator_message(messages, latest_message) when is_binary(latest_message) do
     latest = String.trim(latest_message)

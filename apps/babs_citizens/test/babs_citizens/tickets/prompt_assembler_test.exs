@@ -1,6 +1,7 @@
 defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
   use ExUnit.Case, async: true
 
+  alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.Ticket
 
@@ -279,5 +280,97 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     refute prompt =~ "10.1.2.3"
     refute prompt =~ "lab-host.local"
     refute prompt =~ "super-value"
+  end
+
+  test "builds a sanitized Mayor proposal prompt with opaque rule refs" do
+    ticket = %Ticket{
+      id: "T-2026-05-08-016",
+      type: "mission",
+      state: "open",
+      assigner: "user",
+      assignees: [],
+      assignee_role: nil,
+      inspector: "user",
+      priority: "high",
+      parent_ticket: nil,
+      created_at: "2026-05-08T10:00:00Z",
+      updated_at: "2026-05-08T10:02:00Z",
+      metadata: %{},
+      title: "Mayor prompt",
+      body: "Use /Users/operator/private and 10.1.2.3 only after redaction.",
+      path: nil,
+      warnings: []
+    }
+
+    policy = %{
+      "rules_refs" => ["BAB-1503", "COR-1616"],
+      "max_children" => 5,
+      "allowed_roles" => ["developer", "inspector"]
+    }
+
+    mayor = %{
+      slug: "flora",
+      role: "mayor",
+      citizen: citizen("flora", "Flora", ["mayor"], "Mayor with token secret-value")
+    }
+
+    citizens = [
+      mayor.citizen,
+      citizen("clare", "Clare", ["developer"], "Developer on lab-host.local")
+    ]
+
+    history = [
+      %{
+        "ts" => "2026-05-08T10:01:00Z",
+        "event" => "comment",
+        "by" => "user",
+        "body" => "Split this safely."
+      }
+    ]
+
+    prompt =
+      PromptAssembler.mayor_proposal_prompt(ticket, history, mayor, policy, citizens,
+        max_messages: 5
+      )
+
+    assert prompt =~ "You are flora, a Babs Mayor Citizen."
+    assert prompt =~ "Ticket: T-2026-05-08-016"
+    assert prompt =~ "Rules refs:"
+    assert prompt =~ "- BAB-1503"
+    assert prompt =~ "- COR-1616"
+    assert prompt =~ "You may run `af read` or `af plan`"
+    assert prompt =~ "Allowed assignee role labels:"
+    assert prompt =~ "- developer"
+    assert prompt =~ "- inspector"
+    assert prompt =~ "Eligible Citizens:"
+    assert prompt =~ "clare"
+    assert prompt =~ ~s("proposal_id")
+    assert prompt =~ ~s("children")
+
+    refute prompt =~ "/Users/operator"
+    refute prompt =~ "10.1.2.3"
+    refute prompt =~ "lab-host.local"
+    refute prompt =~ "secret-value"
+    refute prompt =~ "SOP body"
+  end
+
+  defp citizen(slug, display_name, roles, description) do
+    %CitizenRecord{
+      id: "BAB-CIT-#{slug}",
+      slug: slug,
+      display_name: display_name,
+      description: description,
+      cwd: "/Users/operator/#{slug}",
+      cli: "claude",
+      cli_args: [],
+      launch_profile: "safe_interactive",
+      ticket_backend: "hardline",
+      env: %{"API_TOKEN" => "must-not-leak"},
+      status: "running",
+      metadata: %{},
+      role: List.first(roles),
+      roles: Enum.map(roles, &%{"name" => &1, "skills" => []}),
+      is_mayor: slug == "flora"
+    }
   end
 end
