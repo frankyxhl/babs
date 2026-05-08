@@ -107,21 +107,26 @@ defmodule Babs.Citizens.Tickets.InspectionPolicy do
   end
 
   defp roles_field(policy) do
-    policy
-    |> field("roles", ["inspector"])
-    |> Roles.normalize()
-    |> case do
-      {:ok, roles} ->
-        names = Enum.map(roles, & &1["name"])
+    value = field(policy, "roles", ["inspector"])
 
-        if length(names) <= @max_policy_list do
-          {:ok, names}
-        else
-          {:error, {:inspection_policy, {:too_many_roles, length(names)}}}
-        end
+    if is_list(value) do
+      value
+      |> Roles.normalize()
+      |> case do
+        {:ok, roles} ->
+          names = Enum.map(roles, & &1["name"])
 
-      {:error, reason} ->
-        {:error, {:inspection_policy, reason}}
+          if length(names) <= @max_policy_list do
+            {:ok, names}
+          else
+            {:error, {:inspection_policy, {:too_many_roles, length(names)}}}
+          end
+
+        {:error, reason} ->
+          {:error, {:inspection_policy, reason}}
+      end
+    else
+      {:error, {:inspection_policy, {:invalid_roles, value}}}
     end
   end
 

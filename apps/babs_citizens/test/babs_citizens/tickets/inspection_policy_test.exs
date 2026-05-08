@@ -64,6 +64,7 @@ defmodule Babs.Citizens.Tickets.InspectionPolicyTest do
       {%{"mode" => "manual"}, {:invalid_mode, "manual"}},
       {%{"strategy" => "committee"}, {:invalid_strategy, "committee"}},
       {%{"quorum" => "majority"}, {:unsupported_quorum, "majority"}},
+      {%{"roles" => "inspector"}, {:invalid_roles, "inspector"}},
       {%{"roles" => ["bad/role"]}, {:invalid_role_name, "bad/role"}},
       {%{"citizens" => ["BadSlug"]}, {:invalid_citizen_slug, "BadSlug"}},
       {%{"roles" => Enum.map(1..11, &"role-#{&1}")}, {:too_many_roles, 11}},

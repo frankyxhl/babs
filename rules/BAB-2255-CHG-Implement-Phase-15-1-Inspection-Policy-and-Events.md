@@ -305,6 +305,16 @@ PR.
     CI-equivalent `mix test --max-cases 1`, default full `mix test` with 398
     `:babs_citizens` tests and 88 `:babs` tests, exported coverage at
     `:babs_citizens` 84.53% and `:babs` 89.27%.
+- 2026-05-08 GitHub Codex review R5:
+  - Fixed P2 schema strictness bug: `metadata.inspection.roles` must now be a
+    list before normalization, so scalar YAML like `roles: inspector` returns a
+    nested `{:inspection_policy, {:invalid_roles, value}}` error instead of
+    being silently coerced by the shared Citizen role normalizer.
+  - Added policy and Ticket markdown regression coverage for scalar roles.
+  - Post-fix validation passed: focused inspection policy/markdown tests with
+    13 tests, CI-equivalent `mix test --max-cases 1`, default full `mix test`
+    with 399 `:babs_citizens` tests and 88 `:babs` tests, exported coverage at
+    `:babs_citizens` 84.53% and `:babs` 89.27%.
 
 ## Change History
 
@@ -321,3 +331,4 @@ PR.
 | 2026-05-08 | Fixed GitHub CI test isolation for ReattachScannerTest under max-cases 1 | Codex |
 | 2026-05-08 | Fixed GitHub Codex R3 P2 for empty inspector request events | Codex |
 | 2026-05-08 | Fixed GitHub Codex R4 P2 for create-ticket metadata normalization | Codex |
+| 2026-05-08 | Fixed GitHub Codex R5 P2 for scalar inspection roles | Codex |

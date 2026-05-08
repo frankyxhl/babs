@@ -87,6 +87,21 @@ defmodule Babs.Citizens.Tickets.TicketMarkdownTest do
              TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
   end
 
+  test "rejects scalar inspection roles with nested frontmatter error" do
+    content =
+      sample_markdown("""
+      assignees: []
+      state: open
+      metadata:
+        inspection:
+          mode: auto
+          roles: inspector
+      """)
+
+    assert {:error, {:invalid_frontmatter, {:inspection_policy, {:invalid_roles, "inspector"}}}} =
+             TicketMarkdown.parse(content, path: Path.join(tmp_root(), "#{@id}.md"))
+  end
+
   test "rejects unknown top-level frontmatter keys" do
     content =
       String.replace(sample_markdown(), "metadata: {source: test}", "metadata: {}\nextra: nope")
