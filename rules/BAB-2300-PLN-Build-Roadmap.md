@@ -373,8 +373,9 @@ tickets root with role routing metadata preserved.
 **Current status**: Approved PRP after Trinity R2 fast-review with GLM and
 DeepSeek PASS. Phase 17.1 merged via `BAB-2263` for node identity and the
 read-only federation API. Phase 17.2 merged via `BAB-2264` for real-time remote
-reads. Phase 17.3 has `BAB-2265` as the proposed implementation CHG for the
-mobile/PWA shell.
+reads. Phase 17.3 merged via `BAB-2265` for the mobile/PWA shell. Phase 17.4
+has `BAB-2266` as the proposed implementation CHG for the remote write/control
+capability gate.
 **Scope**: Build the mobile and federation product layer. Add configurable node
 identity and peer nodes, start with real-time remote reads, make Babs usable as
 an installable mobile/PWA on the Tailscale network, and add explicitly
@@ -435,7 +436,7 @@ These are aspirational. Trinity flagged that AI rework cycles + context exhausti
 ## Anti-Goals (explicit non-roadmap)
 
 - **NO Discord / Telegram / Slack adapters in v0.1.** Removed from earlier scope (D6); deferred indefinitely.
-- **NO cross-machine citizen-to-citizen A2A messaging in v0.1.** Remote UI federation starts read-only per `BAB-1109`, and Phase 17 may add explicitly configured remote write/control for the single operator over Tailscale per `BAB-2245`. There is no cross-node Citizen-to-Citizen A2A, no distributed Ticket store, and no public-internet exposure.
+- **NO cross-machine citizen-to-citizen A2A messaging in v0.1.** Remote UI federation starts read-only per `BAB-1109`, and Phase 17 adds explicitly configured remote write/control for the single operator over Tailscale per `BAB-2245`. There is no cross-node Citizen-to-Citizen A2A, no distributed Ticket store, and no public-internet exposure.
 - **NO generic non-interactive AI workflows (batch jobs).** Babs is for live, interactive citizens. Phase 13a adds a narrow direct CLI backend for Ticket turns only; background job scheduling remains a different design.
 - **NO multi-tenancy / multi-user auth.** Single-operator default; Tailscale network identity is the only auth in v0.1.
 - **NO Babs-managed model API quotas / cost tracking** in v0.1. Operator manages provider quotas externally.
@@ -518,4 +519,5 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-09 | Mark Phase 16 merged through 16.4 and add `BAB-2263` Phase 17.1 node identity/read API CHG | Codex |
 | 2026-05-09 | Mark Phase 17.1 merged and add `BAB-2264` Phase 17.2 real-time remote reads CHG | Codex |
 | 2026-05-09 | Mark Phase 17.2 merged and add `BAB-2265` Phase 17.3 mobile/PWA shell CHG | Codex |
+| 2026-05-09 | Mark Phase 17.3 merged and add `BAB-2266` Phase 17.4 remote write/control gate CHG | Codex |
 | 2026-05-08 | Add `BAB-2246` Phase 13f.1 implementation CHG for Provider Runtime Contract and inventory | Codex |

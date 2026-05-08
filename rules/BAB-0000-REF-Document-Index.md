@@ -24,7 +24,7 @@
 | 1106 | ADR | LiveView State Channels PTY Bytes |
 | 1107 | ADR | Babs Owns Tmux Session Lifecycle |
 | 1108 | ADR | Citizens Use Alfred for SOP Composition |
-| 1109 | ADR | UI Federation Only for v0.1 |
+| 1109 | ADR | UI Federation Plus Configured Operator Control for v0.1 |
 | 1110 | ADR | Two OTP Apps Plus Tmux Detach |
 | 1111 | ADR | Ticket as Universal Coordination Primitive |
 | 1112 | ADR | Multi AI CLI Citizen Configuration |
@@ -103,6 +103,7 @@
 | 2263 | CHG | Implement Phase 17.1 Node Identity and Read API |
 | 2264 | CHG | Implement Phase 17.2 Real Time Remote Reads |
 | 2265 | CHG | Implement Phase 17.3 Mobile PWA Shell |
+| 2266 | CHG | Implement Phase 17.4 Remote Write Control Gate |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

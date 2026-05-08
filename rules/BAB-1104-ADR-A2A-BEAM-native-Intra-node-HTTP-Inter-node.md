@@ -1,8 +1,8 @@
 # ADR-1104: A2A — BEAM-native Intra-node, HTTP JSON-RPC Inter-node
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-03
-**Last reviewed:** 2026-05-03
+**Last updated:** 2026-05-09
+**Last reviewed:** 2026-05-09
 **Status:** Accepted
 
 ---
@@ -11,8 +11,8 @@
 
 The intra-node A2A design **stands**. Cross-node A2A is significantly amended:
 
-- **v0.1 removes cross-node citizen-to-citizen messaging entirely.** Bidirectional HTTP JSON-RPC A2A is deferred to v0.2+. See `BAB-1109` (UI Federation Only for v0.1).
-- **v0.1 cross-node is read-only UI federation only** — Tailscale-connected nodes expose `GET /api/v1/tickets`, `GET /api/v1/citizens`, `GET /api/v1/citizens/<name>/transcript`. No write operations.
+- **v0.1 removes cross-node citizen-to-citizen messaging entirely.** Bidirectional HTTP JSON-RPC A2A is deferred to v0.2+. See `BAB-1109`.
+- **v0.1 cross-node is UI federation plus explicitly configured single-operator remote write/control** — Tailscale-connected nodes expose read APIs first, and Phase 17 may add capability-guarded remote operator actions where the receiving node's local config allows them. This is not cross-node A2A and does not create distributed Ticket state.
 - **v0.1 intra-node A2A is mediated by the Ticket system** per `BAB-1111`. Citizens coordinate via `bb ticket` CLI commands (write/comment/transition). Registry + GenServer.call remains the substrate but is wrapped, not exposed directly.
 
 The intra-node "BEAM-native" framing is the right substrate; it's just not the coordination API anymore. Operators reason about Tickets, not GenServer calls.
@@ -129,3 +129,4 @@ Use gRPC + protobuf instead of HTTP JSON-RPC.
 | 2026-05-03 | Initial version — split intra/inter, HTTP for inter (not :erpc) | Claude Code |
 | 2026-05-03 | Reframe to from-scratch (drop "Python relay migration compatibility" justification) | Claude Code |
 | 2026-05-03 | Normalize Status metadata to `Accepted`; v0.1 amendment remains authoritative in the banner | Codex |
+| 2026-05-09 | Reconcile Phase 17.4 single-operator remote write/control exception while keeping cross-node A2A deferred | Codex |
