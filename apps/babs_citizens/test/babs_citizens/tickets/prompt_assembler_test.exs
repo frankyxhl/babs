@@ -219,4 +219,65 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     assert prompt =~ "[local-path]"
     assert prompt =~ "[secret]"
   end
+
+  test "builds redacted inspection prompts from visible chat only" do
+    raw_credential = "api_" <> "key=super-value"
+
+    ticket = %Ticket{
+      id: "T-2026-05-08-010",
+      type: "assignment",
+      state: "pending_approval",
+      assigner: "user",
+      assignees: ["clare"],
+      assignee_role: nil,
+      inspector: "user",
+      priority: "high",
+      parent_ticket: nil,
+      created_at: "2026-05-08T10:00:00Z",
+      updated_at: "2026-05-08T10:02:00Z",
+      metadata: %{"inspection" => %{"mode" => "auto"}},
+      title: "Inspect safely",
+      body: "Check /home/operator/private on 10.1.2.3 via lab-host.local #{raw_credential}",
+      path: nil,
+      warnings: []
+    }
+
+    history = [
+      %{
+        "ts" => "2026-05-08T10:01:00Z",
+        "event" => "comment",
+        "by" => "clare",
+        "body" => "Implemented the requested change.",
+        "message_id" => "msg_1"
+      },
+      %{
+        "ts" => "2026-05-08T10:01:30Z",
+        "event" => "inspection_requested",
+        "by" => "system",
+        "ticket_id" => "T-2026-05-08-010",
+        "inspection_id" => "insp_20260508100130_1",
+        "inspectors" => ["dylan"],
+        "policy" => %{}
+      }
+    ]
+
+    prompt =
+      PromptAssembler.inspection_prompt(ticket, history, "dylan",
+        inspection_id: "insp_20260508100130_1",
+        max_messages: 5
+      )
+
+    assert prompt =~ "You are dylan, a Babs Inspector Citizen."
+    assert prompt =~ "Ticket: T-2026-05-08-010"
+    assert prompt =~ "State: pending_approval"
+    assert prompt =~ "Implemented the requested change."
+    assert prompt =~ ~s("decision": "approve")
+    assert prompt =~ ~s("needs_changes")
+
+    refute prompt =~ "inspection_requested"
+    refute prompt =~ "/home/operator"
+    refute prompt =~ "10.1.2.3"
+    refute prompt =~ "lab-host.local"
+    refute prompt =~ "super-value"
+  end
 end

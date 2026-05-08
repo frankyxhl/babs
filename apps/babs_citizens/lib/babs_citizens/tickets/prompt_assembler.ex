@@ -68,6 +68,63 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     |> String.trim()
   end
 
+  @spec inspection_prompt(Ticket.t(), [map()] | Conversation.t(), String.t(), keyword()) ::
+          String.t()
+  def inspection_prompt(ticket, history_or_conversation, inspector_slug, opts \\ [])
+
+  def inspection_prompt(%Ticket{} = ticket, history, inspector_slug, opts)
+      when is_list(history) do
+    inspection_prompt(ticket, Conversation.from_history(history), inspector_slug, opts)
+  end
+
+  def inspection_prompt(
+        %Ticket{} = ticket,
+        %Conversation{} = conversation,
+        inspector_slug,
+        opts
+      )
+      when is_binary(inspector_slug) do
+    inspection_id = Keyword.get(opts, :inspection_id, "")
+    max_messages = Keyword.get(opts, :max_messages, @default_max_messages)
+
+    messages =
+      conversation.messages
+      |> Enum.reject(&(&1.role == :system))
+      |> Enum.take(-max_messages)
+      |> Enum.map_join("\n", &format_message/1)
+
+    """
+    You are #{inspector_slug}, a Babs Inspector Citizen.
+    Inspect this pending-approval Ticket. Be conservative: approve only when the Ticket body and visible conversation show the acceptance criteria are satisfied.
+
+    Ticket: #{ticket.id}
+    Inspection: #{sanitize(inspection_id)}
+    Title: #{sanitize(ticket.title)}
+    State: #{ticket.state}
+    Priority: #{ticket.priority}
+    Assignees: #{Enum.join(ticket.assignees, ", ")}
+    Inspector: #{inspector_slug}
+
+    Ticket body:
+    #{sanitize(ticket.body)}
+
+    Recent visible chat messages:
+    #{messages}
+
+    Reply with exactly one fenced JSON object using this shape:
+    ```json
+    {
+      "decision": "approve",
+      "summary": "One concise sentence.",
+      "findings": []
+    }
+    ```
+
+    Allowed decision values: "approve", "reject", "needs_changes".
+    """
+    |> String.trim()
+  end
+
   defp format_message(message) do
     "- #{message.ts || "unknown"} #{message.author}: #{sanitize(message.body)}"
   end
@@ -106,6 +163,7 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     )
     |> String.replace(~r/\b192\.168\.\d{1,3}\.\d{1,3}\b/, "[private-ip]")
     |> String.replace(~r/\b172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}\b/, "[private-ip]")
+    |> String.replace(~r/\b[a-z0-9][a-z0-9-]*\.local\b/i, "[private-host]")
     |> String.replace(~r{\b(token|secret|password|api[_-]?key)(\s*[:=]\s*)[^\r\n]+}i, "[secret]")
     |> String.replace(~r{\b(token|secret|password|api[_-]?key)\s+\S+}i, "[secret]")
   end

@@ -15,6 +15,8 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.History
   alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.InspectionEvents
+  alias Babs.Citizens.Tickets.InspectorSelector
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.RoleRouter
@@ -70,6 +72,10 @@ defmodule Babs.Citizens.Tickets.Writer do
 
   def append_history_events(pid, id, events, opts \\ []) do
     GenServer.call(pid, {:append_history_events, id, events, opts}, 30_000)
+  end
+
+  def request_inspection(pid, id, opts \\ []) do
+    GenServer.call(pid, {:request_inspection, id, opts}, 30_000)
   end
 
   @impl true
@@ -260,6 +266,14 @@ defmodule Babs.Citizens.Tickets.Writer do
            :ok <- append_events(state.root, id, events) do
         :ok
       end
+
+    {:reply, result, state}
+  end
+
+  def handle_call({:request_inspection, id, opts}, _from, state) do
+    state = reset_idle(state, opts)
+
+    result = request_inspection_once(state.root, id, opts)
 
     {:reply, result, state}
   end
@@ -1111,6 +1125,84 @@ defmodule Babs.Citizens.Tickets.Writer do
     end)
   end
 
+  defp request_inspection_once(root, id, opts) do
+    with {:ok, ticket} <- Store.read_ticket(root, id, opts),
+         :ok <- ensure_pending_approval(ticket),
+         {:ok, selection} <-
+           InspectorSelector.select(ticket, Keyword.put(opts, :tickets_root, root)),
+         now <- now(opts),
+         inspection_id <- Keyword.get(opts, :inspection_id) || InspectionEvents.new_id(now),
+         history <- read_history_for_prompt(root, id),
+         {:ok, request} <-
+           inspection_request(ticket, selection, history, inspection_id, now, opts),
+         :ok <- validate_events(id, request.events),
+         :ok <- append_events(root, id, request.events) do
+      {:ok, Map.drop(request, [:events])}
+    end
+  end
+
+  defp inspection_request(ticket, selection, history, inspection_id, now, opts) do
+    inspectors = Enum.map(selection.inspectors, & &1.slug)
+
+    with {:ok, requested} <-
+           InspectionEvents.requested(ticket.id, inspection_id, selection.policy, inspectors,
+             now: now
+           ),
+         {:ok, deliveries, prompts} <-
+           inspection_prompt_deliveries(
+             ticket,
+             history,
+             selection.inspectors,
+             inspection_id,
+             now,
+             opts
+           ) do
+      {:ok,
+       %{
+         inspection_id: inspection_id,
+         policy: selection.policy,
+         inspectors: selection.inspectors,
+         prompts: prompts,
+         events: [requested | deliveries]
+       }}
+    end
+  end
+
+  defp inspection_prompt_deliveries(ticket, history, inspectors, inspection_id, now, opts) do
+    Enum.reduce_while(inspectors, {:ok, [], []}, fn inspector, {:ok, events, prompts} ->
+      turn_id = TurnIds.generate!(:turn, now)
+      attempt_id = TurnIds.generate!(:attempt, now)
+
+      prompt =
+        PromptAssembler.inspection_prompt(ticket, history, inspector.slug,
+          inspection_id: inspection_id,
+          max_messages: Keyword.get(opts, :max_messages, 12)
+        )
+
+      case InspectionEvents.prompt_delivered(
+             ticket.id,
+             inspection_id,
+             inspector.slug,
+             turn_id,
+             attempt_id,
+             now: now
+           ) do
+        {:ok, event} ->
+          prompt_info = %{
+            to: inspector.slug,
+            prompt: prompt,
+            turn_id: turn_id,
+            attempt_id: attempt_id
+          }
+
+          {:cont, {:ok, events ++ [event], prompts ++ [prompt_info]}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+  end
+
   defp read_history_for_prompt(root, ticket_id) do
     case History.read(root, ticket_id) do
       {:ok, events} ->
@@ -1316,6 +1408,11 @@ defmodule Babs.Citizens.Tickets.Writer do
     do: {:error, {:use_approve_ticket, id}}
 
   defp guard_phase11_transition(_ticket, _to_state, _event), do: :ok
+
+  defp ensure_pending_approval(%{state: "pending_approval"}), do: :ok
+
+  defp ensure_pending_approval(%{id: id, state: state}),
+    do: {:error, {:inspection_requires_human, {:not_pending_approval, id, state}}}
 
   defp require_assignees(%{id: id, assignees: assignees}) do
     if assignees == [], do: {:error, {:no_assignees, id}}, else: :ok
