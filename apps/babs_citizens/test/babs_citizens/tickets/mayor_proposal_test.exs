@@ -81,8 +81,15 @@ defmodule Babs.Citizens.Tickets.MayorProposalTest do
 
   test "rejects malformed proposals with stable reasons" do
     cases = [
+      {Map.delete(valid_payload(), "proposal_id"), {:missing_field, "proposal_id"}},
+      {Map.delete(valid_payload(), "root_ticket_id"), {:missing_field, "root_ticket_id"}},
+      {Map.delete(valid_payload(), "summary"), {:missing_field, "summary"}},
       {Map.put(valid_payload(), "proposal_id", "bad id"), {:invalid_proposal_id, "bad id"}},
+      {Map.delete(valid_payload(), "children"), {:missing_field, "children"}},
       {Map.put(valid_payload(), "children", []), :empty_children},
+      {Map.delete(valid_payload(), "rules_refs_used"), {:missing_field, "rules_refs_used"}},
+      {Map.delete(valid_payload(), "risks"), {:missing_field, "risks"}},
+      {Map.delete(valid_payload(), "questions"), {:missing_field, "questions"}},
       {Map.put(valid_payload(), "risks", Enum.map(1..11, &"risk #{&1}")), {:too_many_risks, 11}},
       {put_in(valid_payload(), ["children"], [%{"title" => "", "body" => "Body"}]),
        {:invalid_child, 0, {:blank, "title"}}},

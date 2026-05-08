@@ -103,7 +103,10 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
   defp children(payload, opts) do
     max_children = Keyword.get(opts, :max_children, @max_list)
 
-    case Map.get(payload, "children", Map.get(payload, :children)) do
+    case required_field(payload, "children") do
+      {:error, reason} ->
+        {:error, {:mayor_proposal, reason}}
+
       [] ->
         {:error, {:mayor_proposal, :empty_children}}
 
@@ -249,7 +252,10 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
   end
 
   defp required_string(map, key) do
-    case field(map, key, nil) do
+    case required_field(map, key) do
+      {:error, reason} ->
+        {:error, {:mayor_proposal, reason}}
+
       value when is_binary(value) ->
         case String.trim(value) do
           "" -> {:error, {:mayor_proposal, {:blank, key}}}
@@ -262,7 +268,10 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
   end
 
   defp string_list(map, key, error_key) do
-    case field(map, key, []) do
+    case required_field(map, key) do
+      {:error, reason} ->
+        {:error, {:mayor_proposal, reason}}
+
       values when is_list(values) ->
         values
         |> Enum.reduce_while({:ok, []}, fn value, {:ok, acc} ->
@@ -307,4 +316,12 @@ defmodule Babs.Citizens.Tickets.MayorProposal do
   end
 
   defp field(map, key, default), do: Map.get(map, key, Map.get(map, @atom_fields[key], default))
+
+  defp required_field(map, key) do
+    cond do
+      Map.has_key?(map, key) -> Map.get(map, key)
+      Map.has_key?(map, @atom_fields[key]) -> Map.get(map, @atom_fields[key])
+      true -> {:error, {:missing_field, key}}
+    end
+  end
 end

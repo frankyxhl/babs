@@ -75,8 +75,8 @@ small and testable.
 
 1. **Review this CHG before code**
    - Run Trinity review with available providers.
-   - DeepSeek is intentionally skipped for this and the next few rounds while
-     the provider is service-down per operator direction.
+   - If a provider is temporarily unavailable, record the outage and re-include
+     it once it is healthy again.
    - Fold blocking findings before implementation.
 
 2. **RED/GREEN: Mayor policy metadata**
@@ -138,8 +138,7 @@ small and testable.
    - Run added-line privacy scan.
 
 6. **Review and PR**
-   - Run Trinity implementation review with available providers, skipping
-     DeepSeek while service-down.
+   - Run Trinity implementation review with available providers.
    - Create the PR with `gh` as `ryosaeba1985`.
    - Follow `COR-1615` / `COR-1612` GitHub Codex loop, max five review rounds.
 
@@ -183,8 +182,9 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Trinity packet:
     `.trinity/reviews/20260508-190051-rules-BAB-2259-CHG-Implement-Phase-16-1-Mayor-Policy-and-Proposal-Schema.md`.
   - GLM PASS at 9.10/10 with no blocking findings.
-  - DeepSeek intentionally skipped because the provider is service-down for
-    this and the next few review rounds per operator direction.
+  - DeepSeek was temporarily skipped because the provider was service-down at
+    the time of CHG review; it was re-enabled once healthy for implementation
+    review.
   - Folded advisories for concrete list/size bounds, compact child `inspector`
     derivation/conflict behavior, and stricter `proposal_id`, `risks`, and
     `questions` validation.
@@ -223,11 +223,35 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Remaining advisories are minor follow-ups: duplicated private helpers,
     cosmetic error wording, and defensive fallback branches without direct
     tests.
+- 2026-05-08 Codex PR review R1:
+  - Codex found one P2 issue: proposal list fields documented as required
+    could be omitted and defaulted to empty lists.
+  - Fixed `MayorProposal` so all top-level required fields return
+    `{:missing_field, key}` when absent, including `proposal_id`,
+    `root_ticket_id`, `summary`, `children`, `rules_refs_used`, `risks`, and
+    `questions`.
+  - Explicit empty lists remain valid for list fields that allow empty values;
+    an empty `children` list still returns `:empty_children`.
+  - Folded the DeepSeek implementation-review advisory to make missing
+    `children` consistent with the other required top-level fields.
+  - Added regression tests for the missing-field cases.
+  - Focused Mayor policy/proposal/Ticket markdown suite passed: 21 tests.
+  - `mise exec -- mix format --check-formatted` passed.
+  - `mise exec -- mix compile --warnings-as-errors` passed.
+  - `mise exec -- mix test --max-cases 1` passed with a fresh temporary test
+    directory: `babs_citizens` 447 tests, `babs` 97 tests.
+  - `mise exec -- mix test` passed with a fresh temporary test directory:
+    `babs_citizens` 447 tests, `babs` 97 tests.
+  - Coverage passed after the R1 fix: `babs_citizens` 85.52%, `babs` 88.92%.
+  - Final Trinity R1-fix implementation review packet:
+    `.trinity/reviews/20260508-195708-Phase-16.1-final-Codex-R1-required-field-consistency-fix`.
+  - GLM PASS and DeepSeek PASS with no blocking findings.
 
 ## Change History
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-08 | Fix Codex R1 required proposal-list-field finding and update validation | Codex |
 | 2026-05-08 | Record final GLM and DeepSeek implementation PASS/PASS | Codex |
 | 2026-05-08 | Fold DeepSeek parser-option advisory and update final validation | Codex |
 | 2026-05-08 | Implement Mayor policy/proposal schema and record validation | Codex |
