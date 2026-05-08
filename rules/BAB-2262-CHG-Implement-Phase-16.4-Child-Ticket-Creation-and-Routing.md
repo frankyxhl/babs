@@ -329,6 +329,11 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     configured tickets root, records compact root `mayor_children_created`
     history, and repairs a retry case where children were recorded before the
     approval event.
+  - Approval now validates a preflight root `mayor_children_created` marker
+    before writing child Tickets, so an oversized root materialization event
+    cannot leave unmarked child Ticket files behind.
+  - Child materialization now rejects multiline child titles before rendering
+    Ticket markdown, matching the normal Ticket creation path.
   - Role routing is attempted per child and records `assigned`,
     `not_requested`, or `failed` without deleting created children.
   - Ticket detail renders created child Ticket links, role/inspector badges,
@@ -341,6 +346,10 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     path; fixed with a Writer-level guard and regression test.
   - Trinity fast-review R2 PASS/PASS for GLM and DeepSeek after the fix, with
     no blocking findings.
+  - GitHub Codex Review R1 found two actionable issues: root materialization
+    event validation occurred after child writes, and multiline child titles
+    could render as truncated Markdown headings. Both were fixed with regression
+    tests before the second GitHub review request.
 - Validation:
   - `mise exec -- mix format --check-formatted`: PASS.
   - `mise exec -- mix compile --warnings-as-errors`: PASS.
@@ -364,6 +373,13 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added-line privacy scan: PASS after triaging the only match,
     `@socket_token`, as an existing public LiveView parameter name rather than
     a secret.
+  - Post-Codex-R1 focused ExUnit for Mayor child planning/API/Error paths:
+    PASS, 54 tests.
+  - Post-Codex-R1 `mise exec -- mix format --check-formatted`: PASS.
+  - Post-Codex-R1 `mise exec -- mix compile --warnings-as-errors`: PASS.
+  - Post-Codex-R1 `mise exec -- mix test`: PASS, 581 tests.
+  - Post-Codex-R1 validation also stabilized one test-only temporary-directory
+    cleanup path that was failing after test assertions had passed.
 
 ---
 
@@ -374,3 +390,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-08 | Initial Phase 16.4 child Ticket creation and routing CHG | Codex |
 | 2026-05-08 | Mark Approved after Trinity plan review and record implementation/validation results | Codex |
 | 2026-05-08 | Record Trinity implementation R1/R2 PASS and post-review stale-revision fix | Codex |
+| 2026-05-08 | Fix GitHub Codex R1 root-event preflight and multiline child-title findings | Codex |

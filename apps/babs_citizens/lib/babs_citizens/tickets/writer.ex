@@ -1491,6 +1491,9 @@ defmodule Babs.Citizens.Tickets.Writer do
 
     with {:ok, approval} <- MayorProposalReview.approve(ticket, history, proposal_id, event_opts),
          {:ok, plan} <- MayorChildTickets.plan(ticket, state),
+         preflight_children_created <-
+           MayorChildTickets.preflight_children_created_event(ticket, plan, event_opts),
+         :ok <- validate_events(ticket.id, [preflight_children_created, approval]),
          {:ok, created_children} <- create_mayor_children(root, plan, opts),
          routed_children <- route_mayor_children(root, created_children, opts),
          children_created <-

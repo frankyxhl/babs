@@ -97,6 +97,9 @@ defmodule Babs.Citizens.Tickets.Error do
     "Mayor proposal created #{length(created_ids)} child Ticket before failing; review created child Tickets before retrying"
   end
 
+  def message({:mayor_child_tickets, {:invalid_child_title, index, :multiline}}),
+    do: "Mayor proposal child #{index + 1} title cannot contain line breaks"
+
   def message({:terminal_ticket, id, state}),
     do: "Ticket #{id} is #{state} and cannot be commented on"
 

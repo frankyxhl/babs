@@ -69,5 +69,8 @@ defmodule Babs.Citizens.Tickets.ErrorTest do
 
     assert Error.message({:mayor_child_tickets, {:partial_child_write, ["T-1"], :boom}}) ==
              "Mayor proposal created 1 child Ticket before failing; review created child Tickets before retrying"
+
+    assert Error.message({:mayor_child_tickets, {:invalid_child_title, 1, :multiline}}) ==
+             "Mayor proposal child 2 title cannot contain line breaks"
   end
 end

@@ -5,25 +5,32 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
 
   alias Babs.Citizens.Tickets.Ticket
 
+  @preflight_ticket_id "T-9999-12-31-999"
+
   @spec plan(Ticket.t(), map()) :: {:ok, map()} | {:error, term()}
   def plan(%Ticket{} = root_ticket, %{proposal: %{"children" => children}} = state)
       when is_list(children) do
     assigner = mayor_assigner(state)
 
-    {:ok,
-     %{
-       proposal_id: state.proposal_id,
-       assigner: assigner,
-       root_ticket_id: root_ticket.id,
-       children:
-         children
-         |> Enum.with_index()
-         |> Enum.map(fn {child, index} -> child_plan(root_ticket, child, index, assigner) end)
-     }}
+    with {:ok, planned_children} <- child_plans(root_ticket, children, assigner) do
+      {:ok,
+       %{
+         proposal_id: state.proposal_id,
+         assigner: assigner,
+         root_ticket_id: root_ticket.id,
+         children: planned_children
+       }}
+    end
   end
 
   def plan(_root_ticket, _state),
     do: {:error, {:mayor_child_tickets, :invalid_proposal_state}}
+
+  @spec preflight_children_created_event(Ticket.t(), map(), keyword()) :: map()
+  def preflight_children_created_event(%Ticket{} = root_ticket, plan, opts \\ []) do
+    children = Enum.map(plan.children, &preflight_child_summary/1)
+    children_created_event(root_ticket, plan, children, opts)
+  end
 
   @spec children_created_event(Ticket.t(), map(), [map()], keyword()) :: map()
   def children_created_event(%Ticket{} = root_ticket, plan, children, opts \\ []) do
@@ -37,26 +44,52 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
     }
   end
 
+  defp child_plans(root_ticket, children, assigner) do
+    children
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {child, index}, {:ok, acc} ->
+      case child_plan(root_ticket, child, index, assigner) do
+        {:ok, planned} -> {:cont, {:ok, [planned | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, planned} -> {:ok, Enum.reverse(planned)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp child_plan(root_ticket, child, index, assigner) do
     assignee_role = child["assignee_role"]
 
-    %{
-      child_index: index,
-      route?: route?(assignee_role),
-      attrs: %{
-        title: child["title"],
-        body: child["body"],
-        type: child["type"] || "assignment",
-        state: "open",
-        assigner: assigner,
-        assignees: [],
-        assignee_role: assignee_role,
-        inspector: child["inspector"] || "user",
-        priority: child["priority"] || "normal",
-        parent_ticket: root_ticket.id,
-        metadata: child["metadata"] || %{}
-      }
-    }
+    with :ok <- validate_title(child["title"], index) do
+      {:ok,
+       %{
+         child_index: index,
+         route?: route?(assignee_role),
+         attrs: %{
+           title: child["title"],
+           body: child["body"],
+           type: child["type"] || "assignment",
+           state: "open",
+           assigner: assigner,
+           assignees: [],
+           assignee_role: assignee_role,
+           inspector: child["inspector"] || "user",
+           priority: child["priority"] || "normal",
+           parent_ticket: root_ticket.id,
+           metadata: child["metadata"] || %{}
+         }
+       }}
+    end
+  end
+
+  defp validate_title(title, index) when is_binary(title) do
+    if String.contains?(title, ["\n", "\r"]) do
+      {:error, {:mayor_child_tickets, {:invalid_child_title, index, :multiline}}}
+    else
+      :ok
+    end
   end
 
   defp route?(value) when is_binary(value), do: String.trim(value) not in ["", "any"]
@@ -67,6 +100,18 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
 
   defp mayor_assigner(_state), do: "mayor"
 
+  defp preflight_child_summary(child) do
+    %{
+      child_index: child.child_index,
+      ticket_id: @preflight_ticket_id,
+      title: child.attrs.title,
+      priority: child.attrs.priority,
+      inspector: child.attrs.inspector,
+      assignee_role: child.attrs.assignee_role,
+      routing: %{"status" => "not_requested"}
+    }
+  end
+
   defp created_child_summary(child) do
     %{
       "child_index" => child.child_index,
@@ -75,7 +120,10 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
       "priority" => child.priority,
       "inspector" => child.inspector,
       "assignee_role" => child.assignee_role,
-      "routing" => child.routing
+      "routing" => compact_routing(child.routing)
     }
   end
+
+  defp compact_routing(%{"status" => status}) when is_binary(status), do: %{"status" => status}
+  defp compact_routing(_routing), do: %{"status" => "unknown"}
 end

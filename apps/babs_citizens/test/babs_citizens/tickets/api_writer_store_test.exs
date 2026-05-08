@@ -188,6 +188,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              Api.approve_mayor_proposal(ticket.id, "prop_review",
                tickets_root: root,
                proposal_revision: third_revision,
+               date: ~D[2026-05-08],
                now: "2026-05-08T00:04:00Z"
              )
 
@@ -250,6 +251,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              Api.approve_mayor_proposal(ticket.id, "prop_children",
                tickets_root: root,
                proposal_revision: revision,
+               date: ~D[2026-05-08],
                now: "2026-05-08T00:02:00Z"
              )
 
@@ -308,6 +310,76 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
              "mayor_children_created",
              "mayor_proposal_approved"
            ]
+  end
+
+  test "mayor proposal approval validates root marker size before creating child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    oversized_title = String.duplicate("A", 17_000)
+    proposal = proposal(ticket.id, "prop_oversized_marker", [oversized_title])
+    ticket_id = ticket.id
+
+    TicketMarkdown.history_path(root, ticket.id)
+    |> File.write!(Jason.encode!(proposal_received(ticket.id, proposal)) <> "\n", [:append])
+
+    assert {:error, {:history_event_too_large, ^ticket_id}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_oversized_marker",
+               tickets_root: root,
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 1
+  end
+
+  test "mayor proposal approval rejects multiline child titles before creating child tickets" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 type: "mission",
+                 title: "Mission root",
+                 body: "Split this mission.",
+                 metadata: mayor_metadata()
+               },
+               tickets_root: root,
+               date: ~D[2026-05-08],
+               now: "2026-05-08T00:00:00Z"
+             )
+
+    proposal = proposal(ticket.id, "prop_multiline_title", ["Bad\nTitle"])
+
+    assert :ok =
+             Api.append_ticket_events(ticket.id, [proposal_received(ticket.id, proposal)],
+               tickets_root: root
+             )
+
+    assert {:error, {:mayor_child_tickets, {:invalid_child_title, 0, :multiline}}} =
+             Api.approve_mayor_proposal(ticket.id, "prop_multiline_title",
+               tickets_root: root,
+               now: "2026-05-08T00:02:00Z"
+             )
+
+    assert root
+           |> Path.join("T-2026-05-08-*.md")
+           |> Path.wildcard()
+           |> length() == 1
   end
 
   test "mayor proposal approval repairs missing approval after children are recorded" do
@@ -440,7 +512,8 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert {:ok, %{event: approved}} =
              Api.approve_mayor_proposal(ticket.id, "prop_review",
                tickets_root: root,
-               proposal_revision: fresh_revision
+               proposal_revision: fresh_revision,
+               date: ~D[2026-05-08]
              )
 
     assert approved["event"] == "mayor_proposal_approved"

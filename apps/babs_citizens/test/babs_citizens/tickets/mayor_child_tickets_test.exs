@@ -105,14 +105,40 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
                "priority" => "normal",
                "inspector" => "user",
                "assignee_role" => "developer",
-               "routing" => %{
-                 "status" => "failed",
-                 "reason" => "No eligible Citizen found for role developer"
-               }
+               "routing" => %{"status" => "failed"}
              }
            ]
 
     refute inspect(event) =~ "Complete Build backend"
+  end
+
+  test "builds a preflight children-created event before child files exist" do
+    proposal = proposal("prop_preflight", [%{"title" => "Build backend"}])
+    assert {:ok, state} = MayorProposalReview.from_history(ticket(), [received(proposal)])
+    assert {:ok, plan} = MayorChildTickets.plan(ticket(), state)
+
+    event =
+      MayorChildTickets.preflight_children_created_event(ticket(), plan,
+        now: "2026-05-08T00:02:00Z",
+        by: "user"
+      )
+
+    assert [
+             %{
+               "ticket_id" => "T-9999-12-31-999",
+               "title" => "Build backend",
+               "routing" => %{"status" => "not_requested"}
+             }
+           ] = event["children"]
+  end
+
+  test "rejects multiline child titles before rendering ticket markdown" do
+    proposal = proposal("prop_multiline", [%{"title" => "Bad\nTitle"}])
+
+    assert {:ok, state} = MayorProposalReview.from_history(ticket(), [received(proposal)])
+
+    assert {:error, {:mayor_child_tickets, {:invalid_child_title, 0, :multiline}}} =
+             MayorChildTickets.plan(ticket(), state)
   end
 
   defp ticket do
