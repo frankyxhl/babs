@@ -1588,7 +1588,8 @@ defmodule Babs.Citizens.Tickets.Writer do
 
     events = [children_created, approval]
 
-    with :ok <- append_events(root, ticket.id, events) do
+    with :ok <- validate_events(ticket.id, events),
+         :ok <- append_events(root, ticket.id, events) do
       {:ok, %{event: approval, children_created: children_created}}
     end
   end

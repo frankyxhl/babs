@@ -6,6 +6,9 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
   alias Babs.Citizens.Tickets.Ticket
 
   @preflight_ticket_id "T-9999-12-31-999"
+  @max_routing_assignees 8
+  @max_routing_assignee_length 64
+  @max_routing_reason_length 240
 
   @spec plan(Ticket.t(), map()) :: {:ok, map()} | {:error, term()}
   def plan(%Ticket{} = root_ticket, %{proposal: %{"children" => children}} = state)
@@ -123,7 +126,7 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
       priority: child.attrs.priority,
       inspector: child.attrs.inspector,
       assignee_role: child.attrs.assignee_role,
-      routing: %{"status" => "not_requested"}
+      routing: max_routing_summary()
     }
   end
 
@@ -141,15 +144,30 @@ defmodule Babs.Citizens.Tickets.MayorChildTickets do
 
   defp compact_routing(%{"status" => "assigned", "assignees" => assignees})
        when is_list(assignees) do
-    %{"status" => "assigned", "assignees" => Enum.filter(assignees, &is_binary/1)}
+    compact_assignees =
+      assignees
+      |> Enum.filter(&is_binary/1)
+      |> Enum.take(@max_routing_assignees)
+      |> Enum.map(&String.slice(&1, 0, @max_routing_assignee_length))
+
+    %{"status" => "assigned", "assignees" => compact_assignees}
   end
 
   defp compact_routing(%{"status" => "failed", "reason" => reason}) when is_binary(reason),
-    do: %{"status" => "failed", "reason" => reason}
+    do: %{"status" => "failed", "reason" => String.slice(reason, 0, @max_routing_reason_length)}
 
   defp compact_routing(%{"status" => status})
        when status in ["assigned", "failed", "not_requested"],
        do: %{"status" => status}
 
   defp compact_routing(_routing), do: %{"status" => "unknown"}
+
+  defp max_routing_summary do
+    max_assignee = String.duplicate("x", @max_routing_assignee_length)
+
+    %{
+      "status" => "assigned",
+      "assignees" => List.duplicate(max_assignee, @max_routing_assignees)
+    }
+  end
 end

@@ -141,6 +141,69 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
     refute inspect(event) =~ "Complete Build backend"
   end
 
+  test "bounds routed summaries so preflight is an upper size bound" do
+    proposal = proposal("prop_bounds", [%{"title" => "Build backend"}])
+    assert {:ok, state} = MayorProposalReview.from_history(ticket(), [received(proposal)])
+    assert {:ok, plan} = MayorChildTickets.plan(ticket(), state)
+
+    preflight =
+      MayorChildTickets.preflight_children_created_event(ticket(), plan,
+        now: "2026-05-08T00:02:00Z",
+        by: "user"
+      )
+
+    long_assignees = Enum.map(1..20, fn index -> String.duplicate("assignee-#{index}", 20) end)
+    long_reason = String.duplicate("No eligible Citizen found. ", 80)
+
+    assigned =
+      MayorChildTickets.children_created_event(
+        ticket(),
+        plan,
+        [
+          %{
+            child_index: 0,
+            ticket_id: "T-2026-05-08-065",
+            title: "Build backend",
+            priority: "normal",
+            inspector: "user",
+            assignee_role: "developer",
+            routing: %{"status" => "assigned", "assignees" => long_assignees}
+          }
+        ],
+        now: "2026-05-08T00:02:00Z",
+        by: "user"
+      )
+
+    failed =
+      MayorChildTickets.children_created_event(
+        ticket(),
+        plan,
+        [
+          %{
+            child_index: 0,
+            ticket_id: "T-2026-05-08-065",
+            title: "Build backend",
+            priority: "normal",
+            inspector: "user",
+            assignee_role: "developer",
+            routing: %{"status" => "failed", "reason" => long_reason}
+          }
+        ],
+        now: "2026-05-08T00:02:00Z",
+        by: "user"
+      )
+
+    assert %{"assignees" => assignees} = get_in(assigned, ["children", Access.at(0), "routing"])
+    assert length(assignees) == 8
+    assert Enum.all?(assignees, &(String.length(&1) <= 64))
+
+    assert %{"reason" => reason} = get_in(failed, ["children", Access.at(0), "routing"])
+    assert String.length(reason) == 240
+
+    assert byte_size(Jason.encode!(assigned)) <= byte_size(Jason.encode!(preflight))
+    assert byte_size(Jason.encode!(failed)) <= byte_size(Jason.encode!(preflight))
+  end
+
   test "builds a preflight children-created event before child files exist" do
     proposal = proposal("prop_preflight", [%{"title" => "Build backend"}])
     assert {:ok, state} = MayorProposalReview.from_history(ticket(), [received(proposal)])
@@ -156,9 +219,12 @@ defmodule Babs.Citizens.Tickets.MayorChildTicketsTest do
              %{
                "ticket_id" => "T-9999-12-31-999",
                "title" => "Build backend",
-               "routing" => %{"status" => "not_requested"}
+               "routing" => %{"status" => "assigned", "assignees" => assignees}
              }
            ] = event["children"]
+
+    assert length(assignees) == 8
+    assert Enum.all?(assignees, &(String.length(&1) == 64))
   end
 
   test "rejects multiline child titles before rendering ticket markdown" do
