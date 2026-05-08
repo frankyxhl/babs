@@ -45,6 +45,27 @@ defmodule Babs.Citizens.ProviderRuntime.ContractTest do
              |> Contract.new()
   end
 
+  test "rejects raw artifact refs that expose host output prompt or credential data" do
+    for unsafe_ref <- [
+          %{"host" => "operator-host-placeholder"},
+          %{"stdout" => "raw provider output placeholder"},
+          %{"prompt" => "raw prompt placeholder"},
+          %{"api_key" => "credential placeholder"}
+        ] do
+      assert {:error, {:unsafe_raw_artifact_ref, ^unsafe_ref}} =
+               valid_attrs()
+               |> Map.put(:raw_artifact_refs, [unsafe_ref])
+               |> Contract.new()
+    end
+
+    assert {:error, {:unsafe_raw_artifact_ref, %{"reply" => "raw reply placeholder"}}} =
+             valid_attrs()
+             |> Map.put(:raw_artifact_refs, [
+               %{"metadata" => %{"reply" => "raw reply placeholder"}}
+             ])
+             |> Contract.new()
+  end
+
   test "rejects unknown contract fields without raising" do
     assert {:error, {:unknown_field, "unexpected"}} = Contract.new(%{"unexpected" => true})
     assert {:error, {:unknown_field, :unexpected}} = Contract.new(%{unexpected: true})

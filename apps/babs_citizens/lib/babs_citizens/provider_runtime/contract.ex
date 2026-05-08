@@ -32,6 +32,11 @@ defmodule Babs.Citizens.ProviderRuntime.Contract do
   @owners ~w(babs external reserved)
   @statuses ~w(supported deferred unsupported)
   @backends ~w(direct_cli hardline lazy_tmux)
+  @unsafe_artifact_ref_keys ~w(
+    absolute_path api_key content credential credentials env environment host
+    hostname ip ip_address output password path private_ip prompt raw_output
+    reply secret stderr stdout text token
+  )
 
   @type t :: %__MODULE__{}
 
@@ -139,17 +144,49 @@ defmodule Babs.Citizens.ProviderRuntime.Contract do
   defp safe_artifact_refs(value), do: {:error, {:invalid_field, :raw_artifact_refs, value}}
 
   defp unsafe_artifact_ref(%{} = value) do
-    cond do
-      Map.has_key?(value, "path") -> value
-      Map.has_key?(value, :path) -> value
-      Map.has_key?(value, "absolute_path") -> value
-      Map.has_key?(value, :absolute_path) -> value
-      true -> Enum.find_value(Map.values(value), &unsafe_artifact_ref/1)
+    if Enum.any?(Map.keys(value), &unsafe_artifact_ref_key?/1) do
+      value
+    else
+      Enum.find_value(Map.values(value), &unsafe_artifact_ref/1)
     end
   end
 
   defp unsafe_artifact_ref(values) when is_list(values),
     do: Enum.find_value(values, &unsafe_artifact_ref/1)
 
+  defp unsafe_artifact_ref(value) when is_binary(value), do: unsafe_artifact_ref_value(value)
+
   defp unsafe_artifact_ref(_value), do: nil
+
+  defp unsafe_artifact_ref_key?(key) do
+    normalized =
+      key
+      |> string_key()
+      |> String.downcase()
+
+    normalized in @unsafe_artifact_ref_keys or String.ends_with?(normalized, "_token") or
+      String.ends_with?(normalized, "_secret")
+  end
+
+  defp unsafe_artifact_ref_value(value) do
+    cond do
+      String.match?(value, ~r{(^|\s)/(?:Users|home|var|tmp|etc|private|opt)/\S*}) ->
+        value
+
+      String.match?(value, ~r/\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/) ->
+        value
+
+      String.match?(value, ~r/\b172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b/) ->
+        value
+
+      String.match?(value, ~r/\b192\.168\.\d{1,3}\.\d{1,3}\b/) ->
+        value
+
+      String.match?(value, ~r/\b100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b/) ->
+        value
+
+      true ->
+        nil
+    end
+  end
 end
