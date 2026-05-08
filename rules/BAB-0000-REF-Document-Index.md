@@ -96,6 +96,7 @@
 | 2256 | CHG | Implement Phase 15.2 Inspector Selection and Prompts |
 | 2257 | CHG | Implement Phase 15.3 Decision Capture and Quorum |
 | 2258 | CHG | Implement Phase 15.4 Inspection UI BDD E2E |
+| 2259 | CHG | Implement Phase 16.1 Mayor Policy and Proposal Schema |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
@@ -110,6 +111,7 @@
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-08 | Add BAB-2258 Phase 15.4 Inspection UI BDD E2E CHG | Codex |
+| 2026-05-08 | Add BAB-2259 Phase 16.1 Mayor Policy and Proposal Schema CHG | Codex |
 | 2026-05-08 | Add BAB-2257 Phase 15.3 Decision Capture and Quorum CHG | Codex |
 | 2026-05-08 | Add BAB-2256 Phase 15.2 Inspector Selection and Prompts CHG | Codex |
 | 2026-05-08 | Add BAB-2255 Phase 15.1 Inspection Policy and Events CHG | Codex |
