@@ -65,6 +65,7 @@ class BabsBddContext:
             os.environ.get("BABS_BDD_DIRECT_PROMPTS_PATH")
             or (tmp_bdd_dir("direct-prompts") / "prompts.jsonl")
         )
+        self.federation_config_path = tmp_bdd_dir("federation") / "federation.toml"
 
     def ensure_server(self) -> None:
         if self._server_ready():
@@ -77,6 +78,20 @@ class BabsBddContext:
         env.setdefault("BABS_BDD_FAKE_DIRECT", "1")
         env.setdefault("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
         env["BABS_BDD_DIRECT_PROMPTS_PATH"] = str(self.direct_prompts_path)
+        self.federation_config_path.write_text(
+            f"""
+            [node]
+            id = "bdd-local"
+            name = "BDD Local"
+
+            [peers.bdd-peer]
+            name = "BDD Peer"
+            url = "{self.base_url}"
+            capabilities = ["read"]
+            """,
+            encoding="utf-8",
+        )
+        env.setdefault("BABS_FEDERATION_CONFIG", str(self.federation_config_path))
         self.server_process = subprocess.Popen(
             ["mise", "exec", "--", "mix", "phx.server"],
             cwd=ROOT,
@@ -289,6 +304,13 @@ def scenarios() -> list[Scenario]:
             when="the viewport is resized",
             then="the xterm surface keeps stable full-window dimensions",
             run=scenario_terminal_fills_viewport,
+        ),
+        Scenario(
+            name="mobile pwa shell",
+            given="Babs is opened from a phone-sized browser viewport",
+            when="the operator opens Tickets, Citizens, and a full terminal",
+            then="PWA metadata and mobile shell layout remain usable without horizontal overflow",
+            run=scenario_mobile_pwa_shell,
         ),
         Scenario(
             name="seed citizen terminals connect when CLIs are available",
@@ -886,6 +908,55 @@ def scenario_terminal_fills_viewport(context: BabsBddContext) -> None:
         assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in full mode")
     finally:
         cdp("Emulation.clearDeviceMetricsOverride")
+
+
+def scenario_mobile_pwa_shell(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    slug = unique_slug("bdd-mobile")
+
+    try:
+        write_ticket(context.tickets_root, ticket_id, "BDD Mobile Ticket", "Visible in phone layout.")
+        create_shell_citizen_from_ui(context, slug)
+        set_mobile_viewport()
+
+        status, body = http_get_status(f"{context.base_url}/manifest.webmanifest", timeout=5)
+        assert status == 200
+        manifest = json.loads(body)
+        assert manifest["display"] == "standalone"
+        assert any(icon["sizes"] == "192x192" for icon in manifest["icons"])
+        assert any(icon["sizes"] == "512x512" for icon in manifest["icons"])
+
+        context.open_path("/tickets")
+        assert_service_worker_registration_noops_without_secure_context()
+        assert_element_visible('[data-testid="tickets-index"]', "tickets index")
+        assert_element_visible('[data-testid="tickets-new"]', "new ticket button")
+        assert_element_visible('[data-testid="tickets-nav-citizens"]', "tickets citizens nav")
+        wait_until("ticket row to render in mobile layout", lambda: ticket_id in js("document.body.innerText"))
+        assert_no_horizontal_overflow("tickets mobile page")
+        assert_touch_targets(".tickets-nav .button", "ticket nav buttons")
+        if js("Boolean(document.querySelector('[data-testid=\"remote-peer-tickets\"]'))"):
+            assert_element_visible('[data-testid="remote-peer-tickets"]', "remote ticket section")
+            assert_no_horizontal_overflow("remote tickets mobile section")
+
+        context.open_path("/citizens")
+        assert_element_visible('[data-testid="citizens-index"]', "citizens index")
+        assert_element_visible('[data-testid="citizens-nav-tickets"]', "citizens tickets nav")
+        assert_no_horizontal_overflow("citizens mobile page")
+        assert_touch_targets(".citizens-nav .button", "citizens nav buttons")
+        assert_touch_targets(".citizen-actions .button", "citizen action buttons", required=False)
+        if js("Boolean(document.querySelector('[data-testid=\"remote-peer-citizens\"]'))"):
+            assert_element_visible('[data-testid="remote-peer-citizens"]', "remote citizen section")
+            assert_no_horizontal_overflow("remote citizens mobile section")
+
+        context.connect_citizen(slug, full=True)
+        full = terminal_geometry()
+        assert abs(full["width"] - full["viewport_width"]) <= 4, full
+        assert abs(full["height"] - full["viewport_height"]) <= 4, full
+        assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in mobile full mode")
+    finally:
+        cdp("Emulation.clearDeviceMetricsOverride")
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
 
 
 def scenario_seed_citizens_connect_when_available(context: BabsBddContext) -> None:
@@ -1793,6 +1864,103 @@ def assert_no_element(selector: str, label: str) -> None:
         raise AssertionError(f"{label} should not be present: {selector}")
 
 
+def assert_no_horizontal_overflow(label: str) -> None:
+    metrics = js(
+        """
+        const root = document.documentElement;
+        const body = document.body;
+        const viewportWidth = window.innerWidth;
+        const offenders = Array.from(document.body.querySelectorAll("*"))
+          .filter((element) => {
+            const style = window.getComputedStyle(element);
+            if (style.display === "none" || style.visibility === "hidden") return false;
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && (rect.left < -2 || rect.right > viewportWidth + 2);
+          })
+          .slice(0, 5)
+          .map((element) => ({
+            tag: element.tagName.toLowerCase(),
+            testid: element.getAttribute("data-testid"),
+            className: typeof element.className === "string" ? element.className : element.getAttribute("class"),
+            rect: (() => {
+              const r = element.getBoundingClientRect();
+              return {left: r.left, right: r.right, width: r.width};
+            })()
+          }));
+
+        return {
+          viewportWidth,
+          scrollWidth: Math.max(root.scrollWidth, body.scrollWidth),
+          clientWidth: root.clientWidth,
+          offenders
+        };
+        """
+    )
+
+    if metrics["scrollWidth"] > metrics["clientWidth"] + 2 or metrics["offenders"]:
+        raise AssertionError(f"{label} has horizontal overflow: {metrics}")
+
+
+def assert_touch_targets(selector: str, label: str, required: bool = True) -> None:
+    selector_json = json.dumps(selector)
+    result = js(
+        f"""
+        const elements = Array.from(document.querySelectorAll({selector_json}))
+          .filter((element) => {{
+            const style = window.getComputedStyle(element);
+            const rect = element.getBoundingClientRect();
+            return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0;
+          }});
+        return {{
+          count: elements.length,
+          tooSmall: elements
+            .map((element) => {{
+              const rect = element.getBoundingClientRect();
+              return {{
+                text: element.innerText.trim(),
+                testid: element.getAttribute("data-testid"),
+                width: rect.width,
+                height: rect.height
+              }};
+            }})
+            .filter((item) => item.height < 42)
+        }};
+        """
+    )
+
+    if required and result["count"] == 0:
+        raise AssertionError(f"{label} not found for selector {selector}")
+
+    if result["tooSmall"]:
+        raise AssertionError(f"{label} had small touch targets: {result['tooSmall']}")
+
+
+def assert_service_worker_registration_noops_without_secure_context() -> None:
+    js(
+        """
+        window.__babsPwaRegistrationResult = null;
+        window.__babsPwaRegistrationCalled = false;
+        import("/js/pwa_boot.js")
+          .then((module) => module.registerBabsServiceWorker({
+            navigator: {serviceWorker: {register: () => { window.__babsPwaRegistrationCalled = true; }}},
+            window: {isSecureContext: false}
+          }))
+          .then((result) => { window.__babsPwaRegistrationResult = result; })
+          .catch((error) => { window.__babsPwaRegistrationResult = {status: "failed", reason: String(error)}; });
+        """
+    )
+
+    wait_until(
+        "service worker no-op result",
+        lambda: js("window.__babsPwaRegistrationResult !== null"),
+        timeout=5,
+    )
+    result = js("window.__babsPwaRegistrationResult")
+    called = js("window.__babsPwaRegistrationCalled")
+    assert result == {"status": "skipped", "reason": "insecure-context"}
+    assert called is False
+
+
 def click_selector(selector: str) -> None:
     selector_json = json.dumps(selector)
     rect = js(
@@ -2016,6 +2184,17 @@ def http_get_status(url: str, timeout: float) -> tuple[int, str]:
 
 def rendered_xterm_row_count() -> int:
     return int(js("document.querySelectorAll('.xterm-rows > div').length") or 0)
+
+
+def set_mobile_viewport() -> None:
+    cdp(
+        "Emulation.setDeviceMetricsOverride",
+        width=390,
+        height=844,
+        deviceScaleFactor=2,
+        mobile=True,
+    )
+    wait(1)
 
 
 def status_geometry() -> dict:

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Babs icon">
+  <rect width="512" height="512" rx="96" fill="#f6f8fa"/>
+  <rect x="84" y="84" width="344" height="344" rx="76" fill="#ffffff" stroke="#d0d7de" stroke-width="18"/>
+  <path d="M154 358V154h116c45 0 75 25 75 63 0 22-11 41-30 52 27 10 43 31 43 60 0 43-32 69-83 69H154zm54-122h54c18 0 29-10 29-26s-11-25-29-25h-54v51zm0 121h61c22 0 35-11 35-30s-13-30-35-30h-61v60z" fill="#0969da"/>
+  <circle cx="362" cy="150" r="24" fill="#1a7f37"/>
+</svg>
