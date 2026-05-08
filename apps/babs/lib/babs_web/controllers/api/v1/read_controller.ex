@@ -99,7 +99,7 @@ defmodule BabsWeb.Api.V1.ReadController do
           "node" => node_summary(info),
           "citizen_slug" => slug,
           "transcript" => %{
-            "output" => transcript.output,
+            "output" => json_safe_output(transcript.output),
             "truncated" => transcript.truncated,
             "lines" => transcript.lines,
             "returned_lines" => transcript.returned_lines
@@ -307,6 +307,35 @@ defmodule BabsWeb.Api.V1.ReadController do
   end
 
   defp safe_history(_history), do: []
+
+  defp json_safe_output(output) when is_binary(output) do
+    if String.valid?(output) do
+      output
+    else
+      replace_invalid_utf8(output, [])
+    end
+  end
+
+  defp json_safe_output(_output), do: ""
+
+  defp replace_invalid_utf8("", acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp replace_invalid_utf8(binary, acc) do
+    case :unicode.characters_to_binary(binary, :utf8, :utf8) do
+      valid when is_binary(valid) ->
+        [valid | acc]
+        |> Enum.reverse()
+        |> IO.iodata_to_binary()
+
+      {:error, valid, <<_bad_byte, rest::binary>>} ->
+        replace_invalid_utf8(rest, [<<0xEF, 0xBF, 0xBD>>, valid | acc])
+
+      {:incomplete, valid, _rest} ->
+        [<<0xEF, 0xBF, 0xBD>>, valid | acc]
+        |> Enum.reverse()
+        |> IO.iodata_to_binary()
+    end
+  end
 
   defp error(conn, status, code, message) do
     conn

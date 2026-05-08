@@ -217,6 +217,44 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
     refute inspect(body) =~ "hidden input"
   end
 
+  test "citizen transcript replaces invalid UTF-8 output bytes before JSON encoding", %{
+    workspace_root: workspace_root
+  } do
+    cwd = Path.join(workspace_root, "elena")
+    File.mkdir_p!(cwd)
+
+    insert_citizen!(%{
+      slug: "elena",
+      display_name: "Elena",
+      cwd: cwd,
+      cli: "gh",
+      cli_args: ["copilot"],
+      roles: ["developer"]
+    })
+
+    {:ok, io} = Transcript.open(cwd)
+
+    :ok =
+      Transcript.append(io, %{
+        slug: "elena",
+        direction: :output,
+        stream_id: 1,
+        seq: 1,
+        payload: <<"valid ", 0xFF, 0xFE, "\n">>
+      })
+
+    :ok = Transcript.close(io)
+
+    conn = get(build_conn(), "/api/v1/citizens/elena/transcript")
+    body = json_body(conn)
+
+    assert conn.status == 200
+    assert String.valid?(body["transcript"]["output"])
+
+    assert body["transcript"]["output"] ==
+             "valid " <> <<0xEF, 0xBF, 0xBD>> <> <<0xEF, 0xBF, 0xBD>> <> "\n"
+  end
+
   test "invalid transcript params return a stable JSON error" do
     conn = get(build_conn(), "/api/v1/citizens/clare/transcript?lines=0")
     body = json_body(conn)

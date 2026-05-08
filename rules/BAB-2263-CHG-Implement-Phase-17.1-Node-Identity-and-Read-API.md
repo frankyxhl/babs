@@ -459,10 +459,10 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added `BABS_FEDERATION_CONFIG` runtime config support.
 - Validation before implementation review:
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/federation_config_test.exs apps/babs/test/babs_web/controllers/api_v1_read_controller_test.exs --seed 1`
-    passed: 14 tests, 0 failures.
+    passed: 15 tests, 0 failures.
   - `mise exec -- mix format --check-formatted` passed.
   - `mise exec -- mix compile --warnings-as-errors` passed.
-  - `mise exec -- mix test` passed: 600 tests, 0 failures.
+  - `mise exec -- mix test` passed: 601 tests, 0 failures.
   - `npm run test:js` passed: 15 tests, 0 failures.
   - `af validate --root .` passed: 173 documents, 0 issues.
   - `git diff --check` passed.
@@ -474,6 +474,12 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     `provider_runtime` subkey values in the safe projection helper. Deferred
     broader API auth/CORS/cache topics to later Phase 17 slices; retained the
     existing manual controller dispatch style used elsewhere in BabsWeb.
+- GitHub Codex review:
+  - R1 on PR #56 found one P2 issue: transcript output may contain arbitrary
+    non-UTF-8 PTY bytes and could fail JSON encoding. Fixed by replacing invalid
+    UTF-8 bytes in the API response boundary while leaving raw transcript replay
+    behavior unchanged. Added a controller regression test for invalid transcript
+    bytes.
 
 ---
 
@@ -488,3 +494,4 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
 | 2026-05-09 | Mark Approved after Trinity R4 PASS/PASS and fold non-blocking advisories | Codex |
 | 2026-05-09 | Implement Phase 17.1 read API and record validation results | Codex |
 | 2026-05-09 | Record Trinity implementation review PASS/PASS and folded advisory | Codex |
+| 2026-05-09 | Fold GitHub Codex R1 P2 transcript JSON encoding finding | Codex |
