@@ -39,6 +39,7 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
     assert snapshot.status == :fresh
     refute snapshot.read_only?
     assert snapshot.capabilities == ["read", "write"]
+    assert snapshot.citizen_capabilities == %{}
     assert snapshot.node == %{"id" => "alpha", "name" => "Alpha"}
     assert [%{"slug" => "remote-clare"}] = snapshot.citizens
     assert [%{"id" => "T-2026-05-09-001"}] = snapshot.tickets
@@ -107,6 +108,48 @@ defmodule Babs.Citizens.Federation.PeerClientTest do
     assert_receive {:request, :delete,
                     "http://alpha.example/api/v1/tickets/T-2026-05-09-001/assignments/clare",
                     _headers, ""}
+  end
+
+  test "mutating helpers accept snapshot-shaped peer maps" do
+    parent = self()
+
+    http = fn method, url, headers, body, _opts ->
+      send(parent, {:request, method, url, headers, body})
+      {:ok, %{status: 200, body: Jason.encode!(%{"ok" => true})}}
+    end
+
+    snapshot = %{
+      peer_id: "alpha",
+      peer_name: "Alpha",
+      peer_url: "http://alpha.example",
+      capabilities: ["read", "write", "control"],
+      citizen_capabilities: %{}
+    }
+
+    assert {:ok, %{"ok" => true}} =
+             PeerClient.transition_ticket(snapshot, "T-2026-05-09-001", "pending_approval",
+               toml: write_peer_toml(),
+               http_client: http
+             )
+
+    assert_receive {:request, :post,
+                    "http://alpha.example/api/v1/tickets/T-2026-05-09-001/transitions", headers,
+                    body}
+
+    assert {"x-babs-peer-id", "local"} in headers
+    assert Jason.decode!(body) == %{"to" => "pending_approval"}
+
+    assert {:ok, %{"ok" => true}} =
+             PeerClient.lifecycle_citizen(snapshot, "remote-clare", "restart",
+               toml: write_peer_toml(),
+               http_client: http
+             )
+
+    assert_receive {:request, :post,
+                    "http://alpha.example/api/v1/citizens/remote-clare/lifecycle", _headers,
+                    lifecycle_body}
+
+    assert Jason.decode!(lifecycle_body) == %{"action" => "restart"}
   end
 
   test "uses the previous event cursor on refresh" do

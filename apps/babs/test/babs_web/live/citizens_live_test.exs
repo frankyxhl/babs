@@ -79,6 +79,8 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ "fresh"
     assert html =~ ~s(data-testid="remote-citizen-remote-clare")
     assert html =~ "Remote Clare"
+    assert html =~ ~s(data-testid="remote-citizen-restart-remote-clare")
+    assert disabled_button?(html, "remote-citizen-restart-remote-clare")
     refute html =~ ~s(data-testid="citizen-open-remote-clare")
     refute html =~ ~s(data-testid="citizen-full-remote-clare")
 
@@ -92,6 +94,83 @@ defmodule BabsWeb.CitizensLiveTest do
     assert html =~ ~s(data-testid="remote-citizen-remote-dylan")
     assert html =~ "Remote Dylan"
     refute html =~ "Remote Clare"
+  end
+
+  test "control remote peer can restart remote citizens and respects read-only overrides" do
+    parent = self()
+
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      remote_peer_provider: fn ->
+        remote_peer(%{
+          read_only?: false,
+          capabilities: ["read", "write", "control"],
+          citizen_capabilities: %{"remote-dylan" => ["read"]},
+          citizens: [
+            %{
+              "slug" => "remote-clare",
+              "display_name" => "Remote Clare",
+              "live_status" => "up"
+            },
+            %{
+              "slug" => "remote-dylan",
+              "display_name" => "Remote Dylan",
+              "live_status" => "up"
+            }
+          ]
+        })
+      end,
+      remote_citizen_action: fn action, peer, slug ->
+        send(parent, {:remote_citizen_action, action, peer.peer_id, slug})
+        {:ok, %{"ok" => true}}
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens")
+    html = render_async(view, 1_000)
+
+    assert html =~ "Control-enabled"
+    assert html =~ ~s(data-testid="remote-citizen-restart-remote-clare")
+    refute disabled_button?(html, "remote-citizen-restart-remote-clare")
+    assert disabled_button?(html, "remote-citizen-restart-remote-dylan")
+
+    view
+    |> element(~s(button[data-testid="remote-citizen-restart-remote-clare"]))
+    |> render_click()
+
+    assert_receive {:remote_citizen_action, :restart, "peer-a", "remote-clare"}
+    assert render(view) =~ "Remote restart sent"
+  end
+
+  test "remote restart failures show redacted failure feedback" do
+    Application.put_env(:babs, BabsWeb.CitizensLive,
+      remote_peer_provider: fn ->
+        remote_peer(%{
+          read_only?: false,
+          capabilities: ["read", "write", "control"],
+          citizens: [
+            %{
+              "slug" => "remote-clare",
+              "display_name" => "Remote Clare",
+              "live_status" => "up"
+            }
+          ]
+        })
+      end,
+      remote_citizen_action: fn :restart, _peer, "remote-clare" -> {:error, :timeout} end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens")
+    html = render_async(view, 1_000)
+
+    assert html =~ ~s(data-testid="remote-citizen-restart-remote-clare")
+
+    view
+    |> element(~s(button[data-testid="remote-citizen-restart-remote-clare"]))
+    |> render_click()
+
+    html = render(view)
+    assert html =~ "Remote restart failed"
+    refute html =~ "timeout"
   end
 
   test "renders sorted citizens, counts, statuses, labels, and token-preserving links" do
@@ -488,6 +567,7 @@ defmodule BabsWeb.CitizensLiveTest do
         status: :fresh,
         read_only?: true,
         capabilities: ["read"],
+        citizen_capabilities: %{},
         fetched_at: ~U[2026-05-09 00:00:00Z],
         node: %{"id" => "peer-a", "name" => "Peer Node"},
         citizens: [],

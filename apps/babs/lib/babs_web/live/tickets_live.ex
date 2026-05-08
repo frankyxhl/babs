@@ -38,6 +38,50 @@ defmodule BabsWeb.TicketsLive do
     {:noreply, assign_tickets(socket)}
   end
 
+  def handle_event("remote_ticket_comment", %{"ticket_id" => ticket_id, "body" => body}, socket) do
+    body = String.trim(body || "")
+
+    cond do
+      !remote_can_write?(socket.assigns.remote_peer) ->
+        {:noreply, put_flash(socket, :error, "Remote peer is read-only")}
+
+      body == "" ->
+        {:noreply, put_flash(socket, :error, "Remote comment cannot be blank")}
+
+      true ->
+        case remote_ticket_action(:comment, socket.assigns.remote_peer, ticket_id, body) do
+          {:ok, _result} ->
+            {:noreply, put_flash(socket, :info, "Remote comment sent")}
+
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Remote comment failed")}
+        end
+    end
+  end
+
+  def handle_event(
+        "remote_ticket_transition",
+        %{"ticket_id" => ticket_id, "to" => to_state},
+        socket
+      ) do
+    cond do
+      !remote_can_write?(socket.assigns.remote_peer) ->
+        {:noreply, put_flash(socket, :error, "Remote peer is read-only")}
+
+      to_state not in ["pending_approval"] ->
+        {:noreply, put_flash(socket, :error, "Remote transition is not available")}
+
+      true ->
+        case remote_ticket_action(:transition, socket.assigns.remote_peer, ticket_id, to_state) do
+          {:ok, _result} ->
+            {:noreply, put_flash(socket, :info, "Remote transition sent")}
+
+          {:error, _reason} ->
+            {:noreply, put_flash(socket, :error, "Remote transition failed")}
+        end
+    end
+  end
+
   @impl true
   def handle_info({:tickets_changed, _payload}, socket) do
     {:noreply, assign_tickets(socket)}
@@ -113,6 +157,18 @@ defmodule BabsWeb.TicketsLive do
           No tickets yet.
         </section>
 
+        <div :if={Phoenix.Flash.get(@flash, :info)} class="flash" data-testid="tickets-flash-info">
+          {Phoenix.Flash.get(@flash, :info)}
+        </div>
+
+        <div
+          :if={Phoenix.Flash.get(@flash, :error)}
+          class="flash flash-error"
+          data-testid="tickets-flash-error"
+        >
+          {Phoenix.Flash.get(@flash, :error)}
+        </div>
+
         <section :for={group <- @groups} class="ticket-group" data-testid={"ticket-group-#{group.key}"}>
           <header class="ticket-group-header">
             <h2>{group.label}</h2>
@@ -167,7 +223,9 @@ defmodule BabsWeb.TicketsLive do
               <span>{remote_node_label(@remote_peer)}</span>
             </h2>
             <div class="remote-badges">
-              <span class="remote-badge remote-badge-readonly">Read-only</span>
+              <span class={["remote-badge", remote_capability_class(@remote_peer)]}>
+                {remote_capability_label(@remote_peer)}
+              </span>
               <span class={["remote-badge", remote_status_class(@remote_peer)]}>
                 {remote_status(@remote_peer)}
               </span>
@@ -186,6 +244,39 @@ defmodule BabsWeb.TicketsLive do
               </div>
               <div class="remote-meta">{remote_value(ticket, "id")}</div>
               <div class="remote-meta">{remote_value(ticket, "state")}</div>
+              <div :if={remote_can_write?(@remote_peer)} class="remote-ticket-actions">
+                <form
+                  phx-submit="remote_ticket_comment"
+                  data-testid={"remote-ticket-comment-form-#{remote_value(ticket, "id")}"}
+                >
+                  <input type="hidden" name="ticket_id" value={remote_value(ticket, "id")} />
+                  <input
+                    class="remote-input"
+                    type="text"
+                    name="body"
+                    placeholder="Comment"
+                    autocomplete="off"
+                  />
+                  <button type="submit" class="button button-compact">
+                    <BabsWeb.Icon.icon name="send" /> Comment
+                  </button>
+                </form>
+                <form
+                  :if={remote_value(ticket, "state") == "in_progress"}
+                  phx-submit="remote_ticket_transition"
+                  data-testid={"remote-ticket-transition-form-#{remote_value(ticket, "id")}"}
+                >
+                  <input type="hidden" name="ticket_id" value={remote_value(ticket, "id")} />
+                  <input type="hidden" name="to" value="pending_approval" />
+                  <button
+                    type="submit"
+                    class="button button-compact"
+                    data-testid={"remote-ticket-transition-#{remote_value(ticket, "id")}"}
+                  >
+                    <BabsWeb.Icon.icon name="check" /> Submit
+                  </button>
+                </form>
+              </div>
             </article>
             <div :if={@remote_peer.tickets == []} class="remote-meta" data-testid="remote-tickets-empty">
               No remote Tickets.
@@ -249,6 +340,43 @@ defmodule BabsWeb.TicketsLive do
       {:error, _reason} -> nil
     end
   end
+
+  defp remote_ticket_action(action, peer, ticket_id, value) do
+    :babs
+    |> Application.get_env(__MODULE__, [])
+    |> Keyword.get(:remote_ticket_action, &default_remote_ticket_action/4)
+    |> then(fn handler -> handler.(action, peer, ticket_id, value) end)
+  end
+
+  defp default_remote_ticket_action(:comment, peer, ticket_id, body),
+    do: PeerClient.comment_ticket(peer, ticket_id, body)
+
+  defp default_remote_ticket_action(:transition, peer, ticket_id, to_state),
+    do: PeerClient.transition_ticket(peer, ticket_id, to_state)
+
+  defp remote_can_write?(peer), do: remote_capability?(peer, "write")
+
+  defp remote_capability_label(peer) do
+    cond do
+      remote_capability?(peer, "control") -> "Control-enabled"
+      remote_capability?(peer, "write") -> "Writable"
+      true -> "Read-only"
+    end
+  end
+
+  defp remote_capability_class(peer) do
+    cond do
+      remote_capability?(peer, "control") -> "remote-badge-control"
+      remote_capability?(peer, "write") -> "remote-badge-write"
+      true -> "remote-badge-readonly"
+    end
+  end
+
+  defp remote_capability?(peer, capability) when is_map(peer) do
+    capability in (Map.get(peer, :capabilities) || Map.get(peer, "capabilities") || [])
+  end
+
+  defp remote_capability?(_peer, _capability), do: false
 
   defp remote_node_label(peer) do
     node = Map.get(peer, :node, %{})
@@ -335,6 +463,14 @@ defmodule BabsWeb.TicketsLive do
     .button-primary:hover { border-color: transparent; background: #0757b8; color: var(--accent-text); }
     .button-icon { width: 44px; padding: 9px; }
     .button-compact { min-height: 32px; padding: 5px 9px; font-size: 13px; }
+    .flash {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      padding: 10px 12px;
+      color: var(--text);
+    }
+    .flash-error { border-color: var(--danger); color: var(--danger); }
     .icon { width: 16px; height: 16px; flex: 0 0 auto; }
     .ticket-counts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
     .ticket-count { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px; }
@@ -432,13 +568,15 @@ defmodule BabsWeb.TicketsLive do
       font-size: 12px;
     }
     .remote-badge-readonly { color: var(--wait); }
+    .remote-badge-write { color: var(--accent); }
+    .remote-badge-control { color: var(--ok); }
     .remote-badge-fresh { color: var(--ok); }
     .remote-badge-stale { color: var(--wait); }
     .remote-badge-unreachable, .remote-badge-config_error { color: var(--danger); }
     .remote-ticket-list { display: grid; gap: 8px; }
     .remote-ticket-row {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.7fr) minmax(110px, 0.45fr);
+      grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.7fr) minmax(110px, 0.45fr) minmax(260px, 1.2fr);
       gap: 10px;
       align-items: center;
       min-width: 0;
@@ -460,11 +598,36 @@ defmodule BabsWeb.TicketsLive do
       font-weight: 700;
     }
     .remote-meta { color: var(--muted); font-size: 13px; }
+    .remote-ticket-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+    .remote-ticket-actions form {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .remote-input {
+      min-height: 32px;
+      min-width: 110px;
+      max-width: 170px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 5px 8px;
+      font: inherit;
+      font-size: 13px;
+    }
     @media (max-width: 900px) {
       .ticket-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .ticket-row, .ticket-row-invalid, .remote-ticket-row { grid-template-columns: minmax(0, 1fr); align-items: start; }
       .tickets-header { flex-direction: column; }
-      .tickets-nav, .remote-badges { justify-content: flex-start; flex-wrap: wrap; }
+      .tickets-nav, .remote-badges, .remote-ticket-actions { justify-content: flex-start; flex-wrap: wrap; }
       .button-compact { min-height: 44px; padding: 7px 10px; }
     }
     @media (max-width: 560px) {

@@ -44,6 +44,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
          status: :fresh,
          read_only?: read_only?(peer),
          capabilities: peer.capabilities,
+         citizen_capabilities: peer.citizens,
          fetched_at: now,
          node: node,
          citizens: citizens,
@@ -166,7 +167,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
   defp previous_cursor(_previous), do: nil
 
   defp get_json(peer, path, opts) do
-    url = peer.url |> String.trim_trailing("/") |> Kernel.<>(path)
+    url = peer_url(peer) |> String.trim_trailing("/") |> Kernel.<>(path)
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
 
     with {:ok, %{status: status, body: body}} <-
@@ -197,7 +198,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
   end
 
   defp request_json(peer, method, path, body, opts) do
-    url = peer.url |> String.trim_trailing("/") |> Kernel.<>(path)
+    url = peer_url(peer) |> String.trim_trailing("/") |> Kernel.<>(path)
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
 
     with {:ok, headers} <- request_headers(opts),
@@ -291,6 +292,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
       status: :unreachable,
       read_only?: read_only?(peer),
       capabilities: peer.capabilities,
+      citizen_capabilities: peer.citizens,
       fetched_at: nil,
       node: %{"id" => peer.id, "name" => peer.name},
       citizens: [],
@@ -318,6 +320,7 @@ defmodule Babs.Citizens.Federation.PeerClient do
       status: status,
       read_only?: true,
       capabilities: [],
+      citizen_capabilities: %{},
       fetched_at: now,
       node: %{},
       citizens: [],
@@ -333,5 +336,10 @@ defmodule Babs.Citizens.Federation.PeerClient do
     reason
     |> inspect()
     |> String.slice(0, 200)
+  end
+
+  defp peer_url(peer) when is_map(peer) do
+    Map.get(peer, :url) || Map.get(peer, :peer_url) || Map.get(peer, "url") ||
+      Map.get(peer, "peer_url")
   end
 end

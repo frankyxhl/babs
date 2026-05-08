@@ -374,8 +374,8 @@ tickets root with role routing metadata preserved.
 DeepSeek PASS. Phase 17.1 merged via `BAB-2263` for node identity and the
 read-only federation API. Phase 17.2 merged via `BAB-2264` for real-time remote
 reads. Phase 17.3 merged via `BAB-2265` for the mobile/PWA shell. Phase 17.4
-has `BAB-2266` as the proposed implementation CHG for the remote write/control
-capability gate.
+merged via `BAB-2266` for the remote write/control capability gate. Phase 17.5
+has `BAB-2267` as the proposed remote operation BDD/E2E hardening CHG.
 **Scope**: Build the mobile and federation product layer. Add configurable node
 identity and peer nodes, start with real-time remote reads, make Babs usable as
 an installable mobile/PWA on the Tailscale network, and add explicitly
@@ -520,4 +520,5 @@ Decision criterion: at each milestone, ask "is the additional feature set worth 
 | 2026-05-09 | Mark Phase 17.1 merged and add `BAB-2264` Phase 17.2 real-time remote reads CHG | Codex |
 | 2026-05-09 | Mark Phase 17.2 merged and add `BAB-2265` Phase 17.3 mobile/PWA shell CHG | Codex |
 | 2026-05-09 | Mark Phase 17.3 merged and add `BAB-2266` Phase 17.4 remote write/control gate CHG | Codex |
+| 2026-05-09 | Mark Phase 17.4 merged and add `BAB-2267` Phase 17.5 remote operation BDD/E2E CHG | Codex |
 | 2026-05-08 | Add `BAB-2246` Phase 13f.1 implementation CHG for Provider Runtime Contract and inventory | Codex |

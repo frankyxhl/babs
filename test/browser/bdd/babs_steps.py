@@ -67,6 +67,40 @@ class BabsBddContext:
         )
         self.federation_config_path = tmp_bdd_dir("federation") / "federation.toml"
 
+    def write_federation_config(
+        self,
+        *,
+        node_id: str = "bdd-local",
+        peer_id: str = "bdd-peer",
+        peer_name: str = "BDD Peer",
+        capabilities: list[str] | None = None,
+        citizen_overrides: dict[str, list[str]] | None = None,
+    ) -> None:
+        capabilities = capabilities or ["read"]
+        citizen_overrides = citizen_overrides or {}
+        citizen_tables = ""
+
+        for slug, caps in sorted(citizen_overrides.items()):
+            citizen_tables += (
+                f"\n            [peers.{peer_id}.citizens.{slug}]\n"
+                f"            capabilities = {json.dumps(caps)}\n"
+            )
+
+        self.federation_config_path.write_text(
+            f"""
+            [node]
+            id = "{node_id}"
+            name = "BDD Local"
+
+            [peers.{peer_id}]
+            name = "{peer_name}"
+            url = "{self.base_url}"
+            capabilities = {json.dumps(capabilities)}
+            {citizen_tables}
+            """,
+            encoding="utf-8",
+        )
+
     def ensure_server(self) -> None:
         if self._server_ready():
             return
@@ -78,20 +112,8 @@ class BabsBddContext:
         env.setdefault("BABS_BDD_FAKE_DIRECT", "1")
         env.setdefault("BABS_BDD_DIRECT_REPLY", "BDD direct CLI UI reply.")
         env["BABS_BDD_DIRECT_PROMPTS_PATH"] = str(self.direct_prompts_path)
-        self.federation_config_path.write_text(
-            f"""
-            [node]
-            id = "bdd-local"
-            name = "BDD Local"
-
-            [peers.bdd-peer]
-            name = "BDD Peer"
-            url = "{self.base_url}"
-            capabilities = ["read"]
-            """,
-            encoding="utf-8",
-        )
-        env.setdefault("BABS_FEDERATION_CONFIG", str(self.federation_config_path))
+        self.write_federation_config()
+        env["BABS_FEDERATION_CONFIG"] = str(self.federation_config_path)
         self.server_process = subprocess.Popen(
             ["mise", "exec", "--", "mix", "phx.server"],
             cwd=ROOT,
@@ -465,6 +487,13 @@ def scenarios() -> list[Scenario]:
             when="a remote peer reads /api/v1/events and repeats the returned cursor",
             then="the first read returns snapshots and the unchanged cursor returns no events",
             run=scenario_federation_events_feed_returns_cursor_snapshots,
+        ),
+        Scenario(
+            name="remote operation bdd e2e ticket and citizen controls",
+            given="a loopback peer has write/control capabilities",
+            when="the operator comments, transitions, and restarts through remote UI controls",
+            then="the operations go through the remote HTTP control path and update local state",
+            run=scenario_remote_operation_bdd_e2e_ticket_and_citizen_controls,
         ),
     ]
 
@@ -1854,6 +1883,99 @@ def scenario_federation_events_feed_returns_cursor_snapshots(context: BabsBddCon
         cleanup_ticket(context.tickets_root, ticket_id)
 
 
+def scenario_remote_operation_bdd_e2e_ticket_and_citizen_controls(context: BabsBddContext) -> None:
+    if context.server_process is None:
+        raise SkipScenario("remote operation bdd e2e needs a managed server so it can set loopback federation config")
+
+    slug = unique_slug("bdd-remote")
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    comment = f"BDD remote operation comment for {ticket_id}."
+
+    try:
+        context.write_federation_config(
+            node_id="bdd-client",
+            peer_id="bdd-client",
+            peer_name="BDD Loopback",
+            capabilities=["control"],
+        )
+        create_shell_citizen_from_ui(context, slug)
+        write_ticket(
+            context.tickets_root,
+            ticket_id,
+            "BDD Remote Operation Ticket",
+            "Remote operation bdd e2e body.",
+            state="in_progress",
+            assignees=[slug],
+        )
+
+        context.open_path("/tickets")
+        wait_until(
+            "remote operation bdd e2e Ticket row to render",
+            lambda: f"remote-ticket-{ticket_id}" in js("document.body.innerHTML")
+            and "Control-enabled" in js("document.body.innerText"),
+            timeout=20,
+        )
+        assert_element_visible(
+            f'[data-testid="remote-ticket-comment-form-{ticket_id}"]',
+            "remote operation bdd e2e comment form",
+        )
+        assert_element_visible(
+            f'[data-testid="remote-ticket-transition-{ticket_id}"]',
+            "remote operation bdd e2e transition button",
+        )
+        set_mobile_viewport()
+        assert_no_horizontal_overflow("remote operation bdd e2e remote tickets mobile controls")
+        submit_remote_ticket_comment(ticket_id, comment)
+        wait_until(
+            "remote operation bdd e2e comment to be stored through HTTP control",
+            lambda: "Remote comment sent" in js("document.body.innerText")
+            and history_has_event(
+                context.tickets_root,
+                ticket_id,
+                lambda event: event.get("event") == "comment"
+                and event.get("by") == "remote:bdd-client"
+                and event.get("body") == comment,
+            ),
+            timeout=20,
+        )
+
+        submit_remote_ticket_transition(ticket_id)
+        wait_until(
+            "remote operation bdd e2e transition to reach pending approval",
+            lambda: "Remote transition sent" in js("document.body.innerText")
+            and history_has_event(
+                context.tickets_root,
+                ticket_id,
+                lambda event: event.get("event") == "remote_transition"
+                and event.get("by") == "remote:bdd-client"
+                and event.get("to") == "pending_approval",
+            ),
+            timeout=20,
+        )
+
+        context.open_path("/citizens")
+        wait_until(
+            "remote operation bdd e2e Citizen row to render",
+            lambda: f"remote-citizen-{slug}" in js("document.body.innerHTML")
+            and "Control-enabled" in js("document.body.innerText"),
+            timeout=20,
+        )
+        restart_selector = f'[data-testid="remote-citizen-restart-{slug}"]'
+        assert_element_visible(restart_selector, "remote operation bdd e2e citizen restart")
+        assert_no_horizontal_overflow("remote operation bdd e2e remote citizens mobile controls")
+        assert not js(f"document.querySelector({json.dumps(restart_selector)})?.disabled")
+        click_selector(restart_selector)
+        wait_until(
+            "remote operation bdd e2e citizen restart to be acknowledged",
+            lambda: "Remote restart sent" in js("document.body.innerText"),
+            timeout=20,
+        )
+    finally:
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+        context.write_federation_config()
+
+
 def assert_element_visible(selector: str, label: str) -> None:
     if not wait_for_element(selector, timeout=15, visible=True):
         raise AssertionError(f"{label} was not visible: {selector}")
@@ -2017,6 +2139,45 @@ def submit_ticket_comment(comment: str) -> None:
         js(script)
     finally:
         js("delete window.__babsBddTicketComment")
+
+
+def submit_remote_ticket_comment(ticket_id: str, comment: str) -> None:
+    values = json.dumps({"ticket_id": ticket_id, "comment": comment})
+    js(f"window.__babsBddRemoteTicketComment = {values}")
+    script = """
+        (() => {
+        const values = window.__babsBddRemoteTicketComment;
+        const form = document.querySelector(`[data-testid="remote-ticket-comment-form-${values.ticket_id}"]`);
+        if (!form) throw new Error("missing remote Ticket comment form");
+        const input = form.querySelector('input[name="body"]');
+        if (!input) throw new Error("missing remote Ticket comment input");
+        input.value = values.comment;
+        input.dispatchEvent(new Event("input", {bubbles: true}));
+        input.dispatchEvent(new Event("change", {bubbles: true}));
+        form.requestSubmit();
+        })();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddRemoteTicketComment")
+
+
+def submit_remote_ticket_transition(ticket_id: str) -> None:
+    ticket_id_json = json.dumps(ticket_id)
+    js(f"window.__babsBddRemoteTicketId = {ticket_id_json}")
+    script = """
+        (() => {
+        const ticketId = window.__babsBddRemoteTicketId;
+        const form = document.querySelector(`[data-testid="remote-ticket-transition-form-${ticketId}"]`);
+        if (!form) throw new Error("missing remote Ticket transition form");
+        form.requestSubmit();
+        })();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddRemoteTicketId")
 
 
 def submit_new_ticket_form(title: str, priority: str, body: str, assignee_role: str = "") -> None:
