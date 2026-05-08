@@ -1,7 +1,20 @@
 import { defineConfig } from "@playwright/test";
 
-const e2ePort = process.env.BABS_E2E_PORT || "4000";
-const baseURL = process.env.BABS_E2E_BASE_URL || `http://127.0.0.1:${e2ePort}`;
+const configuredBaseURL = process.env.BABS_E2E_BASE_URL?.replace(/\/$/, "");
+
+function portFromBaseURL(url) {
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+    return parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+  } catch {
+    return null;
+  }
+}
+
+const e2ePort = process.env.BABS_E2E_PORT || portFromBaseURL(configuredBaseURL) || "4000";
+const baseURL = configuredBaseURL || `http://127.0.0.1:${e2ePort}`;
 
 export default defineConfig({
   testDir: "./test/browser",

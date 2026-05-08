@@ -202,6 +202,12 @@ scenario command as the primary local reproduction.
   - Non-blocking advisories were reviewed: pre-existing prompt capture cleanup,
     intentional split between full BDD execution and narrower E2E UI coverage,
     and happy-path scope matching this validation-only slice.
+- 2026-05-08 GitHub Codex review R1:
+  - Fixed P2 Playwright config bug: when only `BABS_E2E_BASE_URL` is set, the
+    spawned Phoenix port now derives from that URL instead of silently staying
+    on the default port.
+  - Focused E2E passed with only `BABS_E2E_BASE_URL` set:
+    `BABS_CITIZENS_DB_PATH=$(mktemp ...) BABS_E2E_BASE_URL=http://127.0.0.1:4029 npm run test:e2e -- --grep "role routing"`.
 
 ## Change History
 
@@ -211,3 +217,4 @@ scenario command as the primary local reproduction.
 | 2026-05-08 | Trinity fast-review passed GLM and DeepSeek; folded cleanup, helper, workflow, browser-harness, and coverage advisories | Codex |
 | 2026-05-08 | Implemented role-flow BDD/E2E hardening with local validation results | Codex |
 | 2026-05-08 | Trinity implementation fast-review passed GLM and DeepSeek | Codex |
+| 2026-05-08 | Fixed GitHub Codex R1 P2 around `BABS_E2E_BASE_URL` port synchronization | Codex |
