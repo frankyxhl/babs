@@ -11,7 +11,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   @ticket_id_regex ~r/^T-\d{4}-\d{2}-\d{2}-\d{3}$/i
   @reply_line_regex ~r/^\s*BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:\s*(.+?)\s*$/i
   @ticket_reply_regex ~r/BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:/i
-  @planning_reply_regex ~r/^\s*(the user\b|the operator\b|i\s+(need|should|will)\b|let me\b|we need\b|this\s+(is|looks)\b|it\s+(looks|seems)\b)/i
+  @planning_reply_regex ~r/^\s*(the user\b|the operator\b|i\s+(need|should)\b|let me\b|we need\b)/i
 
   @impl true
   def provider, do: "copilot"

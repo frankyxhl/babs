@@ -96,11 +96,11 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     table is ignored instead of crashing capture polling during CI or early
     runtime startup.
 - Validation:
-  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs --seed 1`: pass; 17 tests, 0 failures.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs --seed 1`: pass; 18 tests, 0 failures.
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs apps/babs_citizens/test/babs_citizens/direct_cli/runner_test.exs --seed 1`: pass; 35 tests, 0 failures.
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/reply_capture_test.exs --seed 1`: pass; 10 tests, 0 failures.
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/mix_tasks_test.exs --seed 193306`: pass; 2 tests, 0 failures.
-  - `mise exec -- mix test`: pass; `babs_citizens` 513 tests, 0 failures; `babs` 137 tests, 0 failures.
+  - `mise exec -- mix test`: pass; `babs_citizens` 514 tests, 0 failures; `babs` 137 tests, 0 failures.
   - `mise exec -- mix format --check-formatted`: pass.
   - `mise exec -- mix compile --warnings-as-errors`: pass.
   - `af validate --root .`: pass; 178 documents checked, 0 issues found.
@@ -112,6 +112,11 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Fixed by passing the current Ticket id into command construction and result
     parsing, selecting that id in the wrapper, and rejecting stale-id final
     markers.
+  - GitHub Codex review R2 found one P2 issue: the markerless planning guard was
+    too broad and rejected ordinary final answers starting with natural prefixes
+    such as "This is".
+  - Fixed by narrowing the planning-prefix guard and adding a regression for an
+    ordinary markerless answer.
 
 ---
 

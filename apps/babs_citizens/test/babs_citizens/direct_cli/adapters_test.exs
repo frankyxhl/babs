@@ -363,6 +363,24 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
     assert result.text == "I am currently in the configured Citizen workspace."
   end
 
+  test "copilot parser accepts ordinary markerless answers with natural prefixes" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{"content" => "This is the Babs repository."}
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
+
+    assert result.text == "This is the Babs repository."
+  end
+
   test "copilot parser rejects markerless planning-shaped output" do
     stdout =
       [
