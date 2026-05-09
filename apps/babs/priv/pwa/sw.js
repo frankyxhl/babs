@@ -1,4 +1,4 @@
-const BABS_SHELL_CACHE = "babs-shell-v1";
+const BABS_SHELL_CACHE = "babs-shell-v2";
 
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
