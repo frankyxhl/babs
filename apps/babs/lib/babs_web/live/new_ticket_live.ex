@@ -340,17 +340,17 @@ defmodule BabsWeb.NewTicketLive do
   def styles do
     """
     :root {
-      color-scheme: dark;
-      --bg: #0d0d10;
-      --panel: #16181d;
-      --panel-2: #1d2027;
-      --line: #2a2f39;
-      --text: #e7eaf0;
-      --muted: #9da5b4;
-      --field: #0b0c0f;
-      --accent: #55b3a6;
-      --accent-text: #07100e;
-      --danger: #dc6b6b;
+      color-scheme: light;
+      --bg: #f6f8fa;
+      --panel: #ffffff;
+      --panel-2: #f3f4f6;
+      --line: #d0d7de;
+      --text: #1f2328;
+      --muted: #57606a;
+      --field: #f6f8fa;
+      --accent: #0969da;
+      --accent-text: #ffffff;
+      --danger: #cf222e;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -396,9 +396,9 @@ defmodule BabsWeb.NewTicketLive do
     }
     .field-error { color: var(--danger); font-size: 12px; }
     .status-error {
-      border: 1px solid rgba(220, 107, 107, 0.55);
+      border: 1px solid rgba(207, 34, 46, 0.55);
       border-radius: 8px;
-      background: rgba(220, 107, 107, 0.12);
+      background: rgba(207, 34, 46, 0.08);
       padding: 10px 12px;
       color: var(--danger);
       font-size: 13px;
