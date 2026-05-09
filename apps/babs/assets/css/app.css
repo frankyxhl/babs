@@ -40,6 +40,21 @@
     --ks-wait: var(--color-babs-wait);
     --ks-info: var(--color-babs-info);
     --ks-danger: var(--color-babs-danger);
+    /* Ticket / form pages — match GitHub light palette. */
+    --bg: #f6f8fa;
+    --panel: #ffffff;
+    --panel-2: #f3f4f6;
+    --line: #d0d7de;
+    --line-strong: #8c959f;
+    --text: #1f2328;
+    --muted: #57606a;
+    --field: #f6f8fa;
+    --accent: #0969da;
+    --accent-text: #ffffff;
+    --danger: #cf222e;
+    --ok: #1a7f37;
+    --wait: #9a6700;
+    --done: #0f766e;
   }
 
   * {
@@ -919,3 +934,4 @@
     }
   }
 }
+
