@@ -150,7 +150,7 @@ defmodule BabsWeb.TicketsLive do
         </section>
 
         <section
-          :if={Enum.all?(@groups, &(&1.count == 0))}
+          :if={@empty?}
           class="tickets-empty"
           data-testid="tickets-empty-state"
         >
@@ -299,12 +299,16 @@ defmodule BabsWeb.TicketsLive do
         socket
         |> assign(:groups, groups)
         |> assign(:counts, TicketPresenter.counts(groups))
+        |> assign(:empty?, Enum.all?(groups, &(&1.count == 0)))
         |> assign(:error, nil)
 
       {:error, reason} ->
+        empty_groups = TicketPresenter.groups([], [])
+
         socket
-        |> assign(:groups, TicketPresenter.groups([], []))
+        |> assign(:groups, empty_groups)
         |> assign(:counts, %{})
+        |> assign(:empty?, true)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
   end
