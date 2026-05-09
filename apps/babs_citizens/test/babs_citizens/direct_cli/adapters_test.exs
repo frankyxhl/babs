@@ -397,6 +397,64 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
              Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
   end
 
+  test "copilot parser prefers assistant message over later reasoning events" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{
+            "content" => "BABS_REPLY T-2026-05-09-002: /workspace/tester"
+          }
+        },
+        %{
+          "type" => "assistant.reasoning",
+          "data" => %{
+            "content" => "The user is asking me to respond with my current path. I should answer."
+          }
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
+
+    assert result.provider_session_id == "copilot-session"
+    assert result.text == "[REDACTED_PATH]"
+  end
+
+  test "copilot parser handles executor-redacted assistant message metadata" do
+    stdout =
+      [
+        %{
+          "type" => "assistant.message",
+          "data" => %{
+            "content" => "BABS_REPLY T-2026-05-09-003: /Users/alice/Projects/babs",
+            "outputTokens" => 7,
+            "reasoningText" => "The user is asking me to respond."
+          }
+        },
+        %{
+          "type" => "assistant.reasoning",
+          "data" => %{
+            "content" => "The user is asking me to respond with my current path."
+          }
+        },
+        %{"type" => "result", "sessionId" => "copilot-session"}
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    artifacts = Babs.Citizens.DirectCli.Redactor.redact_artifacts(%{stdout: stdout, stderr: ""})
+
+    assert {:ok, result} =
+             Copilot.parse_result(artifacts, ticket_id: "T-2026-05-09-003")
+
+    assert result.provider_session_id == "copilot-session"
+    assert result.text == "[REDACTED_PATH]"
+  end
+
   test "fake adapter is deterministic for BDD fixtures" do
     cfg = config("babs-fake-ai")
     assert {:ok, command} = Fake.start_command(cfg, "hello", provider_session_id: "fake-session")

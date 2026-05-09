@@ -52,6 +52,27 @@ defmodule Babs.Citizens.DirectCli.EnvRedactorTest do
     assert redacted == "provider echoed [REDACTED]"
   end
 
+  test "keeps redacted json key values parseable" do
+    text =
+      Jason.encode!(%{
+        "type" => "assistant.message",
+        "data" => %{
+          "content" => "BABS_REPLY T-2026-05-09-003: /Users/alice/Projects/babs",
+          "outputTokens" => 42
+        }
+      })
+
+    redacted = Redactor.redact_text(text)
+
+    assert {:ok, value} = Jason.decode(redacted)
+    assert get_in(value, ["data", "outputTokens"]) == "[REDACTED]"
+    assert get_in(value, ["data", "content"]) == "BABS_REPLY T-2026-05-09-003: [REDACTED_PATH]"
+  end
+
+  test "keeps unquoted assignment redaction shell-safe" do
+    assert Redactor.redact_text("api_token=secret") == "api_token=[REDACTED]"
+  end
+
   test "bounds output on a valid UTF-8 boundary" do
     text = "ab🙂cd"
 

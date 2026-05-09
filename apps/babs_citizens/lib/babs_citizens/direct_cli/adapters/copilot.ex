@@ -43,7 +43,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   @impl true
   def parse_result(%{stdout: stdout} = artifacts, opts \\ []) do
     values = Common.decode_json_lines(stdout)
-    text = Common.find_text(values)
+    text = find_assistant_message_text(values) || Common.find_text(values)
     ticket_id = ticket_id_from_opts(opts)
     final_reply = if is_binary(text), do: extract_final_reply(text, ticket_id), else: nil
     session_id = Common.find_session_id(values) || artifacts[:provider_session_id]
@@ -104,6 +104,24 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
     #{prompt}
     """
     |> String.trim()
+  end
+
+  defp find_assistant_message_text(values) do
+    values
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %{"type" => "assistant.message"} = value ->
+        Common.find_text([value])
+
+      %{"type" => "message", "role" => "assistant"} = value ->
+        Common.find_text([value])
+
+      %{"role" => "assistant"} = value ->
+        Common.find_text([value])
+
+      _other ->
+        nil
+    end)
   end
 
   defp extract_final_reply(text, expected_ticket_id) when is_binary(text) do

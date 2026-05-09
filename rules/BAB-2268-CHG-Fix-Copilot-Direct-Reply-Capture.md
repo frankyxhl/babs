@@ -117,6 +117,14 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     such as "This is".
   - Fixed by narrowing the planning-prefix guard and adding a regression for an
     ordinary markerless answer.
+  - Live Ticket follow-up found another Copilot JSONL shape where the real
+    `assistant.message` is followed by an `assistant.reasoning` event. Fixed the
+    Copilot parser to prefer assistant-message content over later reasoning
+    content and added a regression for that ordering.
+  - A second live follow-up found the executor redactor could make Copilot JSONL
+    invalid by replacing numeric metadata under token-like keys with an unquoted
+    `[REDACTED]`. Fixed redaction to preserve JSON validity for quoted JSON
+    keys and added regressions for redacted Copilot metadata.
 
 ---
 
