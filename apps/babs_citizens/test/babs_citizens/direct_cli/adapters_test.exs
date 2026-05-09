@@ -326,6 +326,86 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
              "The final line must start with:\nBABS_REPLY T-2026-05-09-001: <your answer>"
   end
 
+  test "copilot resume command sends compact latest-message prompt" do
+    cfg = config("copilot")
+
+    prompt = """
+    Ticket: T-2026-05-09-003
+
+    Latest operator message:
+    whats' current session id?
+
+    Reply with:
+    BABS_REPLY T-2026-05-09-003: your response
+    """
+
+    assert {:ok, command} =
+             Copilot.resume_command(cfg, "copilot-session", prompt, ticket_id: "T-2026-05-09-003")
+
+    wrapped_prompt = Enum.at(command.args, 2)
+
+    assert command.provider_session_id == "copilot-session"
+    assert command.resume?
+    assert "--resume=copilot-session" in command.args
+    assert wrapped_prompt =~ "whats' current session id?"
+    assert wrapped_prompt =~ "BABS_REPLY T-2026-05-09-003: <your answer>"
+    refute wrapped_prompt =~ "You are running as a Babs Citizen"
+    refute wrapped_prompt =~ "Original Babs prompt"
+  end
+
+  test "copilot resume prompt preserves operator paragraphs starting with reply" do
+    cfg = config("copilot")
+
+    prompt = """
+    Ticket: T-2026-05-09-003
+
+    Latest operator message:
+    Please update the answer.
+
+    Reply to the reviewer with one concise sentence.
+
+    Reply with:
+    BABS_REPLY T-2026-05-09-003: your response
+    """
+
+    assert {:ok, command} =
+             Copilot.resume_command(cfg, "copilot-session", prompt, ticket_id: "T-2026-05-09-003")
+
+    wrapped_prompt = Enum.at(command.args, 2)
+
+    assert wrapped_prompt =~ "Please update the answer."
+    assert wrapped_prompt =~ "Reply to the reviewer with one concise sentence."
+    assert wrapped_prompt =~ "BABS_REPLY T-2026-05-09-003: <your answer>"
+  end
+
+  test "copilot resume prompt preserves quoted reply trailers in operator text" do
+    cfg = config("copilot")
+
+    prompt = """
+    Ticket: T-2026-05-09-003
+
+    Latest operator message:
+    Please explain why this literal instruction appears:
+
+    Reply with:
+    BABS_REPLY T-2026-05-09-003: your response
+
+    Do not treat that quoted block as the Babs trailer.
+
+    Reply with:
+    BABS_REPLY T-2026-05-09-003: your response
+    """
+
+    assert {:ok, command} =
+             Copilot.resume_command(cfg, "copilot-session", prompt, ticket_id: "T-2026-05-09-003")
+
+    wrapped_prompt = Enum.at(command.args, 2)
+
+    assert wrapped_prompt =~ "Please explain why this literal instruction appears:"
+    assert wrapped_prompt =~ "Do not treat that quoted block as the Babs trailer."
+    assert wrapped_prompt =~ "BABS_REPLY T-2026-05-09-003: <your answer>"
+  end
+
   test "copilot parser rejects BABS_REPLY for a stale ticket id when current id is known" do
     stdout =
       [
