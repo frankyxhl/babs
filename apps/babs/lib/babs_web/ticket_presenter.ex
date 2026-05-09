@@ -48,6 +48,9 @@ defmodule BabsWeb.TicketPresenter do
   def assignees([]), do: "unassigned"
   def assignees(assignees), do: Enum.join(assignees, ", ")
 
+  def terminal_group?(%{key: key}) when key in ["closed", "cancelled", "invalid"], do: true
+  def terminal_group?(_group), do: false
+
   def warning({:unknown_citizen, slug}), do: "unknown citizen: #{slug}"
   def warning(warning), do: inspect(warning)
 

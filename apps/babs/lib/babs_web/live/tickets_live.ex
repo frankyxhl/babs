@@ -169,7 +169,12 @@ defmodule BabsWeb.TicketsLive do
           {Phoenix.Flash.get(@flash, :error)}
         </div>
 
-        <section :for={group <- @groups} class="ticket-group" data-testid={"ticket-group-#{group.key}"}>
+        <section
+          :for={group <- @groups}
+          :if={not TicketPresenter.terminal_group?(group) and group.count > 0}
+          class="ticket-group"
+          data-testid={"ticket-group-#{group.key}"}
+        >
           <header class="ticket-group-header">
             <h2>{group.label}</h2>
             <span class="ticket-group-count">{group.count}</span>
@@ -201,20 +206,48 @@ defmodule BabsWeb.TicketsLive do
               </a>
             </article>
           </div>
+        </section>
 
-          <div :if={Map.has_key?(group, :invalid) and group.invalid != []} class="ticket-list">
-            <article :for={invalid <- group.invalid} class="ticket-row ticket-row-invalid" data-testid="ticket-invalid-row">
-              <div class="ticket-main">
-                <span class="ticket-title">
-                  <BabsWeb.Icon.icon name="triangle-alert" />
-                  {invalid.file}
-                </span>
-                <span class="ticket-id">runtime file error</span>
-              </div>
-              <div class="ticket-error">{invalid.reason}</div>
+        <details
+          :for={group <- @groups}
+          :if={TicketPresenter.terminal_group?(group) and group.count > 0}
+          class="ticket-group ticket-group-terminal"
+          data-testid={"ticket-group-#{group.key}"}
+        >
+          <summary class="ticket-group-header">
+            <h2>{group.label}</h2>
+            <span class="ticket-group-count">{group.count}</span>
+          </summary>
+
+          <div :if={Map.has_key?(group, :tickets) and group.tickets != []} class="ticket-list">
+            <article
+              :for={ticket <- group.tickets}
+              class="ticket-row ticket-row-compact"
+              data-testid={"ticket-row-#{ticket.id}"}
+            >
+              <a class="ticket-title" href={TicketPath.detail(ticket.id, @socket_token)}>
+                <BabsWeb.Icon.icon name="file-text" />
+                {ticket.title}
+              </a>
+              <span class="ticket-id">{ticket.id}</span>
+              <div class={"state-badge state-#{ticket.state}"}>{ticket.state}</div>
             </article>
           </div>
-        </section>
+
+          <div :if={Map.has_key?(group, :invalid) and group.invalid != []} class="ticket-list">
+            <article
+              :for={invalid <- group.invalid}
+              class="ticket-row ticket-row-compact"
+              data-testid="ticket-invalid-row"
+            >
+              <span class="ticket-title">
+                <BabsWeb.Icon.icon name="triangle-alert" />
+                {invalid.file}
+              </span>
+              <span class="ticket-error">{invalid.reason}</span>
+            </article>
+          </div>
+        </details>
 
         <section :if={@remote_peer} class="remote-node" data-testid="remote-peer-tickets">
           <header class="remote-node-header">
@@ -497,6 +530,11 @@ defmodule BabsWeb.TicketsLive do
       padding: 12px;
     }
     .ticket-row-invalid { grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.2fr); }
+    .ticket-group-terminal { display: grid; gap: 8px; }
+    .ticket-group-terminal > summary.ticket-group-header { display: flex; align-items: center; gap: 8px; color: var(--text); cursor: pointer; }
+    .ticket-row-compact { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 13px; }
+    .ticket-row-compact:first-child { border-top: none; }
+    .ticket-row-compact .state-badge { font-size: 11px; padding: 2px 7px; }
     .ticket-main, .ticket-meta, .ticket-error { min-width: 0; }
     .ticket-title {
       display: inline-flex;
