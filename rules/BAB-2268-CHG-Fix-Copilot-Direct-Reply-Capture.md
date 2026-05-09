@@ -32,15 +32,19 @@ not semantically valid.
 
 ## Contract
 
-- Copilot direct output must be accepted only when the final assistant text
-  contains a real `BABS_REPLY <ticket_id>:` reply line.
+- Copilot direct output must prefer a real `BABS_REPLY <ticket_id>:` reply line
+  when the provider emits one.
 - Inline quoted instructions such as `` `BABS_REPLY <ticket_id>: your response` ``
   must not be captured as a valid reply.
 - When Copilot includes analysis before a final reply line, Babs must capture
   only the final reply body, without the `BABS_REPLY` marker and without the
   analysis text.
-- If Copilot does not provide a valid final reply line, direct delivery must
-  fail visibly instead of recording the analysis text as a Citizen comment.
+- If Copilot omits the marker, Babs may accept only a narrow markerless fallback:
+  exactly one non-empty line that does not contain `BABS_REPLY`, is not a
+  placeholder, and does not look like planning or analysis text.
+- If Copilot provides neither a valid final reply line nor a safe markerless
+  one-line answer, direct delivery must fail visibly instead of recording the
+  analysis text as a Citizen comment.
 - Copilot prompts should be tightened so the provider is explicitly told to
   return one final line only.
 
@@ -57,6 +61,8 @@ not semantically valid.
 
 - Copilot parser captures a concise final answer from a valid `BABS_REPLY`
   line.
+- Copilot parser captures a concise markerless one-line final answer when
+  Copilot ignores the marker instruction.
 - Copilot parser rejects the observed planning-text failure mode.
 - Existing direct CLI adapter tests continue to pass.
 - No private hostnames, local checkout paths, IPs, runtime Ticket payloads,
@@ -83,9 +89,12 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
     so prompts and parsing cannot be steered by stale quoted markers.
   - Changed Copilot parsing to reject planning text that only quotes the marker
     instruction inline.
+  - Added a conservative markerless fallback for Copilot output: accept only one
+    non-empty final-answer line with no `BABS_REPLY` token, no placeholder, and
+    no planning-shaped prefix.
 - Validation:
-  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs --seed 1`: pass; 15 tests, 0 failures.
-  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs apps/babs_citizens/test/babs_citizens/direct_cli/runner_test.exs --seed 1`: pass; 33 tests, 0 failures.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs --seed 1`: pass; 17 tests, 0 failures.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs apps/babs_citizens/test/babs_citizens/direct_cli/runner_test.exs --seed 1`: pass; 35 tests, 0 failures.
   - `mise exec -- mix format --check-formatted`: pass.
   - `mise exec -- mix compile --warnings-as-errors`: pass.
   - `af validate --root .`: pass; 178 documents checked, 0 issues found.

@@ -11,6 +11,7 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   @ticket_id_regex ~r/^T-\d{4}-\d{2}-\d{2}-\d{3}$/i
   @reply_line_regex ~r/^\s*BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:\s*(.+?)\s*$/i
   @ticket_reply_regex ~r/BABS_REPLY\s+(T-\d{4}-\d{2}-\d{2}-\d{3})\s*:/i
+  @planning_reply_regex ~r/^\s*(the user\b|the operator\b|i\s+(need|should|will)\b|let me\b|we need\b|this\s+(is|looks)\b|it\s+(looks|seems)\b)/i
 
   @impl true
   def provider, do: "copilot"
@@ -106,6 +107,21 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   end
 
   defp extract_final_reply(text, expected_ticket_id) when is_binary(text) do
+    marker_reply = extract_marker_reply(text, expected_ticket_id)
+
+    cond do
+      is_binary(marker_reply) ->
+        marker_reply
+
+      contains_reply_marker?(text) ->
+        nil
+
+      true ->
+        extract_markerless_reply(text)
+    end
+  end
+
+  defp extract_marker_reply(text, expected_ticket_id) do
     text
     |> String.split(~r/\R/)
     |> Enum.reverse()
@@ -123,6 +139,31 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
           nil
       end
     end)
+  end
+
+  defp extract_markerless_reply(text) do
+    text
+    |> String.split(~r/\R/)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> case do
+      [reply] ->
+        if safe_markerless_reply?(reply), do: reply
+
+      _other ->
+        nil
+    end
+  end
+
+  defp safe_markerless_reply?(reply) do
+    not placeholder_reply?(reply) and
+      not Regex.match?(@planning_reply_regex, reply)
+  end
+
+  defp contains_reply_marker?(text) do
+    text
+    |> String.upcase()
+    |> String.contains?("BABS_REPLY")
   end
 
   defp last_ticket_id(prompt) when is_binary(prompt) do
