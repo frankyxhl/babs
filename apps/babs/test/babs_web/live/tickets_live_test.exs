@@ -72,8 +72,8 @@ defmodule BabsWeb.TicketsLiveTest do
     {:ok, _view, html} = live(build_conn(), "/tickets?socket_token=token-1")
 
     assert html =~ ~s(data-testid="tickets-index")
-    assert html =~ "--bg: #f6f8fa"
-    assert html =~ "color-scheme: light"
+    refute html =~ "--bg: #f6f8fa"
+    refute html =~ "color-scheme: light"
     refute html =~ "Phoenix.HTML.raw(styles())"
     assert html =~ ~s(data-testid="tickets-new")
     assert html =~ ~s(href="/tickets/new?socket_token=token-1")

@@ -339,19 +339,6 @@ defmodule BabsWeb.NewTicketLive do
 
   def styles do
     """
-    :root {
-      color-scheme: light;
-      --bg: #f6f8fa;
-      --panel: #ffffff;
-      --panel-2: #f3f4f6;
-      --line: #d0d7de;
-      --text: #1f2328;
-      --muted: #57606a;
-      --field: #f6f8fa;
-      --accent: #0969da;
-      --accent-text: #ffffff;
-      --danger: #cf222e;
-    }
     * { box-sizing: border-box; }
     html, body {
       min-height: 100%;

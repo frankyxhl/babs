@@ -448,22 +448,6 @@ defmodule BabsWeb.TicketsLive do
 
   def styles do
     """
-    :root {
-      color-scheme: light;
-      --bg: #f6f8fa;
-      --panel: #ffffff;
-      --panel-2: #f3f4f6;
-      --line: #d0d7de;
-      --line-strong: #8c959f;
-      --text: #1f2328;
-      --muted: #57606a;
-      --danger: #cf222e;
-      --accent: #0969da;
-      --ok: #1a7f37;
-      --wait: #9a6700;
-      --done: #0f766e;
-      --accent-text: #ffffff;
-    }
     * { box-sizing: border-box; }
     html, body {
       min-height: 100%;
