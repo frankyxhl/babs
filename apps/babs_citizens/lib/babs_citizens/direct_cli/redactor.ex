@@ -32,7 +32,7 @@ defmodule Babs.Citizens.DirectCli.Redactor do
 
     value
     |> to_string()
-    |> String.replace(@sensitive_key_value, "\\1\\2[REDACTED]")
+    |> redact_sensitive_key_values()
     |> String.replace(@sensitive_assignment, "\\1[REDACTED]")
     |> String.replace(@private_ip, "[REDACTED_IP]")
     |> String.replace(@local_path, "[REDACTED_PATH]")
@@ -63,6 +63,25 @@ defmodule Babs.Citizens.DirectCli.Redactor do
     |> Enum.uniq()
     |> Enum.sort_by(&byte_size/1, :desc)
     |> Enum.reduce(value, fn secret, acc -> String.replace(acc, secret, "[REDACTED]") end)
+  end
+
+  defp redact_sensitive_key_values(value) do
+    Regex.replace(@sensitive_key_value, value, &redact_key_value/4)
+  end
+
+  defp redact_key_value(_full, key, separator, _value) do
+    replacement =
+      if json_key_value?(key, separator) do
+        ~s("[REDACTED]")
+      else
+        "[REDACTED]"
+      end
+
+    key <> separator <> replacement
+  end
+
+  defp json_key_value?(key, separator) do
+    String.starts_with?(key, ~s(")) and String.trim(separator) == ":"
   end
 
   defp utf8_prefix(_value, limit) when limit <= 0, do: ""
