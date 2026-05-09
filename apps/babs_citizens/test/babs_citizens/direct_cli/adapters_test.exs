@@ -344,6 +344,59 @@ defmodule Babs.Citizens.DirectCli.AdaptersTest do
              Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
   end
 
+  test "copilot parser accepts a single-line markerless final answer" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{"content" => "I am currently in the configured Citizen workspace."}
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
+
+    assert result.provider_session_id == "copilot-session"
+    assert result.text == "I am currently in the configured Citizen workspace."
+  end
+
+  test "copilot parser accepts ordinary markerless answers with natural prefixes" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{"content" => "This is the Babs repository."}
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:ok, result} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
+
+    assert result.text == "This is the Babs repository."
+  end
+
+  test "copilot parser rejects markerless planning-shaped output" do
+    stdout =
+      [
+        %{"type" => "session", "sessionId" => "copilot-session"},
+        %{
+          "type" => "assistant.message",
+          "data" => %{"content" => "I should answer the user with the current path."}
+        }
+      ]
+      |> Enum.map(&Jason.encode!/1)
+      |> Enum.join("\n")
+
+    assert {:error, :missing_babs_reply} =
+             Copilot.parse_result(%{stdout: stdout, stderr: ""}, ticket_id: "T-2026-05-09-002")
+  end
+
   test "fake adapter is deterministic for BDD fixtures" do
     cfg = config("babs-fake-ai")
     assert {:ok, command} = Fake.start_command(cfg, "hello", provider_session_id: "fake-session")

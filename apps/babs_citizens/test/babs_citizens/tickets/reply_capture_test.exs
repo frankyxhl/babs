@@ -241,6 +241,20 @@ defmodule Babs.Citizens.Tickets.ReplyCaptureTest do
              )
   end
 
+  test "catalog failures are ignored instead of crashing capture polling", %{
+    root: root,
+    ticket: ticket
+  } do
+    assert {:ignored, {:catalog_unavailable, "no such table: citizens"}} =
+             ReplyCapture.capture_once(turn(root, ticket.id),
+               citizen_config_fetcher: fn _slug -> raise "no such table: citizens" end,
+               paths: []
+             )
+
+    assert {:ok, history} = History.read(root, ticket.id)
+    refute Enum.any?(history, &(&1["event"] == "comment"))
+  end
+
   defp turn(root, ticket_id) do
     %{root: root, ticket_id: ticket_id, slug: "clare", started_at: "2026-05-06T00:00:00Z"}
   end
