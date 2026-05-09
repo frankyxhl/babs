@@ -92,9 +92,15 @@ git diff -U0 | rg -n '^\+.*(100\.[0-9]{1,3}|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|1
   - Added a conservative markerless fallback for Copilot output: accept only one
     non-empty final-answer line with no `BABS_REPLY` token, no placeholder, and
     no planning-shaped prefix.
+  - Hardened background reply capture so a missing/unavailable Citizen catalog
+    table is ignored instead of crashing capture polling during CI or early
+    runtime startup.
 - Validation:
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs --seed 1`: pass; 17 tests, 0 failures.
   - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/direct_cli/adapters_test.exs apps/babs_citizens/test/babs_citizens/direct_cli/runner_test.exs --seed 1`: pass; 35 tests, 0 failures.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/reply_capture_test.exs --seed 1`: pass; 10 tests, 0 failures.
+  - `mise exec -- mix test apps/babs_citizens/test/babs_citizens/tickets/mix_tasks_test.exs --seed 193306`: pass; 2 tests, 0 failures.
+  - `mise exec -- mix test`: pass; `babs_citizens` 513 tests, 0 failures; `babs` 137 tests, 0 failures.
   - `mise exec -- mix format --check-formatted`: pass.
   - `mise exec -- mix compile --warnings-as-errors`: pass.
   - `af validate --root .`: pass; 178 documents checked, 0 issues found.

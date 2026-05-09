@@ -9,8 +9,7 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
   use GenServer
 
   alias Babs.Citizens.AiTranscripts
-  alias Babs.Citizens.Catalog
-  alias Babs.Citizens.Runner
+  alias Babs.Citizens.{Catalog, CitizenRecord, Runner}
   alias Babs.Citizens.Tickets.Api
   alias Babs.Citizens.Tickets.History
 
@@ -178,13 +177,28 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
       Keyword.has_key?(opts, :citizen_config) ->
         {:ok, Keyword.fetch!(opts, :citizen_config)}
 
-      record = Catalog.get_by_slug(turn.slug) ->
-        {:ok, Catalog.to_config(record)}
+      fetcher = Keyword.get(opts, :citizen_config_fetcher) ->
+        fetch_config_with(fn -> fetcher.(turn.slug) end)
 
       true ->
-        {:error, :citizen_not_found}
+        fetch_config_with(fn -> Catalog.get_by_slug(turn.slug) end)
     end
   end
+
+  defp fetch_config_with(fun) when is_function(fun, 0) do
+    fun.()
+    |> normalize_config_result()
+  rescue
+    error -> {:error, {:catalog_unavailable, Exception.message(error)}}
+  catch
+    :exit, reason -> {:error, {:catalog_unavailable, reason}}
+  end
+
+  defp normalize_config_result({:ok, config}), do: {:ok, config}
+  defp normalize_config_result({:error, reason}), do: {:error, reason}
+  defp normalize_config_result(%CitizenRecord{} = record), do: {:ok, Catalog.to_config(record)}
+  defp normalize_config_result(nil), do: {:error, :citizen_not_found}
+  defp normalize_config_result(config), do: {:ok, config}
 
   defp normalize_turn(turn, opts) do
     started_at =
