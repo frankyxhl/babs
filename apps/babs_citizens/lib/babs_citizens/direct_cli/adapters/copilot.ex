@@ -32,11 +32,13 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
 
   @impl true
   def resume_command(config, provider_session_id, prompt, opts \\ []) do
+    command_opts = Keyword.merge(opts, provider_session_id: provider_session_id, resume?: true)
+
     Common.command(
       config,
       provider(),
-      base_args(config, prompt, ["--resume=#{provider_session_id}"], opts),
-      Keyword.merge(opts, provider_session_id: provider_session_id, resume?: true)
+      base_args(config, prompt, ["--resume=#{provider_session_id}"], command_opts),
+      command_opts
     )
   end
 
@@ -86,6 +88,14 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
   defp copilot_prompt(prompt, opts) do
     ticket_id = ticket_id_from_opts(opts) || last_ticket_id(prompt)
 
+    if Keyword.get(opts, :resume?, false) do
+      copilot_resume_prompt(prompt, ticket_id)
+    else
+      copilot_start_prompt(prompt, ticket_id)
+    end
+  end
+
+  defp copilot_start_prompt(prompt, ticket_id) do
     required_reply =
       if ticket_id do
         "BABS_REPLY #{ticket_id}: <your answer>"
@@ -104,6 +114,56 @@ defmodule Babs.Citizens.DirectCli.Adapters.Copilot do
     #{prompt}
     """
     |> String.trim()
+  end
+
+  defp copilot_resume_prompt(prompt, ticket_id) do
+    required_reply =
+      if ticket_id do
+        "BABS_REPLY #{ticket_id}: <your answer>"
+      else
+        "BABS_REPLY <ticket_id>: <your answer>"
+      end
+
+    case latest_operator_message(prompt, ticket_id) do
+      message when is_binary(message) and message != "" ->
+        """
+        #{message}
+
+        Reply with exactly one line:
+        #{required_reply}
+        """
+
+      _other ->
+        """
+        #{String.trim(prompt)}
+
+        Reply with exactly one line:
+        #{required_reply}
+        """
+    end
+    |> String.trim()
+  end
+
+  defp latest_operator_message(prompt, ticket_id) when is_binary(prompt) do
+    marker =
+      case ticket_id do
+        ticket_id when is_binary(ticket_id) ->
+          "BABS_REPLY\\s+#{Regex.escape(ticket_id)}\\s*:"
+
+        _other ->
+          "BABS_REPLY\\s+"
+      end
+
+    regex =
+      Regex.compile!(
+        "Latest operator message:\\n(?<message>.*)\\n\\nReply[^\\n]*with:\\n#{marker}[^\\n]*\\s*\\z",
+        "s"
+      )
+
+    case Regex.run(regex, prompt, capture: ["message"]) do
+      [message] -> String.trim(message)
+      _other -> nil
+    end
   end
 
   defp find_assistant_message_text(values) do
