@@ -4,6 +4,19 @@ defmodule BabsWeb.TicketPresenterTest do
   alias Babs.Citizens.Tickets.Ticket
   alias BabsWeb.TicketPresenter
 
+  test "terminal_group?/1 returns true for closed, cancelled, and invalid groups" do
+    assert TicketPresenter.terminal_group?(%{key: "closed"})
+    assert TicketPresenter.terminal_group?(%{key: "cancelled"})
+    assert TicketPresenter.terminal_group?(%{key: "invalid"})
+  end
+
+  test "terminal_group?/1 returns false for active groups" do
+    refute TicketPresenter.terminal_group?(%{key: "billboard"})
+    refute TicketPresenter.terminal_group?(%{key: "open"})
+    refute TicketPresenter.terminal_group?(%{key: "in_progress"})
+    refute TicketPresenter.terminal_group?(%{key: "pending_approval"})
+  end
+
   test "inspection_panel renders human approval fallback without inspection metadata" do
     panel = TicketPresenter.inspection_panel(ticket(), [])
 

@@ -104,6 +104,29 @@ defmodule BabsWeb.TicketsLiveTest do
     refute html =~ ~s(href="/tickets/T-2026-05-06-099)
   end
 
+  test "closed group renders as a collapsed details element when count > 0", %{root: root} do
+    ticket =
+      create_ticket!(root, "Closed ticket title", "Done.",
+        state: "pending_approval",
+        assignees: ["clare"]
+      )
+
+    {:ok, %{ticket: closed}} = Api.approve_ticket(ticket.id, tickets_root: root)
+
+    {:ok, _view, html} = live(build_conn(), "/tickets?socket_token=token-1")
+
+    assert html =~ ~s(<details)
+    assert html =~ ~s(data-testid="ticket-group-closed")
+    assert html =~ "Closed ticket title"
+    assert html =~ ~s(href="/tickets/#{closed.id}?socket_token=token-1")
+  end
+
+  test "invalid group is absent when invalid count is zero" do
+    {:ok, _view, html} = live(build_conn(), "/tickets")
+
+    refute html =~ ~s(data-testid="ticket-group-invalid")
+  end
+
   test "renders empty state when the ticket root has no files" do
     {:ok, _view, html} = live(build_conn(), "/tickets")
 
