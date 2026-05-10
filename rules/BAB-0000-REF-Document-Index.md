@@ -24,7 +24,7 @@
 | 1106 | ADR | LiveView State Channels PTY Bytes |
 | 1107 | ADR | Babs Owns Tmux Session Lifecycle |
 | 1108 | ADR | Citizens Use Alfred for SOP Composition |
-| 1109 | ADR | UI Federation Only for v0.1 |
+| 1109 | ADR | UI Federation Plus Configured Operator Control for v0.1 |
 | 1110 | ADR | Two OTP Apps Plus Tmux Detach |
 | 1111 | ADR | Ticket as Universal Coordination Primitive |
 | 1112 | ADR | Multi AI CLI Citizen Configuration |
