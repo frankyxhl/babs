@@ -24,7 +24,7 @@
 | 1106 | ADR | LiveView State Channels PTY Bytes |
 | 1107 | ADR | Babs Owns Tmux Session Lifecycle |
 | 1108 | ADR | Citizens Use Alfred for SOP Composition |
-| 1109 | ADR | UI Federation Plus Configured Operator Control for v0.1 |
+| 1109 | ADR | UI Federation Only for v0.1 |
 | 1110 | ADR | Two OTP Apps Plus Tmux Detach |
 | 1111 | ADR | Ticket as Universal Coordination Primitive |
 | 1112 | ADR | Multi AI CLI Citizen Configuration |
@@ -108,6 +108,7 @@
 | 2267 | CHG | Implement Phase 17.5 Remote Operation BDD E2E |
 | 2268 | CHG | Fix Copilot Direct Reply Capture |
 | 2269 | CHG | Reduce Copilot Resume Prompt Noise |
+| 2270 | CHG | Gitignore operator local citizen seeds |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
@@ -115,6 +116,7 @@
 | 3003 | REF | Discussion Tracker 2026 05 06 |
 | 3004 | REF | Discussion Tracker 2026 05 07 |
 | 3005 | REF | Discussion Tracker 2026 05 09 |
+| 3006 | REF | Discussion Tracker 2026 05 10 |
 
 ---
 

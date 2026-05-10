@@ -24,6 +24,13 @@ test-results/
 __pycache__/
 *.py[cod]
 
+# Citizens — allowlist committed seeds; ignore operator-local
+citizens/citizen-*.toml
+!citizens/citizen-clare.toml
+!citizens/citizen-dylan.toml
+!citizens/citizen-elena.toml
+!citizens/citizen-sentinel.toml
+
 # Babs runtime
 /sessions/
 /logs/
