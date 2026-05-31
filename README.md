@@ -139,6 +139,30 @@ mise exec -- mix phx.server
 Production mode is not the main dogfood path yet. If you use `MIX_ENV=prod`,
 set at least `PHX_HOST`, `SECRET_KEY_BASE`, and `BABS_SOCKET_TOKEN`.
 
+## Observability
+
+Babs mounts Phoenix LiveDashboard at `/dev/dashboard`. During development the
+dashboard route is open by default. From the same machine, open
+`http://127.0.0.1:4000/dev/dashboard`; from another device over Tailscale or a
+LAN, start Phoenix with `BABS_HTTP_IP=0.0.0.0` and open
+`http://<machine-ip>:4000/dev/dashboard`.
+
+In production, `/dev/dashboard` is token-gated with HTTP Basic Auth. Use
+username `babs` and the `BABS_SOCKET_TOKEN` value as the password. Production
+startup requires `BABS_SOCKET_TOKEN`. Outside production, if dashboard auth is
+manually required and no token is configured, the dashboard route returns a 503
+instead of serving metrics.
+
+The Metrics tab includes Babs-specific gauges alongside the BEAM, Phoenix, and
+Ecto metrics:
+
+- `babs.citizens.count`, tagged by `status`
+- `babs.hardlines.live`
+- `babs.tickets.count`, tagged by `state`
+
+This is the Phase 1 Observability surface tracked in
+`rules/BAB-2271-PRP-Operator-Dashboard-Panels.md`.
+
 ## AI CLI Citizens
 
 The seed Citizens are:

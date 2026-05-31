@@ -91,32 +91,32 @@ operator can review + approve a Citizen's changes from a phone.
 > Labels: `stack-type-*` / `stack-area-*` / `stack-size-*` / `stack-risk-*`;
 > `blueprint-ready` applied by the bot.
 
-| Slice | Title | Size | Risk | Issue |
-|------|-------|------|------|-------|
-| 1.1 | Add `phoenix_live_dashboard` dep + mount `/dev/dashboard` (dev-open, prod token-gated) | S | low | #80 |
-| 1.2 | `Babs.Telemetry` metrics module (BEAM/Phoenix/Ecto) | S | low | #81 |
-| 1.3 | Custom telemetry gauges — Citizens/Hardlines/Tickets | M | med | #82 |
-| 1.4 | Document dashboard access + prod gating | XS | low | #83 |
-| 2.1 | `knowledge_root` config + per-Citizen home path resolution | S | med | #84 |
-| 2.2 | `Babs.Knowledge` core — safe list/read/write markdown | M | med | #85 |
-| 2.3 | Markdown render + frontmatter parse for knowledge files | S | low | #86 |
-| 2.4 | FileSystem watcher for `knowledge_root` → PubSub (mirror Tickets.Watcher) | S | med | #87 |
-| 2.5 | Citizen Home read tab on `/citizens/:slug` (rendered Readme) | M | med | #88 |
-| 2.6 | Citizen Home edit mode (save → file → watcher refresh) | M | med | #89 |
-| 2.7 | Multi-note support under `notes/` (list + pick) | M | low | #90 |
-| 2.8 | Seed default `Readme.md` on Citizen spawn | S | low | #91 |
-| 2.9 | BDD — edit home in browser; external edit reflects in UI | M | med | #92 |
-| 3.1 | `prompt_assembler` injects Citizen standing-context (Readme/GOAL) | M | high | #93 |
-| 3.2 | Standing-context selection policy (frontmatter flag / config) | S | med | #94 |
-| 3.3 | Size/token bounding + truncation for injected context | S | med | #95 |
-| 3.4 | "Preview injected context" dry-run API + UI | M | med | #96 |
-| 3.5 | Tests — assembly includes home; preview matches actual injection | S | med | #97 |
-| 4.1 | `Babs.Git` wrapper — workspace-scoped status/branch/log/diff | M | med | #98 |
-| 4.2 | Resolve repo/workspace for a Ticket (Citizen → cwd) | S | med | #99 |
-| 4.3 | Git diff LiveView component | M | med | #100 |
-| 4.4 | Wire diff into `ticket_live` for `pending_approval` review | M | med | #101 |
-| 4.5 | Mobile/responsive styling for diff view | S | low | #102 |
-| 4.6 | BDD — view Ticket diff + approve from mobile viewport | M | med | #103 |
+| Slice | Title | Size | Risk | Issue | Status |
+|------|-------|------|------|-------|--------|
+| 1.1 | Add `phoenix_live_dashboard` dep + mount `/dev/dashboard` (dev-open, prod token-gated) | S | low | #80 | Done (#105) |
+| 1.2 | `Babs.Telemetry` metrics module (BEAM/Phoenix/Ecto) | S | low | #81 | Done (#107) |
+| 1.3 | Custom telemetry gauges — Citizens/Hardlines/Tickets | M | med | #82 | Done (#108) |
+| 1.4 | Document dashboard access + prod gating | XS | low | #83 | Done on merge |
+| 2.1 | `knowledge_root` config + per-Citizen home path resolution | S | med | #84 | Open |
+| 2.2 | `Babs.Knowledge` core — safe list/read/write markdown | M | med | #85 | Open |
+| 2.3 | Markdown render + frontmatter parse for knowledge files | S | low | #86 | Open |
+| 2.4 | FileSystem watcher for `knowledge_root` → PubSub (mirror Tickets.Watcher) | S | med | #87 | Open |
+| 2.5 | Citizen Home read tab on `/citizens/:slug` (rendered Readme) | M | med | #88 | Open |
+| 2.6 | Citizen Home edit mode (save → file → watcher refresh) | M | med | #89 | Open |
+| 2.7 | Multi-note support under `notes/` (list + pick) | M | low | #90 | Open |
+| 2.8 | Seed default `Readme.md` on Citizen spawn | S | low | #91 | Open |
+| 2.9 | BDD — edit home in browser; external edit reflects in UI | M | med | #92 | Open |
+| 3.1 | `prompt_assembler` injects Citizen standing-context (Readme/GOAL) | M | high | #93 | Open |
+| 3.2 | Standing-context selection policy (frontmatter flag / config) | S | med | #94 | Open |
+| 3.3 | Size/token bounding + truncation for injected context | S | med | #95 | Open |
+| 3.4 | "Preview injected context" dry-run API + UI | M | med | #96 | Open |
+| 3.5 | Tests — assembly includes home; preview matches actual injection | S | med | #97 | Open |
+| 4.1 | `Babs.Git` wrapper — workspace-scoped status/branch/log/diff | M | med | #98 | Open |
+| 4.2 | Resolve repo/workspace for a Ticket (Citizen → cwd) | S | med | #99 | Open |
+| 4.3 | Git diff LiveView component | M | med | #100 | Open |
+| 4.4 | Wire diff into `ticket_live` for `pending_approval` review | M | med | #101 | Open |
+| 4.5 | Mobile/responsive styling for diff view | S | low | #102 | Open |
+| 4.6 | BDD — view Ticket diff + approve from mobile viewport | M | med | #103 | Open |
 
 ## Acceptance (per phase)
 
@@ -161,4 +161,5 @@ Each slice's own issue carries its concrete, checkbox-level acceptance criteria.
 
 | Date | Change | By |
 |------|--------|----|
+| 2026-05-31 | Note Phase 1 Observability slice completion through dashboard access documentation | Codex |
 | 2026-05-31 | Initial draft — 4-phase, 24-slice operator dashboard batch | Claude Code |
