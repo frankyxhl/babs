@@ -18,7 +18,8 @@ config :babs_citizens,
 
 config :babs_citizens, Babs.Citizens.Repo,
   log: false,
-  stacktrace: config_env() == :dev
+  stacktrace: config_env() == :dev,
+  telemetry_prefix: [:babs_citizens, :repo]
 
 config :babs, Babs.DevReloader,
   enabled: config_env() == :dev,

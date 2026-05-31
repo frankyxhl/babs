@@ -3,6 +3,10 @@ defmodule Babs.TelemetryTest do
 
   alias Telemetry.Metrics.{LastValue, Summary}
 
+  test "uses the configured Ecto Repo telemetry prefix" do
+    assert Babs.Citizens.Repo.config()[:telemetry_prefix] == [:babs_citizens, :repo]
+  end
+
   test "defines Phoenix, Ecto, and VM metrics for LiveDashboard" do
     metrics = Babs.Telemetry.metrics()
     metric_names = Enum.map(metrics, & &1.name)
@@ -12,6 +16,11 @@ defmodule Babs.TelemetryTest do
 
     assert [:babs_citizens, :repo, :query, :total_time] in metric_names
     assert [:babs_citizens, :repo, :query, :query_time] in metric_names
+
+    total_time_metric =
+      Enum.find(metrics, &(&1.name == [:babs_citizens, :repo, :query, :total_time]))
+
+    assert %Summary{event_name: [:babs_citizens, :repo, :query]} = total_time_metric
 
     assert [:vm, :memory, :total] in metric_names
     assert [:vm, :total_run_queue_lengths, :total] in metric_names
