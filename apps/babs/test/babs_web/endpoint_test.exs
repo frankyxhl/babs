@@ -58,6 +58,14 @@ defmodule BabsWeb.EndpointTest do
     end)
   end
 
+  test "serves LiveDashboard with the metrics tab enabled" do
+    with_dashboard_auth([required?: false, token: nil], fn ->
+      html = build_conn() |> get("/dev/dashboard/home") |> html_response(200)
+
+      assert html =~ "Metrics"
+    end)
+  end
+
   test "rejects LiveDashboard without credentials when dashboard auth is required" do
     with_dashboard_auth([required?: true, token: "dashboard-secret"], fn ->
       conn = build_conn() |> get("/dev/dashboard")
