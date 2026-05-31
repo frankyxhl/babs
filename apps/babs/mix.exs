@@ -43,6 +43,7 @@ defmodule Babs.MixProject do
       {:jason, "~> 1.4"},
       {:lazy_html, "~> 0.1.0", only: :test},
       {:phoenix, "~> 1.8"},
+      {:phoenix_live_dashboard, "~> 0.8.7"},
       {:phoenix_live_reload, "~> 1.6", only: :dev},
       {:phoenix_live_view, "~> 1.1"},
       {:tailwind, "~> 0.4.1", runtime: Mix.env() == :dev}

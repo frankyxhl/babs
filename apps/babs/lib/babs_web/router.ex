@@ -3,6 +3,9 @@ defmodule BabsWeb.Router do
 
   use Phoenix.Router
   import Phoenix.Controller
+  import Phoenix.LiveDashboard.Router
+
+  @dashboard_auth_required_by_default Mix.env() == :prod
 
   pipeline :browser do
     plug(:accepts, ["html"])
@@ -15,6 +18,10 @@ defmodule BabsWeb.Router do
 
   pipeline :api do
     plug(:accepts, ["json"])
+  end
+
+  pipeline :live_dashboard_auth do
+    plug(:require_live_dashboard_auth)
   end
 
   scope "/", BabsWeb do
@@ -34,6 +41,12 @@ defmodule BabsWeb.Router do
     get("/tickets/:id", TerminalController, :ticket)
   end
 
+  scope "/" do
+    pipe_through([:browser, :live_dashboard_auth])
+
+    live_dashboard("/dev/dashboard")
+  end
+
   scope "/api/v1", BabsWeb.Api.V1 do
     pipe_through(:api)
 
@@ -51,4 +64,45 @@ defmodule BabsWeb.Router do
     get("/tickets", ReadController, :tickets)
     get("/tickets/:id", ReadController, :ticket)
   end
+
+  defp require_live_dashboard_auth(conn, _opts) do
+    if live_dashboard_auth_required?() do
+      case live_dashboard_auth_token() do
+        nil ->
+          conn
+          |> put_resp_content_type("text/plain")
+          |> send_resp(503, "LiveDashboard auth token is not configured")
+          |> halt()
+
+        token ->
+          Plug.BasicAuth.basic_auth(conn,
+            username: "babs",
+            password: token,
+            realm: "babs-dashboard"
+          )
+      end
+    else
+      conn
+    end
+  end
+
+  defp live_dashboard_auth_required? do
+    :babs
+    |> Application.get_env(BabsWeb.LiveDashboardAuth, [])
+    |> Keyword.get(:required?, @dashboard_auth_required_by_default)
+  end
+
+  defp live_dashboard_auth_token do
+    :babs
+    |> Application.get_env(BabsWeb.UserSocket, [])
+    |> Keyword.get(:auth_token)
+    |> normalize_token()
+  end
+
+  defp normalize_token(value) when is_binary(value) do
+    value = String.trim(value)
+    if value == "", do: nil, else: value
+  end
+
+  defp normalize_token(_value), do: nil
 end
