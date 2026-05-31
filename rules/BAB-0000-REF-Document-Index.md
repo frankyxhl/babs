@@ -110,6 +110,7 @@
 | 2269 | CHG | Reduce Copilot Resume Prompt Noise |
 | 2270 | CHG | Gitignore operator local citizen seeds |
 | 2271 | PRP | Operator Dashboard Panels |
+| 2272 | CHG | Custom Telemetry Gauges |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |

@@ -5,6 +5,8 @@ defmodule Babs.Telemetry do
 
   import Telemetry.Metrics
 
+  alias Babs.Telemetry.Measurements
+
   @ecto_repo Babs.Citizens.Repo
   @ecto_query_measurements [:total_time, :decode_time, :query_time, :queue_time, :idle_time]
 
@@ -16,7 +18,13 @@ defmodule Babs.Telemetry do
   def init(_opts) do
     children = [
       {:telemetry_poller,
-       measurements: [:memory, :total_run_queue_lengths, :system_counts, :persistent_term],
+       measurements: [
+         :memory,
+         :total_run_queue_lengths,
+         :system_counts,
+         :persistent_term,
+         {Measurements, :dispatch, []}
+       ],
        period: 10_000,
        name: Babs.Telemetry.Poller}
     ]
@@ -32,7 +40,10 @@ defmodule Babs.Telemetry do
       summary("phoenix.router_dispatch.stop.duration",
         tags: [:route],
         unit: {:native, :millisecond}
-      )
+      ),
+      last_value("babs.citizens.count", tags: [:status]),
+      last_value("babs.hardlines.live"),
+      last_value("babs.tickets.count", tags: [:state])
     ] ++
       ecto_metrics ++
       [
