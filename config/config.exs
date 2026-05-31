@@ -18,7 +18,8 @@ config :babs_citizens,
 
 config :babs_citizens, Babs.Citizens.Repo,
   log: false,
-  stacktrace: config_env() == :dev
+  stacktrace: config_env() == :dev,
+  telemetry_prefix: [:babs_citizens, :repo]
 
 config :babs, Babs.DevReloader,
   enabled: config_env() == :dev,
@@ -40,5 +41,7 @@ config :tailwind,
 config :logger, :console,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
+
+config :telemetry_poller, default: false
 
 import_config "#{config_env()}.exs"

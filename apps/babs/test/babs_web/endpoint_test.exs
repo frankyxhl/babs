@@ -48,6 +48,37 @@ defmodule BabsWeb.EndpointTest do
     assert ["no-cache"] = get_resp_header(conn, "cache-control")
   end
 
+  test "emits endpoint stop telemetry for dashboard metrics" do
+    test_pid = self()
+    handler_id = {__MODULE__, :endpoint_stop, make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        handler_id,
+        [:phoenix, :endpoint, :stop],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:endpoint_stop, event, measurements, metadata})
+        end,
+        nil
+      )
+
+    with_dashboard_auth([required?: false, token: nil], fn ->
+      try do
+        conn = build_conn() |> get("/dev/dashboard")
+
+        assert redirected_to(conn) == "/dev/dashboard/home"
+
+        assert_receive {:endpoint_stop, [:phoenix, :endpoint, :stop], %{duration: duration},
+                        %{conn: %Plug.Conn{}}},
+                       500
+
+        assert is_integer(duration)
+      after
+        :telemetry.detach(handler_id)
+      end
+    end)
+  end
+
   test "serves LiveDashboard when dashboard auth is disabled" do
     with_dashboard_auth([required?: false, token: nil], fn ->
       conn = build_conn() |> get("/dev/dashboard")
@@ -55,6 +86,14 @@ defmodule BabsWeb.EndpointTest do
 
       conn = build_conn() |> get("/dev/dashboard/home")
       assert html_response(conn, 200) =~ "LiveDashboard"
+    end)
+  end
+
+  test "serves LiveDashboard with the metrics tab enabled" do
+    with_dashboard_auth([required?: false, token: nil], fn ->
+      html = build_conn() |> get("/dev/dashboard/home") |> html_response(200)
+
+      assert html =~ "Metrics"
     end)
   end
 

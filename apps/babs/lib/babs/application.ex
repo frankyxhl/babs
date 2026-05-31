@@ -6,6 +6,7 @@ defmodule Babs.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      Babs.Telemetry,
       BabsWeb.Endpoint,
       Babs.DevReloader
     ]

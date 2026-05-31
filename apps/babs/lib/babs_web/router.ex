@@ -44,7 +44,7 @@ defmodule BabsWeb.Router do
   scope "/" do
     pipe_through([:browser, :live_dashboard_auth])
 
-    live_dashboard("/dev/dashboard")
+    live_dashboard("/dev/dashboard", metrics: Babs.Telemetry)
   end
 
   scope "/api/v1", BabsWeb.Api.V1 do

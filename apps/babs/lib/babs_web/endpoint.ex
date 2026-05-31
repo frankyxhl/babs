@@ -28,6 +28,7 @@ defmodule BabsWeb.Endpoint do
     only: ~w(css js icons manifest.webmanifest)
   )
 
+  plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
   plug(Plug.Session, @session_options)
   plug(BabsWeb.Router)
 end
