@@ -1,7 +1,7 @@
 # REF-1200: Multi-Agent Loop Config
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-10
+**Last updated:** 2026-05-31
 **Last reviewed:** 2026-05-10
 **Status:** Active
 **Instantiates:** COR-1622 (Multi-Agent Loop Project Configuration parameter schema)
@@ -55,6 +55,14 @@ COR-1622 separates the *shape* of the loop (specified once in the COR cluster) f
 |-----|-------|-------|
 | `<worker-agent>` | `trinity-glm via droid exec` | Memory: "delegate heavy implementation/debug to Sonnet sub-agents; Opus orchestrates and reviews." trinity-glm is the externalized worker pattern (model-diverse from the orchestrator) for Babs phase work. |
 | `<worker-min-loc>` | `30` | Default. At or below: orchestrator edits directly; above: dispatch to `<worker-agent>`. |
+
+### R-count cap (COR-1617 Phase 8)
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `<max-r-count>` | `10` | Default soft cap. At R10 and later, the orchestrator evaluates convergence before continuing review-loop rounds. |
+| `<max-r-count-extension>` | `15` | Babs-specific extension above the COR-1622 default of `3`. When P0/P1/P2 findings remain open, up to fifteen additional rounds are auto-authorized before hard stop. |
+| `<convergence-severity>` | `advisory` | Default convergence threshold. The PR is considered converged when no P0/P1/P2 findings remain open. |
 
 ### Bot polling (COR-1615 binding)
 
@@ -131,3 +139,4 @@ Babs-specific:
 | Date | Change | By |
 |------|--------|----|
 | 2026-05-10 | Initial instantiation of COR-1622 schema for Babs. Panel = `[glm, deepseek, minimax]` (3 viable, MiniMax newly bootstrapped 2026-05-10). Worker = `trinity-glm`. 1FA intake. Two trade-offs accepted: worker/reviewer overlap (glm both sides) and shared-droid CLI surface (glm + minimax) — mitigated by §Resilience defaults from COR-1622 v1.16.0 (FXA-146). | Claude Opus 4.7 |
+| 2026-05-31 | Add R-count cap parameters introduced by COR-1622: `<max-r-count>`, `<max-r-count-extension>`, and `<convergence-severity>`; set Babs extension to `15` for a stricter review-loop budget. | Codex |
