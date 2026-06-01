@@ -103,6 +103,29 @@ defmodule BabsWeb.TerminalLiveTest do
              ~s(href="/citizens/#{other_slug}?tab=terminal&amp;socket_token=socket-token")
   end
 
+  test "home tab patches from terminal tab back to the default Home route", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal-return")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Home\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}?tab=terminal")
+
+    assert html =~ ~s(data-terminal-visible="true")
+
+    html =
+      view
+      |> element(~s(a[data-testid="citizen-page-tab-home"]))
+      |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}")
+    assert html =~ ~s(data-page-tab="home")
+    assert html =~ ~s(data-home-visible="true")
+    assert html =~ ~s(data-terminal-visible="false")
+    assert html =~ "Home"
+  end
+
   test "clicking a knowledge file patches the URL and renders that file", %{
     knowledge_root: knowledge_root
   } do

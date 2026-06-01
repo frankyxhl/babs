@@ -27,12 +27,15 @@ defmodule BabsWeb.TerminalLive do
       :ok = Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, Watcher.topic())
     end
 
+    default_page_tab = session_page_tab(session)
+
     socket =
       socket
       |> assign(:slug, slug)
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
-      |> assign(:page_tab, session_page_tab(session))
+      |> assign(:default_page_tab, default_page_tab)
+      |> assign(:page_tab, default_page_tab)
       |> assign(:home, empty_home())
       |> assign(:lifecycle_inflight, %{})
       |> assign_tabs()
@@ -45,7 +48,7 @@ defmodule BabsWeb.TerminalLive do
 
   def handle_params(params, _uri, socket) do
     params = normalize_params(params)
-    page_tab = parse_page_tab(Map.get(params, "tab"), socket.assigns.page_tab)
+    page_tab = parse_page_tab(Map.get(params, "tab"), socket.assigns.default_page_tab)
 
     socket = assign(socket, :page_tab, page_tab)
     socket = if page_tab == :home, do: assign_home(socket, params), else: socket
