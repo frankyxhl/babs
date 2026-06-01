@@ -23,6 +23,7 @@ class FakeTerminal {
     this.rows = 32;
     this.options = options;
     this.focusCount = 0;
+    this.blurCount = 0;
     FakeTerminal.instances.push(this);
   }
 
@@ -31,9 +32,14 @@ class FakeTerminal {
   focus() {
     this.focusCount += 1;
   }
+  blur() {
+    this.blurCount += 1;
+  }
   writeln() {}
   write() {}
-  onData() {}
+  onData(callback) {
+    this.dataHandler = callback;
+  }
   attachCustomKeyEventHandler(handler) {
     this.keyHandler = handler;
   }
@@ -62,10 +68,13 @@ FakeResizeObserver.instances = [];
 class FakeSocket {
   constructor() {
     this.channelInstance = new FakeChannel();
+    this.connectCount = 0;
     FakeSocket.instances.push(this);
   }
 
-  connect() {}
+  connect() {
+    this.connectCount += 1;
+  }
 
   channel() {
     return this.channelInstance;
@@ -75,8 +84,14 @@ class FakeSocket {
 FakeSocket.instances = [];
 
 class FakeChannel {
+  constructor() {
+    this.pushed = [];
+  }
+
   on() {}
-  push() {}
+  push(event, payload) {
+    this.pushed.push({ event, payload });
+  }
 
   join() {
     const chain = {
@@ -113,6 +128,95 @@ function fakeElement(attrs = {}) {
 }
 
 describe("terminal_client LiveView status ownership", () => {
+  it("defers xterm and channel boot until the terminal tab is visible", () => {
+    FakeSocket.instances = [];
+    FakeTerminal.instances = [];
+    FakeResizeObserver.instances = [];
+
+    const root = fakeElement({
+      id: "terminal",
+      dataset: { slug: "sentinel", socketToken: "", terminalVisible: "false" }
+    });
+    const status = fakeElement({
+      id: "connection-status",
+      dataset: { state: "connecting" },
+      textContent: "connecting"
+    });
+    const document = new FakeDocument(root, status);
+
+    const deferred = bootTerminal({
+      document,
+      window: fakeWindow(),
+      Terminal: FakeTerminal,
+      FitAddon: FakeFitAddon,
+      Socket: FakeSocket,
+      TextDecoder
+    });
+
+    assert.equal(deferred.deferred, true);
+    assert.equal(FakeTerminal.instances.length, 0);
+    assert.equal(FakeSocket.instances.length, 0);
+
+    root.dataset.terminalVisible = "true";
+    document.dispatchEvent(new Event("phx:update"));
+
+    assert.equal(FakeTerminal.instances.length, 1);
+    assert.equal(FakeSocket.instances.length, 1);
+    assert.equal(FakeSocket.instances[0].connectCount, 1);
+    assert.equal(deferred.client.terminal, FakeTerminal.instances[0]);
+  });
+
+  it("does not send terminal input or claim keys after the terminal is hidden", () => {
+    FakeSocket.instances = [];
+    FakeTerminal.instances = [];
+    FakeResizeObserver.instances = [];
+
+    const root = fakeElement({
+      id: "terminal",
+      dataset: { slug: "sentinel", socketToken: "", terminalVisible: "true" }
+    });
+    const status = fakeElement({
+      id: "connection-status",
+      dataset: { state: "connecting" },
+      textContent: "connecting"
+    });
+    const document = new FakeDocument(root, status);
+
+    bootTerminal({
+      document,
+      window: fakeWindow(),
+      Terminal: FakeTerminal,
+      FitAddon: FakeFitAddon,
+      Socket: FakeSocket,
+      TextDecoder
+    });
+
+    const terminal = FakeTerminal.instances[0];
+    const channel = FakeSocket.instances[0].channelInstance;
+
+    terminal.dataHandler("visible input");
+    assert.deepEqual(channel.pushed.at(-1), { event: "input", payload: { data: "visible input" } });
+
+    root.dataset.terminalVisible = "false";
+    document.dispatchEvent(new Event("phx:update"));
+
+    const pushedBeforeHiddenInput = channel.pushed.length;
+    terminal.dataHandler("hidden input");
+
+    let prevented = false;
+    terminal.keyHandler({
+      type: "keydown",
+      key: "Enter",
+      preventDefault() {
+        prevented = true;
+      }
+    });
+
+    assert.equal(channel.pushed.length, pushedBeforeHiddenInput);
+    assert.equal(prevented, false);
+    assert.equal(terminal.blurCount, 1);
+  });
+
   it("restores connected status after LiveView patches the badge back to connecting", () => {
     FakeSocket.instances = [];
     FakeTerminal.instances = [];
