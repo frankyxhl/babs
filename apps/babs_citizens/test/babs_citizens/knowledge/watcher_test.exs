@@ -31,11 +31,11 @@ defmodule Babs.Knowledge.WatcherTest do
   end
 
   test "broadcasts debounced change when knowledge markdown changes", %{root: root} do
+    File.mkdir_p!(Path.join(root, "clare"))
     pid = start_supervised!({Watcher, knowledge_root: root, name: unique_name(), debounce_ms: 20})
     wait_for_watcher(pid)
 
     path = Path.join([root, "clare", "Readme.md"])
-    File.mkdir_p!(Path.dirname(path))
     File.write!(path, "# Clare\n")
 
     receive_knowledge_change("clare", "Readme.md", path)
@@ -206,7 +206,7 @@ defmodule Babs.Knowledge.WatcherTest do
     after
       40 ->
         if System.monotonic_time(:millisecond) <= deadline do
-          File.touch!(path)
+          File.write!(path, "# Clare #{System.unique_integer([:positive])}\n")
           receive_knowledge_change(slug, name, path, deadline)
         else
           flunk("knowledge change was not received before deadline")

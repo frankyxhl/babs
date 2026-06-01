@@ -218,6 +218,21 @@ PubSub pattern; this slice mirrors that approach for Knowledge files.
   focused test suite now covers disabled mode, FileSystem `:stop`, every
   configured event type, invalid slugs, deterministic watcher startup, and
   outside-root cleanup.
+- 2026-06-01 PR CI R1:
+  GitHub Actions failed the real-write watcher test on Linux because the test
+  created `clare/` after the FileSystem watcher had started. The test now creates
+  the Citizen home before watcher startup, matching the existing-dir behavior
+  this slice guarantees. Local rechecks passed:
+  `mise exec -- mix test apps/babs_citizens/test/babs_citizens/knowledge/watcher_test.exs`
+  and
+  `mise exec -- mix test --max-cases 1 apps/babs_citizens/test/babs_citizens/knowledge/watcher_test.exs`.
+- 2026-06-01 PR CI R2:
+  GitHub Actions still missed the first Linux inotify write event on the
+  real-write watcher test. The retry helper previously used `File.touch!/1`,
+  which can surface as an `:attribute` event on inotify and is intentionally
+  ignored by the Knowledge watcher. The helper now rewrites the markdown file
+  with unique content so retries produce write/close events that the watcher
+  handles.
 
 ---
 
