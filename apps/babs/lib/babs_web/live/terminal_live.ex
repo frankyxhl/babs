@@ -528,7 +528,7 @@ defmodule BabsWeb.TerminalLive do
           <a
             :for={citizen <- live_tabs(@tabs, @slug)}
             class={tab_class(citizen, @slug)}
-            href={CitizenPath.terminal(citizen.slug, @socket_token)}
+            href={citizen_tab_path(citizen.slug, @socket_token, page_tab)}
             data-testid={"citizen-tab-#{citizen.slug}"}
           >
             <span class="status-dot" aria-hidden="true"></span>
@@ -735,6 +735,13 @@ defmodule BabsWeb.TerminalLive do
 
   defp visible_attr(true), do: "true"
   defp visible_attr(false), do: "false"
+
+  defp citizen_tab_path(slug, socket_token, :terminal) do
+    CitizenPath.terminal(slug, socket_token, tab: :terminal)
+  end
+
+  defp citizen_tab_path(slug, socket_token, _page_tab),
+    do: CitizenPath.terminal(slug, socket_token)
 
   defp home(%{home: home}), do: home
   defp home(_assigns), do: empty_home()

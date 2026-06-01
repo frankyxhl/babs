@@ -83,6 +83,26 @@ defmodule BabsWeb.TerminalLiveTest do
     refute conn.resp_body =~ ~s(data-testid="citizen-page-tab-home")
   end
 
+  test "terminal tab preserves terminal mode when switching citizen tabs", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal-switch")
+    other_slug = unique_slug("home-terminal-switch-other")
+    register_pane!(slug)
+    register_pane!(other_slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Home\n")
+
+    Application.put_env(:babs, BabsWeb.TerminalLive,
+      status_snapshot_provider: fn -> [tab(slug, :up), tab(other_slug, :up)] end
+    )
+
+    {:ok, _view, html} =
+      live(build_conn(), "/citizens/#{slug}?tab=terminal&socket_token=socket-token")
+
+    assert html =~
+             ~s(href="/citizens/#{other_slug}?tab=terminal&amp;socket_token=socket-token")
+  end
+
   test "clicking a knowledge file patches the URL and renders that file", %{
     knowledge_root: knowledge_root
   } do
@@ -321,7 +341,7 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ ~s(href="/citizens?socket_token=socket-token")
     assert html =~ ~s(data-testid="citizen-tab-clare")
     assert html =~ ~s(data-testid="citizen-tab-dylan")
-    assert html =~ ~s(href="/citizens/dylan?socket_token=socket-token")
+    assert html =~ ~s(href="/citizens/dylan?tab=terminal&amp;socket_token=socket-token")
     refute html =~ ~s(data-testid="citizen-tab-failed-one")
     refute html =~ ~s(data-testid="citizen-tab-reattaching-one")
     refute html =~ ~s(data-testid="citizen-tab-stopped-one")

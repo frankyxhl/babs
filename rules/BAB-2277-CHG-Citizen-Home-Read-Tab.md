@@ -274,10 +274,10 @@ before later slices add edit mode, multi-note picking, and prompt injection.
   behavior and lifecycle tab preservation.
 - 2026-06-01 GREEN focused:
   `mise exec -- mix test apps/babs/test/babs_web/live/terminal_live_test.exs apps/babs/test/babs_web/controllers/terminal_controller_test.exs apps/babs/test/babs_web/citizen_path_test.exs`
-  passed: 39 tests, 0 failures.
+  passed: 40 tests, 0 failures.
 - 2026-06-01 GREEN full:
   `mise exec -- mix test` passed: `babs_citizens` 568 tests, 0 failures;
-  `babs` 165 tests, 0 failures.
+  `babs` 166 tests, 0 failures.
 - 2026-06-01 validation stack:
   `mise exec -- mix format --check-formatted` passed;
   `mise exec -- mix compile --warnings-as-errors` passed;
@@ -293,6 +293,12 @@ before later slices add edit mode, multi-note picking, and prompt injection.
   this final pass: removed dead controller action, removed unused CSS, skipped
   Home reload while Terminal is active, added Readme-link/PubSub-terminal
   tests, and made invalid `CitizenPath.terminal/3` tab options explicit.
+- 2026-06-01 PR #114 Codex review follow-up:
+  Codex reported that Citizen tab links from `?tab=terminal` dropped terminal
+  mode when switching Citizens. The implementation now builds Citizen tab hrefs
+  with `tab: :terminal` when the page tab is Terminal, and the focused LiveView
+  suite includes a regression test for switching Citizen tabs from Terminal
+  mode. Re-ran the validation stack above after the fix.
 
 ---
 
