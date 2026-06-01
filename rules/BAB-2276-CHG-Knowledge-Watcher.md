@@ -108,7 +108,7 @@ PubSub pattern; this slice mirrors that approach for Knowledge files.
    - normalize `/private/var/` to `/var/` like the Ticket watcher for macOS
      test stability
    - only process events containing one of `:created`, `:modified`, `:renamed`,
-     `:deleted`, or `:removed`
+     `:deleted`, `:removed`, `:moved_to`, or `:moved_from`
    - require the event path to be inside or equal to the expanded
      `knowledge_root` with an explicit containment guard before calling
      `Path.relative_to/2`: `path == root or String.starts_with?(path, root <> "/")`
@@ -233,6 +233,11 @@ PubSub pattern; this slice mirrors that approach for Knowledge files.
   ignored by the Knowledge watcher. The helper now rewrites the markdown file
   with unique content so retries produce write/close events that the watcher
   handles.
+- 2026-06-01 PR review R3:
+  Codex identified that Linux inotify reports atomic save/rename target paths
+  as `:moved_to`/`:moved_from`, while the watcher only accepted `:renamed`.
+  The watcher now accepts both inotify move events so `Babs.Knowledge.write/4`
+  and editor atomic saves broadcast for the final markdown path.
 
 ---
 

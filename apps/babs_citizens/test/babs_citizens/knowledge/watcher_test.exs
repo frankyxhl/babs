@@ -148,7 +148,9 @@ defmodule Babs.Knowledge.WatcherTest do
       {:modified, "notes/modified.md"},
       {:renamed, "notes/renamed.md"},
       {:deleted, "notes/deleted.md"},
-      {:removed, "notes/removed.md"}
+      {:removed, "notes/removed.md"},
+      {:moved_to, "notes/moved-to.md"},
+      {:moved_from, "notes/moved-from.md"}
     ]
 
     Enum.each(events, fn {event, name} ->
@@ -160,6 +162,17 @@ defmodule Babs.Knowledge.WatcherTest do
     Enum.each(events, fn {_event, name} ->
       assert_receive {:knowledge_changed, "clare", ^name}, 1_000
     end)
+  end
+
+  test "broadcasts Linux inotify atomic-save moved_to events", %{root: root} do
+    pid = start_supervised!({Watcher, knowledge_root: root, name: unique_name(), debounce_ms: 20})
+    watcher = wait_for_watcher(pid)
+
+    path = Path.join([root, "clare", "Readme.md"])
+    File.mkdir_p!(Path.dirname(path))
+    send(pid, {:file_event, watcher, {path, [:moved_to]}})
+
+    assert_receive {:knowledge_changed, "clare", "Readme.md"}, 1_000
   end
 
   defp unique_name do

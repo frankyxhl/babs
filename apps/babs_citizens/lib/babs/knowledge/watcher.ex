@@ -16,7 +16,7 @@ defmodule Babs.Knowledge.Watcher do
   @topic "knowledge"
   @default_debounce_ms 250
   @default_retry_ms 1_000
-  @event_types [:created, :modified, :renamed, :deleted, :removed]
+  @event_types [:created, :modified, :renamed, :deleted, :removed, :moved_to, :moved_from]
 
   def topic, do: @topic
 
