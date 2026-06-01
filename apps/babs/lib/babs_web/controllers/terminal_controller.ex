@@ -109,7 +109,12 @@ defmodule BabsWeb.TerminalController do
   defp send_terminal(conn, slug, socket_token, full?) do
     live_render(conn, BabsWeb.TerminalLive,
       router: BabsWeb.Router,
-      session: %{"slug" => slug, "socket_token" => socket_token || "", "full?" => full?}
+      session: %{
+        "slug" => slug,
+        "socket_token" => socket_token || "",
+        "full?" => full?,
+        "tab" => "terminal"
+      }
     )
   end
 

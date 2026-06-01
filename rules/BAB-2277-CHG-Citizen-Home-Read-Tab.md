@@ -299,6 +299,13 @@ before later slices add edit mode, multi-note picking, and prompt injection.
   with `tab: :terminal` when the page tab is Terminal, and the focused LiveView
   suite includes a regression test for switching Citizen tabs from Terminal
   mode. Re-ran the validation stack above after the fix.
+- 2026-06-01 PR #114 Codex review follow-up R2:
+  Codex reported that the active `new` Citizen special-case route still renders
+  through `TerminalController.new/2` and should land on the Terminal tab. The
+  controller-rendered terminal session now passes a Terminal tab default, while
+  router-mounted Citizen routes keep the Home default. Controller tests assert
+  `/citizens/new` active-citizen mode keeps `data-terminal-visible="true"`.
+  Re-ran the validation stack above after the fix.
 
 ---
 

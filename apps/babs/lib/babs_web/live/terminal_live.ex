@@ -32,7 +32,7 @@ defmodule BabsWeb.TerminalLive do
       |> assign(:slug, slug)
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
-      |> assign(:page_tab, :home)
+      |> assign(:page_tab, session_page_tab(session))
       |> assign(:home, empty_home())
       |> assign(:lifecycle_inflight, %{})
       |> assign_tabs()
@@ -45,7 +45,7 @@ defmodule BabsWeb.TerminalLive do
 
   def handle_params(params, _uri, socket) do
     params = normalize_params(params)
-    page_tab = parse_page_tab(Map.get(params, "tab"))
+    page_tab = parse_page_tab(Map.get(params, "tab"), socket.assigns.page_tab)
 
     socket = assign(socket, :page_tab, page_tab)
     socket = if page_tab == :home, do: assign_home(socket, params), else: socket
@@ -715,8 +715,13 @@ defmodule BabsWeb.TerminalLive do
   defp normalize_params(params) when is_map(params), do: params
   defp normalize_params(_params), do: %{}
 
-  defp parse_page_tab("terminal"), do: :terminal
-  defp parse_page_tab(_tab), do: :home
+  defp session_page_tab(%{"tab" => "terminal"}), do: :terminal
+  defp session_page_tab(_session), do: :home
+
+  defp parse_page_tab("terminal", _default), do: :terminal
+  defp parse_page_tab("home", _default), do: :home
+  defp parse_page_tab(nil, default) when default in [:home, :terminal], do: default
+  defp parse_page_tab(_tab, _default), do: :home
 
   defp page_tab(%{page_tab: tab}) when tab in [:home, :terminal], do: tab
   defp page_tab(_assigns), do: :terminal

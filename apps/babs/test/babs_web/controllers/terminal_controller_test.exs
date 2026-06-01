@@ -139,6 +139,8 @@ defmodule BabsWeb.TerminalControllerTest do
     assert conn.resp_body =~ ~s(data-testid="terminal")
     assert conn.resp_body =~ ~s(data-slug="new")
     assert conn.resp_body =~ ~s(data-socket-token="route-token")
+    assert conn.resp_body =~ ~s(data-terminal-visible="true")
+    refute conn.resp_body =~ ~s(data-home-visible="true")
     refute conn.resp_body =~ ~s(data-testid="new-citizen-form")
   end
 
