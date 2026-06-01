@@ -3,6 +3,7 @@ defmodule BabsWeb.Router do
 
   use Phoenix.Router
   import Phoenix.Controller
+  import Phoenix.LiveView.Router
   import Phoenix.LiveDashboard.Router
 
   @dashboard_auth_required_by_default Mix.env() == :prod
@@ -14,6 +15,10 @@ defmodule BabsWeb.Router do
     plug(:protect_from_forgery)
     plug(:put_secure_browser_headers)
     plug(:put_root_layout, html: {BabsWeb.Layouts, :root})
+  end
+
+  pipeline :citizen_terminal_gate do
+    plug(BabsWeb.CitizenTerminalGate)
   end
 
   pipeline :api do
@@ -34,7 +39,16 @@ defmodule BabsWeb.Router do
     head("/citizens", TerminalController, :citizens_head)
     get("/citizens/new", TerminalController, :new)
     get("/citizens/attach", TerminalController, :attach)
-    get("/citizens/:slug", TerminalController, :show)
+
+    scope "/" do
+      pipe_through(:citizen_terminal_gate)
+
+      live_session :citizen_terminal,
+        session: {BabsWeb.TerminalController, :terminal_session, []} do
+        live("/citizens/:slug", TerminalLive)
+      end
+    end
+
     head("/citizens/:slug", TerminalController, :head)
     get("/tickets", TerminalController, :tickets)
     get("/tickets/new", TerminalController, :new_ticket)

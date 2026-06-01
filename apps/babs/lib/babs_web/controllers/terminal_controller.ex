@@ -73,18 +73,14 @@ defmodule BabsWeb.TerminalController do
     )
   end
 
-  def show(conn, %{"slug" => slug} = params) do
+  def terminal_session(conn) do
     conn = fetch_query_params(conn)
 
-    case Lifecycle.lookup(slug) do
-      {:ok, _pid} ->
-        send_terminal(conn, slug, socket_token(conn, params), full?(conn, params))
-
-      {:error, :not_found} ->
-        conn
-        |> put_resp_content_type("text/plain")
-        |> send_resp(404, "citizen not found: #{slug}\n")
-    end
+    %{
+      "slug" => Map.get(conn.path_params, "slug", ""),
+      "socket_token" => socket_token(conn, conn.params),
+      "full?" => full?(conn, conn.params)
+    }
   end
 
   def new(conn, params) do
@@ -112,6 +108,7 @@ defmodule BabsWeb.TerminalController do
 
   defp send_terminal(conn, slug, socket_token, full?) do
     live_render(conn, BabsWeb.TerminalLive,
+      router: BabsWeb.Router,
       session: %{"slug" => slug, "socket_token" => socket_token || "", "full?" => full?}
     )
   end

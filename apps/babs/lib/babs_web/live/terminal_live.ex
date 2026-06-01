@@ -9,27 +9,48 @@ defmodule BabsWeb.TerminalLive do
 
   use Phoenix.LiveView
 
+  alias Babs.Knowledge
+  alias Babs.Knowledge.{Markdown, Watcher}
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
   alias BabsWeb.CitizenPath
   alias Phoenix.LiveView.JS
 
   @refresh_ms 1_000
+  @readme "Readme.md"
 
   @impl true
   def mount(_params, %{"slug" => slug} = session, socket) do
     full? = full?(session)
 
-    if connected?(socket) and not full?, do: schedule_refresh()
+    if connected?(socket) and not full? do
+      schedule_refresh()
+      :ok = Phoenix.PubSub.subscribe(Babs.Citizens.PubSub, Watcher.topic())
+    end
 
     socket =
       socket
       |> assign(:slug, slug)
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
+      |> assign(:page_tab, :home)
+      |> assign(:home, empty_home())
       |> assign(:lifecycle_inflight, %{})
       |> assign_tabs()
 
     {:ok, socket}
+  end
+
+  @impl true
+  def handle_params(_params, _uri, %{assigns: %{full?: true}} = socket), do: {:noreply, socket}
+
+  def handle_params(params, _uri, socket) do
+    params = normalize_params(params)
+    page_tab = parse_page_tab(Map.get(params, "tab"))
+
+    socket = assign(socket, :page_tab, page_tab)
+    socket = if page_tab == :home, do: assign_home(socket, params), else: socket
+
+    {:noreply, socket}
   end
 
   @impl true
@@ -38,6 +59,16 @@ defmodule BabsWeb.TerminalLive do
 
     {:noreply, assign_tabs(socket)}
   end
+
+  def handle_info({:knowledge_changed, slug, _name}, %{assigns: %{slug: slug}} = socket) do
+    if page_tab(socket.assigns) == :home do
+      {:noreply, refresh_home(socket)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info({:knowledge_changed, _slug, _name}, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
@@ -108,7 +139,7 @@ defmodule BabsWeb.TerminalLive do
       .terminal-chrome {
         height: var(--terminal-chrome-height);
         display: grid;
-        grid-template-columns: auto minmax(0, 1fr) auto auto;
+        grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
         align-items: center;
         gap: 8px;
         border-bottom: 1px solid var(--line);
@@ -117,6 +148,7 @@ defmodule BabsWeb.TerminalLive do
       }
 
       .terminal-link,
+      .citizen-page-tab,
       .terminal-tab {
         min-height: 32px;
         border: 1px solid var(--line);
@@ -138,6 +170,7 @@ defmodule BabsWeb.TerminalLive do
       }
 
       .terminal-link:hover,
+      .citizen-page-tab:hover,
       .terminal-tab:hover {
         border-color: var(--accent);
         color: var(--text);
@@ -167,6 +200,12 @@ defmodule BabsWeb.TerminalLive do
         scrollbar-width: thin;
       }
 
+      .citizen-page-tabs {
+        display: inline-flex;
+        gap: 6px;
+      }
+
+      .citizen-page-tab,
       .terminal-tab {
         max-width: 180px;
         flex: 0 0 auto;
@@ -177,6 +216,7 @@ defmodule BabsWeb.TerminalLive do
         text-overflow: ellipsis;
       }
 
+      .citizen-page-tab.is-active,
       .terminal-tab.is-active {
         border-color: var(--accent);
         color: var(--text);
@@ -270,12 +310,125 @@ defmodule BabsWeb.TerminalLive do
         background: var(--terminal-bg);
       }
 
-      .terminal-page[data-mode="tabs"] #terminal {
+      .terminal-page[data-mode="tabs"][data-page-tab="terminal"] #terminal {
         height: calc(100vh - var(--terminal-chrome-height));
       }
 
       .terminal-page[data-mode="full"] #terminal {
         height: 100vh;
+      }
+
+      #terminal[data-terminal-visible="false"] {
+        visibility: hidden;
+        height: 0;
+        min-height: 0;
+        overflow: hidden;
+        pointer-events: none;
+      }
+
+      .terminal-page[data-page-tab="home"] {
+        overflow: auto;
+      }
+
+      .terminal-page[data-page-tab="home"] #connection-status {
+        display: none;
+      }
+
+      .citizen-home {
+        min-height: calc(100vh - var(--terminal-chrome-height));
+        background: var(--bg);
+        color: var(--text);
+        padding: 20px;
+      }
+
+      .citizen-home[data-home-visible="false"] {
+        display: none;
+      }
+
+      .citizen-home-layout {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      .knowledge-sidebar {
+        border-right: 1px solid var(--line);
+        padding-right: 16px;
+      }
+
+      .knowledge-sidebar-title {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font: 600 12px/1.4 system-ui, sans-serif;
+        text-transform: uppercase;
+      }
+
+      .knowledge-files {
+        display: grid;
+        gap: 6px;
+      }
+
+      .knowledge-file-link {
+        min-width: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: var(--text);
+        padding: 7px 8px;
+        text-decoration: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .knowledge-file-link:hover,
+      .knowledge-file-link.is-active {
+        border-color: var(--accent);
+        background: #171c23;
+      }
+
+      .knowledge-empty,
+      .knowledge-error {
+        color: var(--muted);
+        font: 14px/1.5 system-ui, sans-serif;
+      }
+
+      .knowledge-error {
+        color: var(--danger);
+      }
+
+      .knowledge-document {
+        min-width: 0;
+        color: var(--text);
+      }
+
+      .knowledge-document-title {
+        margin: 0 0 16px;
+        color: var(--muted);
+        font: 600 13px/1.4 system-ui, sans-serif;
+      }
+
+      .knowledge-rendered {
+        max-width: 760px;
+        color: var(--text);
+        font: 15px/1.65 system-ui, sans-serif;
+      }
+
+      .knowledge-rendered h1,
+      .knowledge-rendered h2,
+      .knowledge-rendered h3 {
+        line-height: 1.2;
+        margin: 0 0 14px;
+      }
+
+      .knowledge-rendered p {
+        margin: 0 0 12px;
+      }
+
+      .knowledge-rendered a {
+        color: var(--accent);
       }
 
       #connection-status {
@@ -327,14 +480,50 @@ defmodule BabsWeb.TerminalLive do
           grid-row: 2;
           order: 3;
         }
+        .citizen-page-tabs {
+          grid-column: 1 / -1;
+        }
         .terminal-roles {
           max-width: 100%;
         }
+        .citizen-home {
+          padding: 14px;
+        }
+        .citizen-home-layout {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .knowledge-sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          padding: 0 0 14px;
+        }
       }
     </style>
-    <div class="terminal-page" data-mode={if @full?, do: "full", else: "tabs"}>
+    <% page_tab = page_tab(assigns) %>
+    <% home = home(assigns) %>
+    <div
+      class="terminal-page"
+      data-mode={if @full?, do: "full", else: "tabs"}
+      data-page-tab={page_tab}
+    >
       <nav :if={!@full?} class="terminal-chrome" data-testid="terminal-chrome" aria-label="Citizen terminal navigation">
         <a class="terminal-link" href={CitizenPath.index(@socket_token)} data-testid="citizens-link">Citizens</a>
+        <div class="citizen-page-tabs" aria-label="Citizen page tabs">
+          <.link
+            class={page_tab_class(page_tab, :home)}
+            patch={CitizenPath.terminal(@slug, @socket_token)}
+            data-testid="citizen-page-tab-home"
+          >
+            Home
+          </.link>
+          <.link
+            class={page_tab_class(page_tab, :terminal)}
+            patch={CitizenPath.terminal(@slug, @socket_token, tab: :terminal)}
+            data-testid="citizen-page-tab-terminal"
+          >
+            Terminal
+          </.link>
+        </div>
         <div class="terminal-tabs" aria-label="Citizen tabs">
           <a
             :for={citizen <- live_tabs(@tabs, @slug)}
@@ -442,6 +631,58 @@ defmodule BabsWeb.TerminalLive do
           {flash(assigns, :error)}
         </span>
       </nav>
+      <section
+        :if={!@full?}
+        class="citizen-home"
+        data-testid="citizen-home"
+        data-home-visible={visible_attr(page_tab == :home)}
+      >
+        <div class="citizen-home-layout">
+          <aside class="knowledge-sidebar" aria-label="Knowledge files">
+            <h2 class="knowledge-sidebar-title">Knowledge</h2>
+            <p :if={home.list_error} class="knowledge-error" data-testid="knowledge-list-error">
+              {home.list_error}
+            </p>
+            <div :if={home.files == []} class="knowledge-empty" data-testid="knowledge-file-empty">
+              No knowledge files yet.
+            </div>
+            <nav :if={home.files != []} class="knowledge-files">
+              <.link
+                :for={file <- home.files}
+                class={knowledge_file_class(file, home.selected_file)}
+                patch={knowledge_file_path(@slug, @socket_token, file)}
+                data-testid={"knowledge-file-#{file}"}
+              >
+                {file}
+              </.link>
+            </nav>
+          </aside>
+          <article class="knowledge-document" data-testid="knowledge-document">
+            <h1 class="knowledge-document-title">{home.selected_file}</h1>
+            <div
+              :if={home.document.status == :ok}
+              class="knowledge-rendered"
+              data-testid="knowledge-rendered"
+            >
+              {safe_html(home.document.html)}
+            </div>
+            <p
+              :if={home.document.status == :empty}
+              class="knowledge-empty"
+              data-testid="knowledge-empty-state"
+            >
+              {home.document.message}
+            </p>
+            <p
+              :if={home.document.status == :error}
+              class="knowledge-error"
+              data-testid="knowledge-render-error"
+            >
+              {home.document.message}
+            </p>
+          </article>
+        </div>
+      </section>
       <div
         id="connection-status"
         phx-update="ignore"
@@ -456,6 +697,7 @@ defmodule BabsWeb.TerminalLive do
         data-testid="terminal"
         data-slug={@slug}
         data-socket-token={@socket_token}
+        data-terminal-visible={visible_attr(terminal_visible?(@full?, page_tab))}
       >
       </div>
     </div>
@@ -469,6 +711,132 @@ defmodule BabsWeb.TerminalLive do
     </script>
     """
   end
+
+  defp normalize_params(params) when is_map(params), do: params
+  defp normalize_params(_params), do: %{}
+
+  defp parse_page_tab("terminal"), do: :terminal
+  defp parse_page_tab(_tab), do: :home
+
+  defp page_tab(%{page_tab: tab}) when tab in [:home, :terminal], do: tab
+  defp page_tab(_assigns), do: :terminal
+
+  defp page_tab_class(active, tab) do
+    if active == tab do
+      "citizen-page-tab is-active"
+    else
+      "citizen-page-tab"
+    end
+  end
+
+  defp terminal_visible?(true, _page_tab), do: true
+  defp terminal_visible?(false, :terminal), do: true
+  defp terminal_visible?(_full?, _page_tab), do: false
+
+  defp visible_attr(true), do: "true"
+  defp visible_attr(false), do: "false"
+
+  defp home(%{home: home}), do: home
+  defp home(_assigns), do: empty_home()
+
+  defp empty_home do
+    %{
+      files: [],
+      selected_file: @readme,
+      list_error: nil,
+      document: %{status: :empty, html: "", message: "This file does not exist yet."}
+    }
+  end
+
+  defp assign_home(socket, params) do
+    assign(socket, :home, load_home(socket.assigns.slug, Map.get(params, "file")))
+  end
+
+  defp refresh_home(socket) do
+    selected_file = socket.assigns.home.selected_file
+    assign(socket, :home, load_home(socket.assigns.slug, selected_file))
+  end
+
+  defp load_home(slug, requested_file) do
+    case Knowledge.list(slug) do
+      {:ok, files} ->
+        selected_file = selected_knowledge_file(files, requested_file)
+
+        %{
+          files: files,
+          selected_file: selected_file,
+          list_error: nil,
+          document: load_document(slug, selected_file)
+        }
+
+      {:error, reason} ->
+        %{
+          files: [],
+          selected_file: @readme,
+          list_error: friendly_list_error(reason),
+          document: load_document(slug, @readme)
+        }
+    end
+  end
+
+  defp selected_knowledge_file(files, requested_file) when is_binary(requested_file) do
+    requested_file = String.trim(requested_file)
+
+    if requested_file in files do
+      requested_file
+    else
+      @readme
+    end
+  end
+
+  defp selected_knowledge_file(_files, _requested_file), do: @readme
+
+  defp load_document(slug, file) do
+    with {:ok, markdown} <- Knowledge.read(slug, file),
+         :ok <- validate_utf8(markdown),
+         {:ok, rendered} <- Markdown.render(markdown) do
+      %{status: :ok, html: rendered.html, message: nil}
+    else
+      {:error, {:not_found, _path}} ->
+        %{status: :empty, html: "", message: "This file does not exist yet."}
+
+      {:error, reason} ->
+        %{status: :error, html: "", message: friendly_document_error(reason)}
+    end
+  end
+
+  defp validate_utf8(markdown) do
+    if String.valid?(markdown), do: :ok, else: {:error, {:invalid_markdown, :invalid_utf8}}
+  end
+
+  defp friendly_list_error(_reason), do: "Unable to read knowledge files."
+
+  defp friendly_document_error({:invalid_frontmatter, _reason}),
+    do: "Unable to render this knowledge file."
+
+  defp friendly_document_error({:invalid_markdown, _reason}),
+    do: "Unable to render this knowledge file."
+
+  defp friendly_document_error({:render_failed, _reason}),
+    do: "Unable to render this knowledge file."
+
+  defp friendly_document_error(_reason), do: "Unable to read this knowledge file."
+
+  defp knowledge_file_class(file, selected_file) do
+    if file == selected_file do
+      "knowledge-file-link is-active"
+    else
+      "knowledge-file-link"
+    end
+  end
+
+  defp knowledge_file_path(slug, socket_token, @readme),
+    do: CitizenPath.terminal(slug, socket_token)
+
+  defp knowledge_file_path(slug, socket_token, file),
+    do: CitizenPath.terminal(slug, socket_token, file: file)
+
+  defp safe_html(html), do: {:safe, html}
 
   defp assign_tabs(socket) do
     tabs = tab_provider().(socket.assigns.slug)
@@ -613,7 +981,12 @@ defmodule BabsWeb.TerminalLive do
         result
         |> assign_lifecycle_result(socket, action, slug)
         |> redirect(
-          to: CitizenPath.terminal(slug, socket.assigns.socket_token, full?: socket.assigns.full?)
+          to:
+            CitizenPath.terminal(
+              slug,
+              socket.assigns.socket_token,
+              terminal_redirect_opts(socket)
+            )
         )
 
       result ->
@@ -654,6 +1027,16 @@ defmodule BabsWeb.TerminalLive do
   defp action_error_label(:start), do: "Start"
   defp action_error_label(:stop), do: "Stop"
   defp action_error_label(:restart), do: "Restart"
+
+  defp terminal_redirect_opts(%{assigns: %{full?: true}}), do: [full?: true]
+
+  defp terminal_redirect_opts(%{assigns: assigns}) do
+    if page_tab(assigns) == :terminal do
+      [tab: :terminal]
+    else
+      []
+    end
+  end
 
   defp flash(assigns, kind) do
     assigns

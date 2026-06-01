@@ -5,6 +5,22 @@ defmodule BabsWeb.TerminalControllerTest do
 
   @endpoint BabsWeb.Endpoint
 
+  setup do
+    previous = Application.get_env(:babs, BabsWeb.TerminalLive)
+
+    Application.put_env(:babs, BabsWeb.TerminalLive, status_snapshot_provider: fn -> [] end)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:babs, BabsWeb.TerminalLive, previous)
+      else
+        Application.delete_env(:babs, BabsWeb.TerminalLive)
+      end
+    end)
+
+    :ok
+  end
+
   test "root redirects to citizens index" do
     conn = get(build_conn(), "/")
 
