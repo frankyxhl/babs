@@ -88,7 +88,7 @@ defmodule BabsWeb.TerminalController do
 
     case Lifecycle.lookup("new") do
       {:ok, _pid} ->
-        send_terminal(conn, "new", socket_token(conn, params), full?(conn, params))
+        send_terminal(conn, "new", socket_token(conn, params), full?(conn, params), params)
 
       {:error, :not_found} ->
         live_render(conn, BabsWeb.NewCitizenLive,
@@ -106,17 +106,37 @@ defmodule BabsWeb.TerminalController do
 
   def citizens_head(conn, _params), do: send_resp(conn, 200, "")
 
-  defp send_terminal(conn, slug, socket_token, full?) do
+  defp send_terminal(conn, slug, socket_token, full?, params) do
     live_render(conn, BabsWeb.TerminalLive,
       router: BabsWeb.Router,
-      session: %{
-        "slug" => slug,
-        "socket_token" => socket_token || "",
-        "full?" => full?,
-        "tab" => "terminal"
-      }
+      session:
+        %{
+          "slug" => slug,
+          "socket_token" => socket_token || "",
+          "full?" => full?,
+          "tab" => terminal_page_tab(params)
+        }
+        |> maybe_put_file(params)
     )
   end
+
+  defp terminal_page_tab(%{"tab" => "home"}), do: "home"
+  defp terminal_page_tab(%{"tab" => "terminal"}), do: "terminal"
+  defp terminal_page_tab(%{"file" => file}) when is_binary(file), do: file_page_tab(file)
+  defp terminal_page_tab(_params), do: "terminal"
+
+  defp file_page_tab(file) do
+    if String.trim(file) == "", do: "terminal", else: "home"
+  end
+
+  defp maybe_put_file(session, %{"file" => file}) when is_binary(file) do
+    case String.trim(file) do
+      "" -> session
+      file -> Map.put(session, "file", file)
+    end
+  end
+
+  defp maybe_put_file(session, _params), do: session
 
   defp socket_token(conn, params) do
     case Map.get(conn.query_params, "socket_token") || Map.get(params, "socket_token", "") do

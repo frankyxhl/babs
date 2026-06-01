@@ -32,6 +32,12 @@ defmodule BabsWeb.CitizenPathTest do
     assert CitizenPath.terminal("clare", "socket token", tab: :home, file: "Plan.md") ==
              "/citizens/clare?file=Plan.md&socket_token=socket+token"
 
+    assert CitizenPath.terminal("new", "socket token", tab: :home, explicit_tab?: true) ==
+             "/citizens/new?tab=home&socket_token=socket+token"
+
+    assert CitizenPath.terminal("new", "", tab: :home, file: "Plan.md", explicit_tab?: true) ==
+             "/citizens/new?tab=home&file=Plan.md"
+
     assert CitizenPath.terminal("clare", "socket token",
              full?: true,
              tab: :terminal,

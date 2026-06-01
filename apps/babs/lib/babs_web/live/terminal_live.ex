@@ -35,6 +35,7 @@ defmodule BabsWeb.TerminalLive do
       |> assign(:socket_token, Map.get(session, "socket_token", ""))
       |> assign(:full?, full?)
       |> assign(:default_page_tab, default_page_tab)
+      |> assign(:default_params, session_default_params(session))
       |> assign(:page_tab, default_page_tab)
       |> assign(:home, empty_home())
       |> assign(:lifecycle_inflight, %{})
@@ -47,7 +48,7 @@ defmodule BabsWeb.TerminalLive do
   def handle_params(_params, _uri, %{assigns: %{full?: true}} = socket), do: {:noreply, socket}
 
   def handle_params(params, _uri, socket) do
-    params = normalize_params(params)
+    params = Map.merge(socket.assigns.default_params, normalize_params(params))
     page_tab = parse_page_tab(Map.get(params, "tab"), socket.assigns.default_page_tab)
 
     socket = assign(socket, :page_tab, page_tab)
@@ -512,20 +513,22 @@ defmodule BabsWeb.TerminalLive do
       <nav :if={!@full?} class="terminal-chrome" data-testid="terminal-chrome" aria-label="Citizen terminal navigation">
         <a class="terminal-link" href={CitizenPath.index(@socket_token)} data-testid="citizens-link">Citizens</a>
         <div class="citizen-page-tabs" aria-label="Citizen page tabs">
-          <.link
+          <.terminal_nav_link
+            slug={@slug}
             class={page_tab_class(page_tab, :home)}
-            patch={CitizenPath.terminal(@slug, @socket_token)}
-            data-testid="citizen-page-tab-home"
+            to={page_tab_path(@slug, @socket_token, :home)}
+            testid="citizen-page-tab-home"
           >
             Home
-          </.link>
-          <.link
+          </.terminal_nav_link>
+          <.terminal_nav_link
+            slug={@slug}
             class={page_tab_class(page_tab, :terminal)}
-            patch={CitizenPath.terminal(@slug, @socket_token, tab: :terminal)}
-            data-testid="citizen-page-tab-terminal"
+            to={page_tab_path(@slug, @socket_token, :terminal)}
+            testid="citizen-page-tab-terminal"
           >
             Terminal
-          </.link>
+          </.terminal_nav_link>
         </div>
         <div class="terminal-tabs" aria-label="Citizen tabs">
           <a
@@ -650,14 +653,15 @@ defmodule BabsWeb.TerminalLive do
               No knowledge files yet.
             </div>
             <nav :if={home.files != []} class="knowledge-files">
-              <.link
+              <.terminal_nav_link
                 :for={file <- home.files}
+                slug={@slug}
                 class={knowledge_file_class(file, home.selected_file)}
-                patch={knowledge_file_path(@slug, @socket_token, file)}
-                data-testid={"knowledge-file-#{file}"}
+                to={knowledge_file_path(@slug, @socket_token, file)}
+                testid={"knowledge-file-#{file}"}
               >
                 {file}
-              </.link>
+              </.terminal_nav_link>
             </nav>
           </aside>
           <article class="knowledge-document" data-testid="knowledge-document">
@@ -719,7 +723,23 @@ defmodule BabsWeb.TerminalLive do
   defp normalize_params(_params), do: %{}
 
   defp session_page_tab(%{"tab" => "terminal"}), do: :terminal
+  defp session_page_tab(%{"tab" => "home"}), do: :home
   defp session_page_tab(_session), do: :home
+
+  defp session_default_params(session) do
+    %{}
+    |> maybe_put_default_param("tab", Map.get(session, "tab"))
+    |> maybe_put_default_param("file", Map.get(session, "file"))
+  end
+
+  defp maybe_put_default_param(params, key, value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> params
+      value -> Map.put(params, key, value)
+    end
+  end
+
+  defp maybe_put_default_param(params, _key, _value), do: params
 
   defp parse_page_tab("terminal", _default), do: :terminal
   defp parse_page_tab("home", _default), do: :home
@@ -743,6 +763,30 @@ defmodule BabsWeb.TerminalLive do
 
   defp visible_attr(true), do: "true"
   defp visible_attr(false), do: "false"
+
+  defp terminal_nav_link(%{slug: "new"} = assigns) do
+    ~H"""
+    <a class={@class} href={@to} data-testid={@testid}>
+      {render_slot(@inner_block)}
+    </a>
+    """
+  end
+
+  defp terminal_nav_link(assigns) do
+    ~H"""
+    <.link class={@class} patch={@to} data-testid={@testid}>
+      {render_slot(@inner_block)}
+    </.link>
+    """
+  end
+
+  defp page_tab_path("new", socket_token, :home),
+    do: CitizenPath.terminal("new", socket_token, tab: :home, explicit_tab?: true)
+
+  defp page_tab_path(slug, socket_token, :home), do: CitizenPath.terminal(slug, socket_token)
+
+  defp page_tab_path(slug, socket_token, :terminal),
+    do: CitizenPath.terminal(slug, socket_token, tab: :terminal)
 
   defp citizen_tab_path(slug, socket_token, :terminal) do
     CitizenPath.terminal(slug, socket_token, tab: :terminal)
@@ -845,8 +889,14 @@ defmodule BabsWeb.TerminalLive do
     end
   end
 
+  defp knowledge_file_path("new", socket_token, @readme),
+    do: CitizenPath.terminal("new", socket_token, tab: :home, explicit_tab?: true)
+
   defp knowledge_file_path(slug, socket_token, @readme),
     do: CitizenPath.terminal(slug, socket_token)
+
+  defp knowledge_file_path("new", socket_token, file),
+    do: CitizenPath.terminal("new", socket_token, tab: :home, file: file, explicit_tab?: true)
 
   defp knowledge_file_path(slug, socket_token, file),
     do: CitizenPath.terminal(slug, socket_token, file: file)

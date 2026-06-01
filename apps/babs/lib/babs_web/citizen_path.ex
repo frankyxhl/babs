@@ -11,11 +11,12 @@ defmodule BabsWeb.CitizenPath do
 
   def terminal(slug, socket_token \\ "", opts \\ []) when is_binary(slug) do
     full? = Keyword.get(opts, :full?, false)
+    explicit_tab? = Keyword.get(opts, :explicit_tab?, false)
 
     params =
       []
       |> maybe_put_full(full?)
-      |> maybe_put_tab(Keyword.get(opts, :tab), full?)
+      |> maybe_put_tab(Keyword.get(opts, :tab), full?, explicit_tab?)
       |> maybe_put_file(Keyword.get(opts, :file), full?)
       |> maybe_put_socket_token(socket_token)
 
@@ -37,14 +38,18 @@ defmodule BabsWeb.CitizenPath do
   defp maybe_put_full(params, true), do: params ++ [{"full", "1"}]
   defp maybe_put_full(params, _full), do: params
 
-  defp maybe_put_tab(params, _tab, true), do: params
-  defp maybe_put_tab(params, tab, _full?) when tab in [:home, "home"], do: params
+  defp maybe_put_tab(params, _tab, true, _explicit_tab?), do: params
 
-  defp maybe_put_tab(params, tab, _full?) when tab in [:terminal, "terminal"],
+  defp maybe_put_tab(params, tab, _full?, true) when tab in [:home, "home"],
+    do: params ++ [{"tab", "home"}]
+
+  defp maybe_put_tab(params, tab, _full?, _explicit_tab?) when tab in [:home, "home"], do: params
+
+  defp maybe_put_tab(params, tab, _full?, _explicit_tab?) when tab in [:terminal, "terminal"],
     do: params ++ [{"tab", "terminal"}]
 
-  defp maybe_put_tab(params, tab, _full?) when tab in [nil, ""], do: params
-  defp maybe_put_tab(params, _tab, _full?), do: params ++ [{"tab", "home"}]
+  defp maybe_put_tab(params, tab, _full?, _explicit_tab?) when tab in [nil, ""], do: params
+  defp maybe_put_tab(params, _tab, _full?, _explicit_tab?), do: params ++ [{"tab", "home"}]
 
   defp maybe_put_file(params, _file, true), do: params
 
