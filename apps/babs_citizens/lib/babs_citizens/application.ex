@@ -18,6 +18,7 @@ defmodule Babs.Citizens.Application do
         Babs.Citizens.DirectCli.Runner,
         Babs.Citizens.Tickets.WriterSupervisor,
         Babs.Citizens.Tickets.Watcher,
+        Babs.Knowledge.Watcher,
         Babs.Citizens.Tickets.ReplyCapture,
         {DynamicSupervisor, strategy: :one_for_one, name: Babs.Citizens.DynamicSupervisor}
       ] ++ reattach_children()

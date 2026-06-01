@@ -114,6 +114,7 @@
 | 2273 | CHG | Knowledge Root Resolution |
 | 2274 | CHG | Knowledge Markdown CRUD |
 | 2275 | CHG | Knowledge Markdown Render |
+| 2276 | CHG | Knowledge FileSystem Watcher |
 | 2300 | PLN | Build Roadmap |
 | 3000 | REF | Discussion Tracker 2026 05 03 |
 | 3001 | REF | Discussion Tracker 2026 05 04 |
