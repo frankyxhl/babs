@@ -7,6 +7,7 @@ defmodule Babs.Knowledge do
 
   @temp_suffix ".babs.md.tmp"
   @stale_temp_age_ms 900_000
+  @temp_write_attempts 16
 
   @spec list(term(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
   def list(slug, opts \\ []) do
@@ -41,7 +42,7 @@ defmodule Babs.Knowledge do
          # Re-check after mkdir_p because previously missing parents now exist.
          :ok <- reject_symlink_path(guard_root, path, child_path),
          :ok <- cleanup_stale_temp_files(path, opts),
-         {:ok, temp_path} <- write_temp(path, content),
+         {:ok, temp_path} <- write_temp(path, content, opts),
          :ok <- run_before_rename(opts, temp_path, path),
          :ok <- install_temp(temp_path, path) do
       :ok
@@ -79,7 +80,24 @@ defmodule Babs.Knowledge do
     root = Config.root(opts)
     knowledge_root = Config.knowledge_root(opts)
 
-    if inside_or_same?(knowledge_root, root), do: root, else: knowledge_root
+    if inside_or_same?(knowledge_root, root) do
+      root
+    else
+      common_path_prefix(root, knowledge_root)
+    end
+  end
+
+  defp common_path_prefix(left, right) do
+    left
+    |> Path.expand()
+    |> Path.split()
+    |> Enum.zip(Path.expand(right) |> Path.split())
+    |> Enum.take_while(fn {left_segment, right_segment} -> left_segment == right_segment end)
+    |> Enum.map(fn {segment, _segment} -> segment end)
+    |> case do
+      [] -> "."
+      segments -> Path.join(segments)
+    end
   end
 
   defp inside_or_same?(path, root) do
@@ -180,39 +198,63 @@ defmodule Babs.Knowledge do
   end
 
   defp reject_symlink_path(guard_root, path, child_path, operation \\ :inspect_knowledge_path) do
-    guard_root
-    |> path_chain(path)
-    |> Enum.reduce_while(:ok, fn {component, current_path}, :ok ->
-      case File.lstat(current_path) do
-        {:ok, %File.Stat{type: :symlink}} ->
-          {:halt, {:error, {:unsafe_symlink, %{path: child_path, component: component}}}}
+    with {:ok, chain} <- path_chain(guard_root, path, operation) do
+      Enum.reduce_while(chain, :ok, fn {component, current_path}, :ok ->
+        case File.lstat(current_path) do
+          {:ok, %File.Stat{type: :symlink}} ->
+            {:halt, {:error, {:unsafe_symlink, %{path: child_path, component: component}}}}
 
-        {:ok, _stat} ->
-          {:cont, :ok}
+          {:ok, _stat} ->
+            {:cont, :ok}
 
-        {:error, :enoent} ->
-          {:halt, :ok}
+          {:error, :enoent} ->
+            {:halt, :ok}
 
-        {:error, reason} ->
-          {:halt, {:error, {:redacted_io_error, {operation, reason}}}}
-      end
-    end)
+          {:error, reason} ->
+            {:halt, {:error, {:redacted_io_error, {operation, reason}}}}
+        end
+      end)
+    end
   end
 
-  defp path_chain(guard_root, path) do
+  defp path_chain(guard_root, path, operation) do
     guard_root = Path.expand(guard_root)
     path = Path.expand(path)
 
-    case Path.relative_to(path, guard_root) do
-      "." ->
-        [{".", guard_root}]
+    case safe_relative_to(path, guard_root) do
+      {:ok, "."} ->
+        {:ok, [{".", guard_root}]}
 
-      relative_path ->
-        relative_path
-        |> Path.split()
-        |> Enum.scan([], fn segment, segments -> segments ++ [segment] end)
-        |> Enum.map(fn segments -> {Path.join(segments), Path.join([guard_root | segments])} end)
-        |> then(&[{".", guard_root} | &1])
+      {:ok, relative_path} ->
+        chain =
+          relative_path
+          |> Path.split()
+          |> Enum.scan([], fn segment, segments -> segments ++ [segment] end)
+          |> Enum.map(fn segments ->
+            {Path.join(segments), Path.join([guard_root | segments])}
+          end)
+          |> then(&[{".", guard_root} | &1])
+
+        {:ok, chain}
+
+      :error ->
+        {:error, {:redacted_io_error, {operation, :path_escape}}}
+    end
+  end
+
+  defp safe_relative_to(path, guard_root) do
+    relative_path = Path.relative_to(path, guard_root)
+
+    cond do
+      relative_path == "." ->
+        {:ok, "."}
+
+      Path.type(relative_path) == :relative and
+          not Enum.any?(Path.split(relative_path), &(&1 == "..")) ->
+        {:ok, relative_path}
+
+      true ->
+        :error
     end
   end
 
@@ -249,7 +291,7 @@ defmodule Babs.Knowledge do
   end
 
   defp temp_name_pattern(basename) do
-    Regex.compile!("^\\.#{Regex.escape(basename)}\\.\\d+#{Regex.escape(@temp_suffix)}$")
+    Regex.compile!("^\\.#{Regex.escape(basename)}\\.[A-Za-z0-9_-]+#{Regex.escape(@temp_suffix)}$")
   end
 
   defp stale_temp_file?(path, stale_temp_age_ms, now_ms) do
@@ -278,12 +320,29 @@ defmodule Babs.Knowledge do
     end
   end
 
-  defp write_temp(final_path, content) do
-    temp_path = temp_path(final_path)
+  defp write_temp(final_path, content, opts) do
+    write_temp(final_path, content, opts, @temp_write_attempts)
+  end
 
-    case File.write(temp_path, content) do
-      :ok ->
+  defp write_temp(_final_path, _content, _opts, 0) do
+    {:error, {:redacted_io_error, {:write_knowledge_temp, :eexist}}}
+  end
+
+  defp write_temp(final_path, content, opts, attempts_left) do
+    temp_path = temp_path(final_path, opts)
+
+    case File.open(temp_path, [:write, :exclusive, :binary], fn file ->
+           IO.binwrite(file, content)
+         end) do
+      {:ok, :ok} ->
         {:ok, temp_path}
+
+      {:ok, {:error, reason}} ->
+        File.rm(temp_path)
+        {:error, {:redacted_io_error, {:write_knowledge_temp, reason}}}
+
+      {:error, :eexist} ->
+        write_temp(final_path, content, opts, attempts_left - 1)
 
       {:error, reason} ->
         File.rm(temp_path)
@@ -291,9 +350,33 @@ defmodule Babs.Knowledge do
     end
   end
 
-  defp temp_path(final_path) do
-    unique = System.unique_integer([:positive, :monotonic])
-    Path.join(Path.dirname(final_path), ".#{Path.basename(final_path)}.#{unique}#{@temp_suffix}")
+  defp temp_path(final_path, opts) do
+    token = temp_token(opts)
+    Path.join(Path.dirname(final_path), ".#{Path.basename(final_path)}.#{token}#{@temp_suffix}")
+  end
+
+  defp temp_token(opts) do
+    case Keyword.get(opts, :temp_token_fun) do
+      fun when is_function(fun, 0) -> sanitize_temp_token(fun.())
+      _fun -> random_temp_token()
+    end
+  end
+
+  defp sanitize_temp_token(token) when is_binary(token) do
+    token
+    |> String.replace(~r/[^A-Za-z0-9_-]/, "")
+    |> case do
+      "" -> random_temp_token()
+      token -> token
+    end
+  end
+
+  defp sanitize_temp_token(_token), do: random_temp_token()
+
+  defp random_temp_token do
+    16
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
   end
 
   defp run_before_rename(opts, temp_path, final_path) do

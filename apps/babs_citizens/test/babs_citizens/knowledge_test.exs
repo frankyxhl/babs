@@ -148,15 +148,16 @@ defmodule Babs.KnowledgeTest do
   end
 
   test "rejects symlinked absolute knowledge root outside the configured root" do
-    root = tmp_root()
-    knowledge_root = tmp_root()
-    outside = tmp_root()
+    base = tmp_root()
+    root = Path.join(base, "root")
+    knowledge_root = Path.join(base, "knowledge-link")
+    outside = Path.join(base, "outside")
     File.mkdir_p!(Path.dirname(knowledge_root))
     File.mkdir_p!(outside)
     File.ln_s!(outside, knowledge_root)
     opts = [root: root, knowledge_root: knowledge_root]
 
-    expected = {:error, {:unsafe_symlink, %{path: "Readme.md", component: "."}}}
+    expected = {:error, {:unsafe_symlink, %{path: "Readme.md", component: "knowledge-link"}}}
 
     assert Knowledge.read("clare", "Readme.md", opts) == expected
     assert Knowledge.write("clare", "Readme.md", "new", opts) == expected
@@ -165,7 +166,30 @@ defmodule Babs.KnowledgeTest do
     refute File.exists?(Path.join(outside, "clare/Readme.md"))
 
     assert Knowledge.list("clare", opts) ==
-             {:error, {:unsafe_symlink, %{path: ".", component: "."}}}
+             {:error, {:unsafe_symlink, %{path: ".", component: "knowledge-link"}}}
+  end
+
+  test "rejects symlinked absolute knowledge root ancestry outside the configured root" do
+    base = tmp_root()
+    root = Path.join(base, "root")
+    outside = Path.join(base, "outside")
+    link = Path.join(base, "state-link")
+    knowledge_root = Path.join(link, "knowledge")
+    File.mkdir_p!(root)
+    File.mkdir_p!(outside)
+    File.ln_s!(outside, link)
+    opts = [root: root, knowledge_root: knowledge_root]
+
+    expected = {:error, {:unsafe_symlink, %{path: "Readme.md", component: "state-link"}}}
+
+    assert Knowledge.read("clare", "Readme.md", opts) == expected
+    assert Knowledge.write("clare", "Readme.md", "new", opts) == expected
+    assert Knowledge.delete("clare", "Readme.md", opts) == expected
+
+    refute File.exists?(Path.join(outside, "knowledge/clare/Readme.md"))
+
+    assert Knowledge.list("clare", opts) ==
+             {:error, {:unsafe_symlink, %{path: ".", component: "state-link"}}}
   end
 
   test "rejects symlinked intermediate directories and target files" do
@@ -280,6 +304,32 @@ defmodule Babs.KnowledgeTest do
     assert_receive {:unexpected_before_rename, unexpected_temp_path}
     assert File.read!(final_path) == "new"
     refute File.exists?(unexpected_temp_path)
+  end
+
+  test "write retries cross-runtime temp file collisions without truncating the in-flight temp" do
+    root = tmp_root()
+    home = home(root, "clare")
+    final_path = Path.join(home, "Readme.md")
+    File.mkdir_p!(home)
+
+    colliding_temp = Path.join(home, ".Readme.md.collision.babs.md.tmp")
+    File.write!(colliding_temp, "in-flight")
+
+    {:ok, token_agent} = Agent.start_link(fn -> ["collision", "fresh"] end)
+
+    token_fun = fn ->
+      Agent.get_and_update(token_agent, fn
+        [token | rest] -> {token, rest}
+        [] -> flunk("temp token retried more times than expected")
+      end)
+    end
+
+    assert :ok =
+             Knowledge.write("clare", "Readme.md", "new", opts(root, temp_token_fun: token_fun))
+
+    assert File.read!(final_path) == "new"
+    assert File.read!(colliding_temp) == "in-flight"
+    assert Agent.get(token_agent, & &1) == []
   end
 
   defp opts(root, extra \\ []) do
