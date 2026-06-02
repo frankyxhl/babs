@@ -90,6 +90,10 @@ function shouldRecoverTerminalFocus(event, root, doc) {
   );
 }
 
+function terminalInputActive(options) {
+  return typeof options.isActive === "function" ? options.isActive() : true;
+}
+
 export function installTerminalKeyboardHandler(terminal, options = {}) {
   if (!terminal || typeof terminal.attachCustomKeyEventHandler !== "function") {
     return false;
@@ -103,7 +107,7 @@ export function installTerminalKeyboardHandler(terminal, options = {}) {
     : () => {};
 
   terminal.attachCustomKeyEventHandler((event) => {
-    if (terminalShouldOwnKey(event)) {
+    if (terminalInputActive(options) && terminalShouldOwnKey(event)) {
       event.preventDefault?.();
 
       if (scheduleRefocus) {
@@ -119,6 +123,7 @@ export function installTerminalKeyboardHandler(terminal, options = {}) {
       "keydown",
       (event) => {
         if (
+          terminalInputActive(options) &&
           terminalShouldOwnKey(event) &&
           shouldRecoverTerminalFocus(event, options.root, options.document)
         ) {

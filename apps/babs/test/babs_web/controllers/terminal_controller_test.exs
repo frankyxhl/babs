@@ -5,6 +5,22 @@ defmodule BabsWeb.TerminalControllerTest do
 
   @endpoint BabsWeb.Endpoint
 
+  setup do
+    previous = Application.get_env(:babs, BabsWeb.TerminalLive)
+
+    Application.put_env(:babs, BabsWeb.TerminalLive, status_snapshot_provider: fn -> [] end)
+
+    on_exit(fn ->
+      if previous do
+        Application.put_env(:babs, BabsWeb.TerminalLive, previous)
+      else
+        Application.delete_env(:babs, BabsWeb.TerminalLive)
+      end
+    end)
+
+    :ok
+  end
+
   test "root redirects to citizens index" do
     conn = get(build_conn(), "/")
 
@@ -123,7 +139,23 @@ defmodule BabsWeb.TerminalControllerTest do
     assert conn.resp_body =~ ~s(data-testid="terminal")
     assert conn.resp_body =~ ~s(data-slug="new")
     assert conn.resp_body =~ ~s(data-socket-token="route-token")
+    assert conn.resp_body =~ ~s(data-terminal-visible="true")
+    refute conn.resp_body =~ ~s(data-home-visible="true")
     refute conn.resp_body =~ ~s(data-testid="new-citizen-form")
+  end
+
+  test "existing new citizen uses normal navigation for controller-backed tabs" do
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "new", nil)
+
+    conn = get(build_conn(), "/citizens/new?tab=home&socket_token=route-token")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(data-testid="citizen-page-tab-home")
+    assert conn.resp_body =~ ~s(href="/citizens/new?tab=home&amp;socket_token=route-token")
+    assert conn.resp_body =~ ~s(href="/citizens/new?tab=terminal&amp;socket_token=route-token")
+    assert conn.resp_body =~ ~s(data-home-visible="true")
+    assert conn.resp_body =~ ~s(data-terminal-visible="false")
+    refute conn.resp_body =~ ~s(data-phx-link="patch")
   end
 
   test "citizens attach route renders attach LiveView instead of slug terminal" do

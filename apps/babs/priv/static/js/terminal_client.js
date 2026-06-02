@@ -17,6 +17,38 @@ function terminalOwnedStatus(doc, fallback) {
   return doc.getElementById(fallback.id) ?? fallback;
 }
 
+function terminalVisible(root) {
+  return root.dataset.terminalVisible !== "false";
+}
+
+function deferTerminalBoot(options, root, status) {
+  const doc = options.document ?? document;
+  const win = options.window ?? window;
+  let client = null;
+
+  const startIfVisible = () => {
+    if (client || !terminalVisible(root)) {
+      return client;
+    }
+
+    client = bootTerminal({ ...options, root, status, deferUntilVisible: false });
+    return client;
+  };
+
+  const deferred = {
+    deferred: true,
+    startIfVisible,
+    get client() {
+      return client;
+    }
+  };
+
+  doc.addEventListener?.("phx:update", startIfVisible);
+  win.__babsTerminalClient = deferred;
+
+  return deferred;
+}
+
 export function bootTerminal(options = {}) {
   const doc = options.document ?? document;
   const win = options.window ?? window;
@@ -36,6 +68,10 @@ export function bootTerminal(options = {}) {
     throw new Error("connection status not found");
   }
 
+  if (options.deferUntilVisible !== false && !terminalVisible(root)) {
+    return deferTerminalBoot(options, root, status);
+  }
+
   const setConnectionStatus = (state) => {
     statusState = state;
     applyConnectionStatus(terminalOwnedStatus(doc, status), statusState, root.dataset.slug);
@@ -43,6 +79,10 @@ export function bootTerminal(options = {}) {
 
   doc.addEventListener?.("phx:update", () => {
     applyConnectionStatus(terminalOwnedStatus(doc, status), statusState, root.dataset.slug);
+
+    if (!terminalVisible(root)) {
+      terminal?.blur?.();
+    }
   });
 
   const terminal = new TerminalCtor({
@@ -64,7 +104,7 @@ export function bootTerminal(options = {}) {
 
   terminal.loadAddon(fit);
   terminal.open(root);
-  installTerminalKeyboardHandler(terminal, { document: doc, root });
+  installTerminalKeyboardHandler(terminal, { document: doc, root, isActive: () => terminalVisible(root) });
   terminal.focus?.();
   fit.fit();
 
@@ -89,7 +129,7 @@ export function bootTerminal(options = {}) {
     });
 
   terminal.onData((data) => {
-    if (allowedInput(data)) {
+    if (terminalVisible(root) && allowedInput(data)) {
       channel.push("input", { data });
     }
   });

@@ -4,19 +4,310 @@ defmodule BabsWeb.TerminalLiveTest do
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
 
+  alias Babs.Knowledge.Watcher
+
   @endpoint BabsWeb.Endpoint
 
   setup do
     {:ok, _apps} = Application.ensure_all_started(:babs)
     previous = Application.get_env(:babs, BabsWeb.TerminalLive)
+    previous_root = Application.get_env(:babs_citizens, :root)
+    previous_workspace_root = Application.get_env(:babs_citizens, :workspace_root)
+    previous_knowledge_root = Application.get_env(:babs_citizens, :knowledge_root)
+    root = tmp_root!()
+    workspace_root = Path.join(root, "workspaces")
+    knowledge_root = Path.join(root, "knowledge")
+
+    Application.put_env(:babs_citizens, :root, root)
+    Application.put_env(:babs_citizens, :workspace_root, workspace_root)
+    Application.put_env(:babs_citizens, :knowledge_root, knowledge_root)
+    Application.put_env(:babs, BabsWeb.TerminalLive, status_snapshot_provider: fn -> [] end)
 
     on_exit(fn ->
+      File.rm_rf!(root)
+
       if previous do
         Application.put_env(:babs, BabsWeb.TerminalLive, previous)
       else
         Application.delete_env(:babs, BabsWeb.TerminalLive)
       end
+
+      restore_env(:root, previous_root)
+      restore_env(:workspace_root, previous_workspace_root)
+      restore_env(:knowledge_root, previous_knowledge_root)
     end)
+
+    {:ok, root: root, knowledge_root: knowledge_root}
+  end
+
+  test "citizen route defaults to Home and renders sanitized Readme markdown", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-read")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Citizen Home\n\nHello **Babs**.\n")
+    write_knowledge!(knowledge_root, slug, "Plan.md", "# Plan\n\nShip it.\n")
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}?socket_token=socket-token")
+
+    assert html =~ ~s(data-testid="citizen-home")
+    assert html =~ ~s(data-testid="citizen-page-tab-home")
+    assert html =~ "Citizen Home"
+    assert html =~ "<strong>Babs</strong>"
+    assert html =~ ~s(data-testid="knowledge-file-Plan.md")
+    assert html =~ ~s(data-testid="terminal")
+    assert html =~ ~s(data-terminal-visible="false")
+    assert html =~ ~s(href="/citizens/#{slug}?tab=terminal&amp;socket_token=socket-token")
+  end
+
+  test "terminal tab and full mode preserve existing terminal behavior", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Home\n")
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}?tab=terminal&socket_token=secret")
+
+    assert html =~ ~s(data-testid="terminal")
+    assert html =~ ~s(data-terminal-visible="true")
+    assert html =~ ~s(data-testid="citizen-page-tab-terminal")
+    assert html =~ ~s(data-testid="citizen-home")
+    refute html =~ ~s(data-home-visible="true")
+
+    conn = get(build_conn(), "/citizens/#{slug}?full=1&tab=home&file=Plan.md&socket_token=secret")
+
+    assert conn.status == 200
+    assert conn.resp_body =~ ~s(data-testid="terminal")
+    refute conn.resp_body =~ ~s(data-testid="citizen-home")
+    refute conn.resp_body =~ ~s(data-testid="citizen-page-tab-home")
+  end
+
+  test "terminal tab preserves terminal mode when switching citizen tabs", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal-switch")
+    other_slug = unique_slug("home-terminal-switch-other")
+    register_pane!(slug)
+    register_pane!(other_slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Home\n")
+
+    Application.put_env(:babs, BabsWeb.TerminalLive,
+      status_snapshot_provider: fn -> [tab(slug, :up), tab(other_slug, :up)] end
+    )
+
+    {:ok, _view, html} =
+      live(build_conn(), "/citizens/#{slug}?tab=terminal&socket_token=socket-token")
+
+    assert html =~
+             ~s(href="/citizens/#{other_slug}?tab=terminal&amp;socket_token=socket-token")
+  end
+
+  test "home tab patches from terminal tab back to the default Home route", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal-return")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Home\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}?tab=terminal")
+
+    assert html =~ ~s(data-terminal-visible="true")
+
+    html =
+      view
+      |> element(~s(a[data-testid="citizen-page-tab-home"]))
+      |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}")
+    assert html =~ ~s(data-page-tab="home")
+    assert html =~ ~s(data-home-visible="true")
+    assert html =~ ~s(data-terminal-visible="false")
+    assert html =~ "Home"
+  end
+
+  test "clicking a knowledge file patches the URL and renders that file", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-file")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n\nDefault file.\n")
+    write_knowledge!(knowledge_root, slug, "Plan.md", "# Plan\n\nSelected file.\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    html =
+      view
+      |> element(~s(a[data-testid="knowledge-file-Plan.md"]))
+      |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}?file=Plan.md")
+    assert html =~ "Selected file."
+    refute html =~ "Default file."
+    assert html =~ ~s(data-testid="terminal")
+  end
+
+  test "clicking Readme in the knowledge list patches back to the default Home URL", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-readme-link")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n\nDefault file.\n")
+    write_knowledge!(knowledge_root, slug, "Plan.md", "# Plan\n\nSelected file.\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}?file=Plan.md")
+
+    assert html =~ "Selected file."
+
+    html =
+      view
+      |> element(~s(a[data-testid="knowledge-file-Readme.md"]))
+      |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}")
+    assert html =~ "Default file."
+    refute html =~ "Selected file."
+  end
+
+  test "missing Readme and empty knowledge list render friendly empty states" do
+    slug = unique_slug("home-empty")
+    register_pane!(slug)
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ ~s(data-testid="knowledge-empty-state")
+    assert html =~ "This file does not exist yet."
+    assert html =~ "No knowledge files yet."
+    refute html =~ "{:not_found"
+  end
+
+  test "invalid manual file query falls back to Readme without leaking raw errors", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-invalid")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Safe Readme\n")
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}?file=../etc/passwd")
+
+    assert html =~ "Safe Readme"
+    refute html =~ "passwd"
+    refute html =~ "path_traversal"
+    refute html =~ "{:invalid_child_path"
+  end
+
+  test "knowledge render failures show friendly messages without raw tuples", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-render-error")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", <<255, 255, 255>>)
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ "Unable to render this knowledge file."
+    refute html =~ "render_failed"
+    refute html =~ "MDEx"
+  end
+
+  test "unsafe knowledge list failures show friendly messages without raw tuples", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-list-error")
+    register_pane!(slug)
+    target = Path.join(knowledge_root, "#{slug}-target")
+    File.mkdir_p!(target)
+    File.ln_s!(target, Path.join(knowledge_root, slug))
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ "Unable to read knowledge files."
+    refute html =~ "unsafe_symlink"
+    refute html =~ target
+  end
+
+  test "knowledge PubSub refreshes matching Home state and ignores other slugs", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-refresh")
+    other_slug = unique_slug("home-refresh-other")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Initial\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+    assert html =~ "Initial"
+
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Ignored for now\n")
+
+    Phoenix.PubSub.broadcast(
+      Babs.Citizens.PubSub,
+      Watcher.topic(),
+      {:knowledge_changed, other_slug, "Readme.md"}
+    )
+
+    html = render(view)
+    refute html =~ "Ignored for now"
+
+    Phoenix.PubSub.broadcast(
+      Babs.Citizens.PubSub,
+      Watcher.topic(),
+      {:knowledge_changed, slug, "Readme.md"}
+    )
+
+    assert render(view) =~ "Ignored for now"
+  end
+
+  test "knowledge PubSub does not reload Home content while Terminal tab is active", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-terminal-refresh")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Initial\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+    assert html =~ "Initial"
+
+    view
+    |> element(~s(a[data-testid="citizen-page-tab-terminal"]))
+    |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}?tab=terminal")
+
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Deferred\n")
+
+    Phoenix.PubSub.broadcast(
+      Babs.Citizens.PubSub,
+      Watcher.topic(),
+      {:knowledge_changed, slug, "Readme.md"}
+    )
+
+    html = render(view)
+    assert html =~ "Initial"
+    refute html =~ "Deferred"
+  end
+
+  test "lifecycle restart from terminal tab preserves the terminal tab" do
+    parent = self()
+    slug = unique_slug("home-restart")
+    register_pane!(slug)
+
+    Application.put_env(:babs, BabsWeb.TerminalLive,
+      status_snapshot_provider: fn -> [tab(slug, :up)] end,
+      lifecycle_action: fn :restart, ^slug ->
+        send(parent, {:terminal_lifecycle_action, :restart, slug})
+        {:ok, self()}
+      end
+    )
+
+    {:ok, view, _html} =
+      live(build_conn(), "/citizens/#{slug}?tab=terminal&socket_token=socket-token")
+
+    view
+    |> element(~s(button[data-testid="terminal-restart"]))
+    |> render_click()
+
+    assert_receive {:terminal_lifecycle_action, :restart, ^slug}
+    assert_redirect(view, "/citizens/#{slug}?tab=terminal&socket_token=socket-token")
   end
 
   test "full mode renders the pure terminal shell and static browser modules" do
@@ -73,7 +364,7 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ ~s(href="/citizens?socket_token=socket-token")
     assert html =~ ~s(data-testid="citizen-tab-clare")
     assert html =~ ~s(data-testid="citizen-tab-dylan")
-    assert html =~ ~s(href="/citizens/dylan?socket_token=socket-token")
+    assert html =~ ~s(href="/citizens/dylan?tab=terminal&amp;socket_token=socket-token")
     refute html =~ ~s(data-testid="citizen-tab-failed-one")
     refute html =~ ~s(data-testid="citizen-tab-reattaching-one")
     refute html =~ ~s(data-testid="citizen-tab-stopped-one")
@@ -246,10 +537,8 @@ defmodule BabsWeb.TerminalLiveTest do
       end
     )
 
-    {:ok, view, _html} =
-      live_isolated(build_conn(), BabsWeb.TerminalLive,
-        session: %{"slug" => "clare", "socket_token" => "socket-token"}
-      )
+    register_pane!("clare")
+    {:ok, view, _html} = live(build_conn(), "/citizens/clare?socket_token=socket-token")
 
     view
     |> element(~s(button[data-testid="terminal-stop"]))
@@ -270,10 +559,8 @@ defmodule BabsWeb.TerminalLiveTest do
       end
     )
 
-    {:ok, view, _html} =
-      live_isolated(build_conn(), BabsWeb.TerminalLive,
-        session: %{"slug" => "clare", "socket_token" => "socket-token"}
-      )
+    register_pane!("clare")
+    {:ok, view, _html} = live(build_conn(), "/citizens/clare?socket_token=socket-token")
 
     view
     |> element(~s(button[data-testid="terminal-restart"]))
@@ -294,10 +581,8 @@ defmodule BabsWeb.TerminalLiveTest do
       end
     )
 
-    {:ok, view, _html} =
-      live_isolated(build_conn(), BabsWeb.TerminalLive,
-        session: %{"slug" => "clare", "socket_token" => "socket-token"}
-      )
+    register_pane!("clare")
+    {:ok, view, _html} = live(build_conn(), "/citizens/clare?socket_token=socket-token")
 
     view
     |> element(~s(button[data-testid="terminal-restart"]))
@@ -318,10 +603,8 @@ defmodule BabsWeb.TerminalLiveTest do
       end
     )
 
-    {:ok, view, _html} =
-      live_isolated(build_conn(), BabsWeb.TerminalLive,
-        session: %{"slug" => "clare", "socket_token" => "socket-token"}
-      )
+    register_pane!("clare")
+    {:ok, view, _html} = live(build_conn(), "/citizens/clare?socket_token=socket-token")
 
     view
     |> element(~s(button[data-testid="terminal-start"]))
@@ -349,10 +632,8 @@ defmodule BabsWeb.TerminalLiveTest do
       end
     )
 
-    {:ok, view, _html} =
-      live_isolated(build_conn(), BabsWeb.TerminalLive,
-        session: %{"slug" => "clare", "socket_token" => "socket-token"}
-      )
+    register_pane!("clare")
+    {:ok, view, _html} = live(build_conn(), "/citizens/clare?socket_token=socket-token")
 
     html =
       view
@@ -406,6 +687,37 @@ defmodule BabsWeb.TerminalLiveTest do
   defp actions(:reattaching), do: [:start, :stop]
   defp actions(:stopped), do: [:start]
   defp actions(:failed), do: [:start]
+
+  defp write_knowledge!(knowledge_root, slug, name, content) do
+    path = Path.join([knowledge_root, slug, name])
+    path |> Path.dirname() |> File.mkdir_p!()
+    File.write!(path, content)
+    path
+  end
+
+  defp register_pane!(slug) do
+    case Registry.register(Babs.Citizens.PaneRegistry, slug, nil) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_registered, _pid}} -> :ok
+    end
+  end
+
+  defp unique_slug(prefix), do: "#{prefix}-#{System.unique_integer([:positive])}"
+
+  defp tmp_root! do
+    root =
+      Path.join(
+        System.tmp_dir!(),
+        "babs-terminal-live-#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+      )
+
+    File.rm_rf!(root)
+    File.mkdir_p!(root)
+    root
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:babs_citizens, key)
+  defp restore_env(key, value), do: Application.put_env(:babs_citizens, key, value)
 
   defp disabled_button?(html, testid) do
     pattern =
