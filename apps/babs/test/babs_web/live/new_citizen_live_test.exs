@@ -250,6 +250,32 @@ defmodule BabsWeb.NewCitizenLiveTest do
     refute html =~ "eacces"
   end
 
+  test "Readme seed errors render actionable status without leaking internals" do
+    Application.put_env(:babs, BabsWeb.NewCitizenLive,
+      spawner: fn _params ->
+        {:error, {:readme_seed_failed, {:redacted_io_error, {:mkdir_knowledge, :eacces}}}}
+      end
+    )
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/new")
+
+    html =
+      view
+      |> form("[data-testid='new-citizen-form']",
+        citizen: %{
+          slug: "readme-error",
+          display_name: "Readme Error",
+          cli_preset: "shell"
+        }
+      )
+      |> render_submit()
+
+    assert html =~ ~s(data-testid="spawn-error")
+    assert html =~ "Could not create Citizen home"
+    refute html =~ "redacted_io_error"
+    refute html =~ "eacces"
+  end
+
   test "unexpected spawner errors render generic status without inspect output" do
     Application.put_env(:babs, BabsWeb.NewCitizenLive,
       spawner: fn _params ->

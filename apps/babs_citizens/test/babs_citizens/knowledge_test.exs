@@ -306,6 +306,48 @@ defmodule Babs.KnowledgeTest do
     refute File.exists?(unexpected_temp_path)
   end
 
+  test "write with if_exists error creates missing files and preserves existing files" do
+    root = tmp_root()
+    final_path = Path.join(home(root, "clare"), "Readme.md")
+
+    assert :ok = Knowledge.write("clare", "Readme.md", "first\n", opts(root, if_exists: :error))
+    assert File.read!(final_path) == "first\n"
+
+    assert {:error, {:knowledge_file_exists, "Readme.md"}} =
+             Knowledge.write("clare", "Readme.md", "second\n", opts(root, if_exists: :error))
+
+    assert File.read!(final_path) == "first\n"
+    refute Enum.any?(File.ls!(Path.dirname(final_path)), &String.ends_with?(&1, ".babs.md.tmp"))
+
+    assert :ok = Knowledge.write("clare", "Readme.md", "replacement\n", opts(root))
+    assert File.read!(final_path) == "replacement\n"
+  end
+
+  test "write with if_exists error does not call before_rename for existing files" do
+    root = tmp_root()
+    final_path = Path.join(home(root, "clare"), "Readme.md")
+    File.mkdir_p!(Path.dirname(final_path))
+    File.write!(final_path, "original\n")
+    parent = self()
+
+    assert {:error, {:knowledge_file_exists, "Readme.md"}} =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               "ignored\n",
+               opts(root,
+                 if_exists: :error,
+                 before_rename: fn _temp_path, ^final_path ->
+                   send(parent, :before_rename_called)
+                   :ok
+                 end
+               )
+             )
+
+    refute_receive :before_rename_called, 50
+    assert File.read!(final_path) == "original\n"
+  end
+
   test "write retries cross-runtime temp file collisions without truncating the in-flight temp" do
     root = tmp_root()
     home = home(root, "clare")
