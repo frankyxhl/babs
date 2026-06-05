@@ -17,6 +17,7 @@ defmodule BabsWeb.TerminalLive do
 
   @refresh_ms 1_000
   @readme "Readme.md"
+  @max_home_edit_bytes 256 * 1024
 
   @impl true
   def mount(_params, %{"slug" => slug} = session, socket) do
@@ -65,7 +66,7 @@ defmodule BabsWeb.TerminalLive do
   end
 
   def handle_info({:knowledge_changed, slug, _name}, %{assigns: %{slug: slug}} = socket) do
-    if page_tab(socket.assigns) == :home do
+    if page_tab(socket.assigns) == :home and not home_editing?(socket.assigns.home) do
       {:noreply, refresh_home(socket)}
     else
       {:noreply, socket}
@@ -75,6 +76,30 @@ defmodule BabsWeb.TerminalLive do
   def handle_info({:knowledge_changed, _slug, _name}, socket), do: {:noreply, socket}
 
   @impl true
+  def handle_event("home_edit", _params, socket) do
+    {:noreply, start_home_edit(socket)}
+  end
+
+  def handle_event("home_cancel_edit", _params, socket) do
+    {:noreply, cancel_home_edit(socket)}
+  end
+
+  def handle_event("home_validate", params, %{assigns: %{home: home}} = socket) do
+    if home_editing?(home) do
+      validate_home_edit(socket, params)
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("home_save", params, %{assigns: %{home: home}} = socket) do
+    if home_editing?(home) do
+      submit_home_edit(socket, params)
+    else
+      {:noreply, socket}
+    end
+  end
+
   def handle_event("lifecycle", %{"action" => action, "slug" => slug}, socket) do
     case parse_action(action) do
       {:ok, action} ->
@@ -82,6 +107,29 @@ defmodule BabsWeb.TerminalLive do
 
       :error ->
         {:noreply, put_flash(socket, :error, "Unknown lifecycle action")}
+    end
+  end
+
+  defp validate_home_edit(socket, params) do
+    content = home_edit_content(params)
+    error = validate_home_edit_content(content)
+
+    socket =
+      socket
+      |> update_home_edit(&Map.merge(&1, %{content: content, error: error}))
+
+    {:noreply, socket}
+  end
+
+  defp submit_home_edit(socket, params) do
+    content = home_edit_content(params)
+
+    case validate_home_edit_content(content) do
+      nil ->
+        {:noreply, save_home_edit(socket, content)}
+
+      error ->
+        {:noreply, update_home_edit(socket, &Map.merge(&1, %{content: content, error: error}))}
     end
   end
 
@@ -408,10 +456,92 @@ defmodule BabsWeb.TerminalLive do
         color: var(--text);
       }
 
-      .knowledge-document-title {
+      .knowledge-document-header {
+        max-width: 760px;
         margin: 0 0 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .knowledge-document-title {
+        min-width: 0;
+        margin: 0;
         color: var(--muted);
         font: 600 13px/1.4 system-ui, sans-serif;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .knowledge-edit-button,
+      .knowledge-save-button,
+      .knowledge-cancel-button {
+        min-height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #1a1d24;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px 10px;
+        font: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .knowledge-edit-button:hover,
+      .knowledge-save-button:hover,
+      .knowledge-cancel-button:hover {
+        border-color: var(--accent);
+      }
+
+      .knowledge-save-button {
+        background: #18342f;
+      }
+
+      .knowledge-edit-form {
+        max-width: 760px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .knowledge-edit-textarea {
+        width: 100%;
+        min-height: 340px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #101217;
+        color: var(--text);
+        padding: 12px;
+        font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        resize: vertical;
+      }
+
+      .knowledge-edit-textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(85, 179, 166, 0.18);
+      }
+
+      .knowledge-edit-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .knowledge-edit-meta {
+        color: var(--muted);
+        font: 12px/1.5 system-ui, sans-serif;
+      }
+
+      .knowledge-edit-error {
+        margin: 0;
+        color: var(--danger);
+        font: 14px/1.5 system-ui, sans-serif;
       }
 
       .knowledge-rendered {
@@ -500,6 +630,13 @@ defmodule BabsWeb.TerminalLive do
           border-right: 0;
           border-bottom: 1px solid var(--line);
           padding: 0 0 14px;
+        }
+        .knowledge-document-header {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .knowledge-edit-button {
+          width: 100%;
         }
       }
     </style>
@@ -665,23 +802,77 @@ defmodule BabsWeb.TerminalLive do
             </nav>
           </aside>
           <article class="knowledge-document" data-testid="knowledge-document">
-            <h1 class="knowledge-document-title">{home.selected_file}</h1>
+            <div class="knowledge-document-header">
+              <h1 class="knowledge-document-title">{home.selected_file}</h1>
+              <button
+                :if={home_edit_available?(home)}
+                type="button"
+                class="knowledge-edit-button"
+                phx-click="home_edit"
+                data-testid="knowledge-edit-button"
+              >
+                Edit
+              </button>
+            </div>
+            <form
+              :if={home_editing?(home)}
+              class="knowledge-edit-form"
+              phx-change="home_validate"
+              phx-submit="home_save"
+              data-testid="knowledge-edit-form"
+            >
+              <textarea
+                class="knowledge-edit-textarea"
+                name="home[content]"
+                phx-debounce="300"
+                data-testid="knowledge-edit-content"
+              >{home.edit.content}</textarea>
+              <p
+                :if={home.edit.error}
+                class="knowledge-edit-error"
+                data-testid="knowledge-edit-error"
+              >
+                {home.edit.error}
+              </p>
+              <div class="knowledge-edit-actions">
+                <button
+                  type="submit"
+                  class="knowledge-save-button"
+                  phx-disable-with="Saving"
+                  data-testid="knowledge-save-button"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="knowledge-cancel-button"
+                  phx-click="home_cancel_edit"
+                  phx-disable-with="Canceling"
+                  data-testid="knowledge-cancel-edit"
+                >
+                  Cancel
+                </button>
+                <span class="knowledge-edit-meta">
+                  {home_edit_size(home.edit.content)} / {max_home_edit_bytes()} bytes
+                </span>
+              </div>
+            </form>
             <div
-              :if={home.document.status == :ok}
+              :if={!home_editing?(home) && home.document.status == :ok}
               class="knowledge-rendered"
               data-testid="knowledge-rendered"
             >
               {safe_html(home.document.html)}
             </div>
             <p
-              :if={home.document.status == :empty}
+              :if={!home_editing?(home) && home.document.status == :empty}
               class="knowledge-empty"
               data-testid="knowledge-empty-state"
             >
               {home.document.message}
             </p>
             <p
-              :if={home.document.status == :error}
+              :if={!home_editing?(home) && home.document.status == :error}
               class="knowledge-error"
               data-testid="knowledge-render-error"
             >
@@ -803,7 +994,19 @@ defmodule BabsWeb.TerminalLive do
       files: [],
       selected_file: @readme,
       list_error: nil,
-      document: %{status: :empty, html: "", message: "This file does not exist yet."}
+      document: %{status: :empty, html: "", message: "This file does not exist yet."},
+      edit: inactive_home_edit()
+    }
+  end
+
+  defp inactive_home_edit do
+    %{
+      active?: false,
+      file: nil,
+      content: "",
+      base_content: nil,
+      base_missing?: false,
+      error: nil
     }
   end
 
@@ -825,7 +1028,8 @@ defmodule BabsWeb.TerminalLive do
           files: files,
           selected_file: selected_file,
           list_error: nil,
-          document: load_document(slug, selected_file)
+          document: load_document(slug, selected_file),
+          edit: inactive_home_edit()
         }
 
       {:error, reason} ->
@@ -833,7 +1037,8 @@ defmodule BabsWeb.TerminalLive do
           files: [],
           selected_file: @readme,
           list_error: friendly_list_error(reason),
-          document: load_document(slug, @readme)
+          document: load_document(slug, @readme),
+          edit: inactive_home_edit()
         }
     end
   end
@@ -854,7 +1059,11 @@ defmodule BabsWeb.TerminalLive do
     with {:ok, markdown} <- Knowledge.read(slug, file),
          :ok <- validate_utf8(markdown),
          {:ok, rendered} <- Markdown.render(markdown) do
-      %{status: :ok, html: rendered.html, message: nil}
+      if String.trim(rendered.body) == "" do
+        %{status: :empty, html: "", message: "This file is empty."}
+      else
+        %{status: :ok, html: rendered.html, message: nil}
+      end
     else
       {:error, {:not_found, _path}} ->
         %{status: :empty, html: "", message: "This file does not exist yet."}
@@ -867,6 +1076,136 @@ defmodule BabsWeb.TerminalLive do
   defp validate_utf8(markdown) do
     if String.valid?(markdown), do: :ok, else: {:error, {:invalid_markdown, :invalid_utf8}}
   end
+
+  defp start_home_edit(socket) do
+    file = socket.assigns.home.selected_file || @readme
+
+    case read_home_edit_source(socket.assigns.slug, file) do
+      {:ok, content, base_missing?} ->
+        assign_home_edit(socket, %{
+          active?: true,
+          file: file,
+          content: content,
+          base_content: content,
+          base_missing?: base_missing?,
+          error: nil
+        })
+
+      {:error, reason} ->
+        socket
+        |> cancel_home_edit()
+        |> put_flash(:error, friendly_edit_error(reason))
+    end
+  end
+
+  defp cancel_home_edit(socket),
+    do: refresh_home(socket)
+
+  defp save_home_edit(socket, content) do
+    edit = socket.assigns.home.edit
+    file = edit.file || @readme
+
+    case Knowledge.write(socket.assigns.slug, file, content, before_rename: stale_guard(edit)) do
+      :ok ->
+        socket
+        |> assign(:home, load_home(socket.assigns.slug, file))
+        |> put_flash(:info, "Saved #{file}")
+
+      {:error, reason} ->
+        update_home_edit(
+          socket,
+          &Map.merge(&1, %{content: content, error: friendly_save_error(reason)})
+        )
+    end
+  end
+
+  defp read_home_edit_source(slug, file) do
+    case Knowledge.read(slug, file) do
+      {:ok, content} ->
+        if String.valid?(content) do
+          {:ok, content, false}
+        else
+          {:error, {:invalid_markdown, :invalid_utf8}}
+        end
+
+      {:error, {:not_found, _path}} ->
+        {:ok, "", true}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp stale_guard(%{base_missing?: true}) do
+    fn _temp_path, final_path ->
+      case File.read(final_path) do
+        {:error, :enoent} -> :ok
+        {:ok, _content} -> {:error, :stale_home_edit}
+        {:error, reason} -> {:error, {:verify_home_edit, reason}}
+      end
+    end
+  end
+
+  defp stale_guard(%{base_content: base_content}) do
+    fn _temp_path, final_path ->
+      case File.read(final_path) do
+        {:ok, ^base_content} -> :ok
+        {:ok, _content} -> {:error, :stale_home_edit}
+        {:error, reason} -> {:error, {:verify_home_edit, reason}}
+      end
+    end
+  end
+
+  defp home_edit_content(%{"home" => %{"content" => content}}) when is_binary(content),
+    do: content
+
+  defp home_edit_content(_params), do: ""
+
+  defp validate_home_edit_content(content) when is_binary(content) do
+    cond do
+      not String.valid?(content) ->
+        "Knowledge home must be valid UTF-8 text."
+
+      byte_size(content) > @max_home_edit_bytes ->
+        "Knowledge home must be 256 KiB or smaller."
+
+      true ->
+        nil
+    end
+  end
+
+  defp validate_home_edit_content(_content), do: "Knowledge home must be valid UTF-8 text."
+
+  defp assign_home_edit(socket, edit) do
+    assign(socket, :home, Map.put(socket.assigns.home, :edit, edit))
+  end
+
+  defp update_home_edit(socket, fun) do
+    edit = socket.assigns.home |> Map.get(:edit, inactive_home_edit()) |> fun.()
+    assign_home_edit(socket, edit)
+  end
+
+  defp home_edit_available?(home), do: home.list_error == nil and not home_editing?(home)
+
+  defp home_editing?(%{edit: %{active?: true}}), do: true
+  defp home_editing?(_home), do: false
+
+  defp home_edit_size(content) when is_binary(content), do: byte_size(content)
+  defp home_edit_size(_content), do: 0
+
+  defp max_home_edit_bytes, do: @max_home_edit_bytes
+
+  defp friendly_edit_error(_reason), do: "Unable to edit this knowledge file."
+
+  defp friendly_save_error({:redacted_io_error, {:before_rename_knowledge, :stale_home_edit}}),
+    do: "This file changed on disk. Reload before saving."
+
+  defp friendly_save_error(
+         {:redacted_io_error, {:before_rename_knowledge, {:verify_home_edit, _reason}}}
+       ),
+       do: "Unable to verify this file before saving. Try again."
+
+  defp friendly_save_error(_reason), do: "Unable to save this knowledge file."
 
   defp friendly_list_error(_reason), do: "Unable to read knowledge files."
 
