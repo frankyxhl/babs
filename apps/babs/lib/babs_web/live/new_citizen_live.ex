@@ -346,6 +346,7 @@ defmodule BabsWeb.NewCitizenLive do
   defp error_message({:toml_write_failed, _reason}), do: "Could not write Citizen TOML"
   defp error_message({:toml_write_failed, _path, _reason}), do: "Could not write Citizen TOML"
   defp error_message({:workspace_mkdir_failed, _reason}), do: "Could not create workspace"
+  defp error_message({:readme_seed_failed, _reason}), do: "Could not create Citizen home"
   defp error_message({:sqlite_insert_failed, _reason}), do: "Could not save Citizen"
   defp error_message({:lifecycle_start_failed, reason}), do: "Could not start Citizen: #{reason}"
   defp error_message({:spawn_lock_timeout, _slug}), do: "Citizen is already being created"
