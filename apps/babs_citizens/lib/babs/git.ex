@@ -290,7 +290,17 @@ defmodule Babs.Git do
   end
 
   defp untracked_paths(workspace, max_bytes) do
-    case git_cmd(workspace, @untracked_files_args) do
+    case git_cmd(workspace, @untracked_files_args, max_bytes: max_bytes) do
+      {:ok, output} when byte_size(output) > max_bytes ->
+        {:error,
+         {:git_failed,
+          git_failure(
+            safe_git_args(workspace, @untracked_files_args),
+            1,
+            "untracked file scan exceeded max_bytes",
+            max_bytes
+          )}}
+
       {:ok, output} ->
         {:ok, output |> nul_split() |> Enum.reject(&(&1 == ""))}
 

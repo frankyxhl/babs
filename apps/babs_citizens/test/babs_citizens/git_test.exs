@@ -362,6 +362,31 @@ defmodule Babs.GitTest do
     assert String.valid?(diff)
   end
 
+  test "bounds untracked file scans before diffing" do
+    repo = committed_repo()
+
+    for index <- 1..40 do
+      File.write!(
+        Path.join(repo, "generated-#{index}-#{String.duplicate("x", 20)}.txt"),
+        "content\n"
+      )
+    end
+
+    assert {:error, {:git_failed, failure}} = Git.diff(repo, max_bytes: 80)
+
+    assert Enum.take(failure.args, -6) == [
+             "ls-files",
+             "--others",
+             "--exclude-standard",
+             "-z",
+             "--",
+             "."
+           ]
+
+    assert failure.output == "untracked file scan exceeded max_bytes"
+    assert failure.truncated? == false
+  end
+
   test "normalizes invalid utf8 output without truncating" do
     repo = committed_repo()
 
