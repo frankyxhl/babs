@@ -23,11 +23,12 @@ defmodule BabsWeb.GitDiffComponentTest do
     assert html =~ ~s(data-testid="git-diff-status")
     assert html =~ "changed"
     assert html =~ ~s(data-testid="git-diff-status-text")
-    assert html =~ "M lib/example.ex"
+    assert html =~ " M lib/example.ex"
     assert html =~ ~s(data-testid="git-diff-file-lib-example-ex")
     assert html =~ ~s(data-line-kind="addition")
     assert html =~ ~s(data-line-kind="deletion")
     assert html =~ ~s(data-line-kind="hunk")
+    assert html =~ ">defmodule Example do</span>"
     assert html =~ "new line"
     assert html =~ "old line"
   end

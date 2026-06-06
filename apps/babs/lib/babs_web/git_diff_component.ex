@@ -105,7 +105,7 @@ defmodule BabsWeb.GitDiffComponent do
   defp status_class(%{clean?: false}), do: "badge pending"
   defp status_class(_status), do: "badge"
 
-  defp status_text(%{text: text}) when is_binary(text), do: String.trim(text)
+  defp status_text(%{text: text}) when is_binary(text), do: String.trim_trailing(text)
   defp status_text(_status), do: ""
 
   defp truncated?(%{truncated?: true}), do: true
@@ -172,6 +172,7 @@ defmodule BabsWeb.GitDiffComponent do
   defp diff_line("---" <> _rest = line), do: %{kind: :header, prefix: "", text: line}
   defp diff_line("+" <> text), do: %{kind: :addition, prefix: "+", text: text}
   defp diff_line("-" <> text), do: %{kind: :deletion, prefix: "-", text: text}
+  defp diff_line(" " <> text), do: %{kind: :context, prefix: " ", text: text}
   defp diff_line(line), do: %{kind: :context, prefix: " ", text: line}
 
   defp line_class(kind), do: "git-diff-line #{kind}"
