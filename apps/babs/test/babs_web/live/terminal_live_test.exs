@@ -4,6 +4,7 @@ defmodule BabsWeb.TerminalLiveTest do
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest
 
+  alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Knowledge.Watcher
 
   @endpoint BabsWeb.Endpoint
@@ -58,6 +59,55 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ ~s(data-testid="terminal")
     assert html =~ ~s(data-terminal-visible="false")
     assert html =~ ~s(href="/citizens/#{slug}?tab=terminal&amp;socket_token=socket-token")
+  end
+
+  test "citizen Home renders the injected standing context preview", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-preview")
+    register_pane!(slug)
+
+    write_knowledge!(
+      knowledge_root,
+      slug,
+      "Readme.md",
+      "# Home Preview\n\nUse dashboard facts.\n"
+    )
+
+    write_knowledge!(
+      knowledge_root,
+      slug,
+      "GOAL.md",
+      """
+      ---
+      inject: false
+      ---
+      Hidden goal context.
+      """
+    )
+
+    write_knowledge!(
+      knowledge_root,
+      slug,
+      "notes/operator.md",
+      """
+      ---
+      inject: true
+      ---
+      Operator note context.
+      """
+    )
+
+    expected = PromptAssembler.standing_context_preview(slug)
+
+    {:ok, _view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ ~s(data-testid="standing-context-preview")
+    assert html =~ expected
+    assert html =~ "[file: Readme.md]"
+    assert html =~ "[file: notes/operator.md]"
+    refute html =~ "Hidden goal context."
+    refute html =~ "inject: true"
   end
 
   test "terminal tab and full mode preserve existing terminal behavior", %{
@@ -131,7 +181,21 @@ defmodule BabsWeb.TerminalLiveTest do
   } do
     slug = unique_slug("home-file")
     register_pane!(slug)
-    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n\nDefault file.\n")
+
+    write_knowledge!(
+      knowledge_root,
+      slug,
+      "Readme.md",
+      """
+      ---
+      inject: false
+      ---
+      # Readme
+
+      Default file.
+      """
+    )
+
     write_knowledge!(knowledge_root, slug, "Plan.md", "# Plan\n\nSelected file.\n")
 
     {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
@@ -152,7 +216,21 @@ defmodule BabsWeb.TerminalLiveTest do
   } do
     slug = unique_slug("home-note")
     register_pane!(slug)
-    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n\nDefault file.\n")
+
+    write_knowledge!(
+      knowledge_root,
+      slug,
+      "Readme.md",
+      """
+      ---
+      inject: false
+      ---
+      # Readme
+
+      Default file.
+      """
+    )
+
     write_knowledge!(knowledge_root, slug, "notes/alpha.md", "# Alpha Note\n\nSelected note.\n")
 
     {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")

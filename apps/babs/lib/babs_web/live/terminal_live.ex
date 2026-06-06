@@ -12,6 +12,7 @@ defmodule BabsWeb.TerminalLive do
   alias Babs.Knowledge
   alias Babs.Knowledge.{Markdown, Watcher}
   alias Babs.Citizens.{Catalog, Lifecycle, StatusSnapshot}
+  alias Babs.Citizens.Tickets.PromptAssembler
   alias BabsWeb.CitizenPath
   alias Phoenix.LiveView.JS
 
@@ -646,6 +647,34 @@ defmodule BabsWeb.TerminalLive do
         color: var(--accent);
       }
 
+      .knowledge-context-preview {
+        max-width: 760px;
+        margin-top: 20px;
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+      }
+
+      .knowledge-context-preview-title {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font: 600 13px/1.4 system-ui, sans-serif;
+      }
+
+      .knowledge-context-preview-body {
+        width: 100%;
+        max-height: 360px;
+        margin: 0;
+        overflow: auto;
+        overflow-wrap: anywhere;
+        white-space: pre-wrap;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #101217;
+        color: var(--text);
+        padding: 12px;
+        font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
       #connection-status {
         position: fixed;
         top: 8px;
@@ -1039,6 +1068,21 @@ defmodule BabsWeb.TerminalLive do
             >
               {home.document.message}
             </p>
+            <section class="knowledge-context-preview" data-testid="standing-context-preview">
+              <h2 class="knowledge-context-preview-title">Injected context preview</h2>
+              <pre
+                :if={home.context_preview != ""}
+                class="knowledge-context-preview-body"
+                data-testid="standing-context-preview-content"
+              >{home.context_preview}</pre>
+              <p
+                :if={home.context_preview == ""}
+                class="knowledge-empty"
+                data-testid="standing-context-preview-empty"
+              >
+                No injected context.
+              </p>
+            </section>
           </article>
         </div>
       </section>
@@ -1156,6 +1200,7 @@ defmodule BabsWeb.TerminalLive do
       selected_file: @readme,
       list_error: nil,
       document: %{status: :empty, html: "", message: "This file does not exist yet."},
+      context_preview: "",
       edit: inactive_home_edit(),
       note_form: inactive_home_note_form()
     }
@@ -1198,6 +1243,7 @@ defmodule BabsWeb.TerminalLive do
           selected_file: selected_file,
           list_error: nil,
           document: load_document(slug, selected_file),
+          context_preview: PromptAssembler.standing_context_preview(slug),
           edit: inactive_home_edit(),
           note_form: inactive_home_note_form()
         }
@@ -1208,6 +1254,7 @@ defmodule BabsWeb.TerminalLive do
           selected_file: @readme,
           list_error: friendly_list_error(reason),
           document: load_document(slug, @readme),
+          context_preview: "",
           edit: inactive_home_edit(),
           note_form: inactive_home_note_form()
         }
