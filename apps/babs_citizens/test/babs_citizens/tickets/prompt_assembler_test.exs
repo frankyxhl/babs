@@ -246,6 +246,60 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     refute prompt =~ "inject: false"
   end
 
+  test "standing context cap leaves under-cap content verbatim" do
+    root = tmp_root()
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               "Short durable context.\n",
+               knowledge_opts(root)
+             )
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "clare",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge",
+        standing_context_max_bytes: 256
+      )
+
+    assert prompt =~ "[file: Readme.md]\nShort durable context."
+    refute prompt =~ "[standing context truncated]"
+    assert prompt =~ "Ticket body:\nBuild the feature."
+  end
+
+  test "standing context cap truncates deterministically with visible marker" do
+    root = tmp_root()
+    long_context = String.duplicate("context line ", 30) <> "must-not-survive"
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               long_context,
+               knowledge_opts(root)
+             )
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "clare",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge",
+        standing_context_max_bytes: 120
+      )
+
+    assert prompt =~ "[file: Readme.md]\ncontext line"
+    assert prompt =~ "... [standing context truncated]"
+    refute prompt =~ "must-not-survive"
+    assert before?(prompt, "[standing context truncated]", "Ticket body:")
+    assert prompt =~ "Ticket body:\nBuild the feature."
+    assert String.split(prompt, "Ticket body:") |> length() == 2
+  end
+
   test "warns and skips invalid UTF-8 standing context without aborting valid files" do
     root = tmp_root()
 

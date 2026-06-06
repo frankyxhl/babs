@@ -5,6 +5,8 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   Standing context defaults to root `Readme.md` and `GOAL.md`. Any Knowledge
   markdown file can opt in with `inject: true` frontmatter or opt out with
   `inject: false`; notes and other non-default files stay out unless flagged.
+  Standing context is capped with `:standing_context_max_bytes` and marked when
+  truncated before the rest of the Ticket prompt is appended.
   """
 
   alias Babs.Citizens.CitizenRecord
@@ -18,6 +20,8 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   @default_max_messages 12
   @default_max_children 5
   @default_standing_context_files ["Readme.md", "GOAL.md"]
+  @default_standing_context_max_bytes 8_192
+  @standing_context_truncation_marker "... [standing context truncated]"
 
   @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
   def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
@@ -261,9 +265,60 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
           Enum.map_join(entries, "\n\n", fn {file, content} ->
             "[file: #{file}]\n#{content |> String.trim() |> sanitize()}"
           end)
+          |> truncate_standing_context(standing_context_max_bytes(opts))
 
         "\nCitizen standing context:\n\n" <> body
     end
+  end
+
+  defp standing_context_max_bytes(opts) do
+    config =
+      :babs_citizens
+      |> Application.get_env(__MODULE__, [])
+      |> Keyword.get(:standing_context_max_bytes, @default_standing_context_max_bytes)
+
+    opts
+    |> Keyword.get(:standing_context_max_bytes, config)
+    |> normalize_standing_context_max_bytes()
+  end
+
+  defp normalize_standing_context_max_bytes(value) when is_integer(value) and value > 0,
+    do: value
+
+  defp normalize_standing_context_max_bytes(_value), do: @default_standing_context_max_bytes
+
+  defp truncate_standing_context(body, max_bytes) when byte_size(body) <= max_bytes, do: body
+
+  defp truncate_standing_context(body, max_bytes) do
+    marker = "\n" <> @standing_context_truncation_marker
+    max_bytes = max(max_bytes, byte_size(marker))
+    prefix_bytes = max_bytes - byte_size(marker)
+
+    prefix =
+      body
+      |> utf8_prefix(prefix_bytes)
+      |> String.trim_trailing()
+
+    prefix <> marker
+  end
+
+  defp utf8_prefix(_body, max_bytes) when max_bytes <= 0, do: ""
+
+  defp utf8_prefix(body, max_bytes) do
+    body
+    |> String.graphemes()
+    |> Enum.reduce_while({[], 0}, fn grapheme, {parts, byte_count} ->
+      next_byte_count = byte_count + byte_size(grapheme)
+
+      if next_byte_count > max_bytes do
+        {:halt, {parts, byte_count}}
+      else
+        {:cont, {[grapheme | parts], next_byte_count}}
+      end
+    end)
+    |> elem(0)
+    |> Enum.reverse()
+    |> IO.iodata_to_binary()
   end
 
   defp standing_context_files(citizen_slug, opts) do
