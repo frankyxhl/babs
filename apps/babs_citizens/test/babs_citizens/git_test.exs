@@ -51,6 +51,54 @@ defmodule Babs.GitTest do
     assert {:ok, %{text: base_diff, base: ^base, truncated?: false}} = Git.diff(repo, base: base)
     assert base_diff =~ "diff --git a/UNTRACKED.md b/UNTRACKED.md"
     assert base_diff =~ "+untracked content"
+
+    assert {:ok, %{text: status_after, clean?: false}} = Git.status(repo)
+    assert status_after =~ "?? UNTRACKED.md"
+  end
+
+  test "explicit base diff renders recreated untracked base paths as modifications" do
+    repo = empty_repo()
+
+    File.write!(Path.join(repo, "BASE.md"), "old content\n")
+    git!(repo, ["add", "BASE.md"])
+    git!(repo, ["commit", "-m", "base file"])
+    base = git!(repo, ["rev-parse", "HEAD"]) |> String.trim()
+
+    git!(repo, ["rm", "BASE.md"])
+    git!(repo, ["commit", "-m", "delete base file"])
+    File.write!(Path.join(repo, "BASE.md"), "new content\n")
+
+    assert {:ok, %{text: status, clean?: false}} = Git.status(repo)
+    assert status =~ "?? BASE.md"
+
+    assert {:ok, %{text: diff, base: ^base, truncated?: false}} = Git.diff(repo, base: base)
+    assert diff =~ "diff --git a/BASE.md b/BASE.md"
+    assert diff =~ "-old content"
+    assert diff =~ "+new content"
+    refute diff =~ "deleted file mode"
+    refute diff =~ "new file mode"
+  end
+
+  test "default HEAD diff renders cached-removal untracked paths as modifications" do
+    repo = committed_repo()
+
+    git!(repo, ["rm", "--cached", "README.md"])
+    File.write!(Path.join(repo, "README.md"), "new content\n")
+
+    assert {:ok, %{text: status, clean?: false}} = Git.status(repo)
+    assert status =~ "D  README.md"
+    assert status =~ "?? README.md"
+
+    assert {:ok, %{text: diff, base: nil, truncated?: false}} = Git.diff(repo)
+    assert diff =~ "diff --git a/README.md b/README.md"
+    assert diff =~ "-hello"
+    assert diff =~ "+new content"
+    refute diff =~ "deleted file mode"
+    refute diff =~ "new file mode"
+
+    assert {:ok, %{text: status_after, clean?: false}} = Git.status(repo)
+    assert status_after =~ "D  README.md"
+    assert status_after =~ "?? README.md"
   end
 
   test "unborn default diff includes staged initial files" do
@@ -147,6 +195,26 @@ defmodule Babs.GitTest do
 
     assert {:ok, %{text: diff}} = Git.diff(repo)
     assert diff =~ "+after"
+    refute File.exists?(marker)
+  end
+
+  test "untracked diff disables repository clean filters" do
+    repo = committed_repo()
+    marker = Path.join(repo, "untracked-clean-filter-ran")
+    script = Path.join(repo, "clean-filter.sh")
+
+    File.write!(script, "#!/bin/sh\nprintf ran > #{marker}\ncat\n")
+    File.chmod!(script, 0o755)
+    File.write!(Path.join(repo, ".gitattributes"), "*.dat filter=evil\n")
+    git!(repo, ["add", ".gitattributes"])
+    git!(repo, ["commit", "-m", "add clean filter attributes"])
+    git!(repo, ["config", "filter.evil.clean", script])
+
+    File.write!(Path.join(repo, "asset.dat"), "new\n")
+
+    assert {:ok, %{text: diff}} = Git.diff(repo)
+    assert diff =~ "new file mode"
+    assert diff =~ "+new"
     refute File.exists?(marker)
   end
 
