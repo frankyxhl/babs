@@ -335,6 +335,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_mobile_pwa_shell,
         ),
         Scenario(
+            name="mobile ticket diff approval",
+            given="a pending approval Ticket has assignee workspace git changes",
+            when="the operator reviews the diff from a phone-sized browser viewport",
+            then="the diff is readable, controls are reachable, and approval closes the Ticket",
+            run=scenario_mobile_ticket_diff_approval,
+        ),
+        Scenario(
             name="seed citizen terminals connect when CLIs are available",
             given="Clare, Dylan, and Elena are configured",
             when="their CLI commands are available",
@@ -982,6 +989,78 @@ def scenario_mobile_pwa_shell(context: BabsBddContext) -> None:
         assert abs(full["width"] - full["viewport_width"]) <= 4, full
         assert abs(full["height"] - full["viewport_height"]) <= 4, full
         assert_no_element('[data-testid="terminal-chrome"]', "terminal chrome in mobile full mode")
+    finally:
+        cdp("Emulation.clearDeviceMetricsOverride")
+        cleanup_ticket(context.tickets_root, ticket_id)
+        cleanup_spawned_citizen(slug)
+
+
+def scenario_mobile_ticket_diff_approval(context: BabsBddContext) -> None:
+    ticket_id = allocate_ticket_id(context.tickets_root)
+    slug = unique_slug("bdd-diff")
+    marker = unique_marker("BABS_BDD_MOBILE_DIFF")
+    long_line = f"{marker}-" + ("mobile-contained-scroll-" * 18)
+
+    try:
+        workspace = create_git_diff_workspace(slug, long_line)
+        upsert_sqlite_citizen(slug, f"BDD {slug}", workspace)
+        write_ticket(
+            context.tickets_root,
+            ticket_id,
+            "BDD Mobile Diff Approval",
+            "Approve this ticket after reading the mobile diff.",
+            state="pending_approval",
+            assignees=[slug],
+        )
+
+        set_mobile_viewport()
+        context.open_path(f"/tickets/{ticket_id}")
+        set_mobile_viewport()
+        wait_until(
+            "mobile viewport to apply on ticket detail",
+            lambda: abs(page_info()["w"] - 390) <= 4,
+            timeout=5,
+        )
+        wait_until(
+            "LiveView socket to connect on mobile diff detail",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+
+        assert_element_visible('[data-testid="ticket-review-diff"]', "mobile ticket diff panel")
+        assert_element_visible('[data-testid="git-diff-component"]', "mobile git diff component")
+        assert_element_visible('[data-testid="ticket-approve"]', "mobile approve button")
+        assert_element_visible('[data-testid="ticket-reject"]', "mobile reject button")
+        wait_until(
+            "mobile diff to render workspace file and long addition",
+            lambda: "README.md" in js("document.body.innerText") and marker in js("document.body.innerText"),
+            timeout=15,
+        )
+
+        assert js("Boolean(document.querySelector('[data-line-kind=\"addition\"]'))")
+        assert_mobile_diff_containment("mobile ticket diff detail")
+        assert_touch_targets(
+            '[data-testid="ticket-approve"], [data-testid="ticket-reject"]',
+            "mobile approval controls",
+        )
+
+        click_selector('[data-testid="ticket-approve"]')
+        wait_until(
+            "mobile approval to close the Ticket",
+            lambda: "Approved ticket" in js("document.body.innerText")
+            and "closed" in js("document.body.innerText"),
+            timeout=20,
+        )
+        assert_no_element('[data-testid="ticket-review-diff"]', "diff panel after approval")
+        wait_until(
+            "approved event to be written to Ticket history",
+            lambda: history_has_event(
+                context.tickets_root,
+                ticket_id,
+                lambda event: event.get("event") == "approved",
+            ),
+            timeout=10,
+        )
     finally:
         cdp("Emulation.clearDeviceMetricsOverride")
         cleanup_ticket(context.tickets_root, ticket_id)
@@ -2023,6 +2102,47 @@ def assert_no_horizontal_overflow(label: str) -> None:
         raise AssertionError(f"{label} has horizontal overflow: {metrics}")
 
 
+def assert_mobile_diff_containment(label: str) -> None:
+    metrics = js(
+        """
+        const root = document.documentElement;
+        const body = document.body;
+        const viewportWidth = window.innerWidth;
+        const panel = document.querySelector('[data-testid="ticket-review-diff"]');
+        const file = document.querySelector(".git-diff-file");
+        const code = document.querySelector(".git-diff-code");
+        const rectFor = (element) => {
+          if (!element) return null;
+          const rect = element.getBoundingClientRect();
+          return {left: rect.left, right: rect.right, width: rect.width};
+        };
+
+        return {
+          viewportWidth,
+          rootScrollWidth: root.scrollWidth,
+          bodyScrollWidth: body.scrollWidth,
+          panel: rectFor(panel),
+          file: rectFor(file),
+          codeClientWidth: code?.clientWidth || 0,
+          codeScrollWidth: code?.scrollWidth || 0,
+          codeHasHorizontalScroll: Boolean(code && code.scrollWidth > code.clientWidth)
+        };
+        """
+    )
+
+    page_scroll_width = max(metrics["rootScrollWidth"], metrics["bodyScrollWidth"])
+    if page_scroll_width > metrics["viewportWidth"] + 2:
+        raise AssertionError(f"{label} page has horizontal scroll: {metrics}")
+
+    for key in ["panel", "file"]:
+        rect = metrics[key]
+        if not rect or rect["left"] < -2 or rect["right"] > metrics["viewportWidth"] + 2:
+            raise AssertionError(f"{label} {key} escapes viewport: {metrics}")
+
+    if not metrics["codeHasHorizontalScroll"]:
+        raise AssertionError(f"{label} expected per-file diff horizontal scroll: {metrics}")
+
+
 def assert_touch_targets(selector: str, label: str, required: bool = True) -> None:
     selector_json = json.dumps(selector)
     result = js(
@@ -2652,6 +2772,48 @@ def transcript_path(slug: str) -> Path:
     return workspace_root() / slug / "transcript.jsonl"
 
 
+def upsert_sqlite_citizen(slug: str, display_name: str, cwd: Path) -> None:
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    db_path = citizens_db_path()
+
+    if not slug.startswith("bdd-"):
+        raise AssertionError(f"refusing to seed non-BDD citizen slug: {slug}")
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("delete from provider_sessions where citizen_slug = ?", (slug,))
+        connection.execute("delete from citizens where slug = ?", (slug,))
+        connection.execute(
+            """
+            insert into citizens (
+              id, slug, display_name, description, cwd, cli, cli_args, env, status,
+              metadata, role, is_mayor, last_error, launch_profile, ticket_backend,
+              roles, inserted_at, updated_at
+            ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "BAB-CIT-" + slug.upper().replace("-", "_"),
+                slug,
+                display_name,
+                "BDD mobile diff fixture",
+                str(cwd),
+                "/bin/zsh",
+                json.dumps(["-f"]),
+                json.dumps({}),
+                "running",
+                json.dumps({"source": "browser-harness"}),
+                None,
+                0,
+                None,
+                "safe_interactive",
+                "hardline",
+                json.dumps([]),
+                now,
+                now,
+            ),
+        )
+        connection.commit()
+
+
 def sqlite_citizen_row(slug: str) -> sqlite3.Row | None:
     db_path = citizens_db_path()
 
@@ -2697,6 +2859,38 @@ def allocate_ticket_id(root: Path) -> str:
             return ticket_id
 
     raise AssertionError("could not allocate BDD Ticket id")
+
+
+def create_git_diff_workspace(slug: str, added_line: str) -> Path:
+    if not slug.startswith("bdd-"):
+        raise AssertionError(f"refusing to seed non-BDD workspace: {slug}")
+
+    workspace = workspace_root() / slug
+    shutil.rmtree(workspace, ignore_errors=True)
+    workspace.mkdir(parents=True, exist_ok=True)
+    git_command(workspace, "init")
+    git_command(workspace, "config", "user.email", "babs@example.test")
+    git_command(workspace, "config", "user.name", "Babs BDD")
+
+    readme = workspace / "README.md"
+    readme.write_text("old line\n", encoding="utf-8")
+    git_command(workspace, "add", "README.md")
+    git_command(workspace, "commit", "-m", "Initial commit")
+    readme.write_text(f"old line\n{added_line}\n", encoding="utf-8")
+    return workspace
+
+
+def git_command(cwd: Path, *args: str) -> None:
+    result = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    if result.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} failed in {cwd}: {result.stdout}")
 
 
 def write_ticket(
