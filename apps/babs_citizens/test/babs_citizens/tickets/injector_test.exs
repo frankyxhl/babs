@@ -1,6 +1,7 @@
 defmodule Babs.Citizens.Tickets.InjectorTest do
   use ExUnit.Case, async: true
 
+  alias Babs.Knowledge
   alias Babs.Citizens.Tickets.Injector
   alias Babs.Citizens.Tickets.Ticket
 
@@ -43,6 +44,33 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
     assert prompt =~ "Please review the branch."
     assert prompt =~ "BABS_REPLY T-2026-05-06-001: your response"
     assert String.ends_with?(prompt, "\n")
+  end
+
+  test "comment prompt can thread Knowledge resolver opts into standing context" do
+    root = tmp_root()
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               "Prefer concise replies.\n",
+               knowledge_opts(root)
+             )
+
+    prompt =
+      Injector.comment_prompt(
+        ticket(),
+        "clare",
+        "dylan",
+        "  Please review the branch.  ",
+        [],
+        root: root,
+        knowledge_root: "knowledge"
+      )
+
+    assert prompt =~ "Citizen standing context:"
+    assert prompt =~ "[file: Readme.md]\nPrefer concise replies."
+    assert prompt =~ "Ticket body for the citizen."
   end
 
   test "prepare validates the citizen exists" do
@@ -143,5 +171,19 @@ defmodule Babs.Citizens.Tickets.InjectorTest do
       path: "/tmp/T-2026-05-06-001.md",
       warnings: []
     }
+  end
+
+  defp knowledge_opts(root), do: [root: root, knowledge_root: "knowledge"]
+
+  defp tmp_root do
+    root =
+      Path.join([
+        System.tmp_dir!(),
+        "babs-injector-context-#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+      ])
+
+    File.rm_rf!(root)
+    on_exit(fn -> File.rm_rf!(root) end)
+    root
   end
 end
