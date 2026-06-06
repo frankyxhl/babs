@@ -73,6 +73,27 @@ defmodule Babs.GitTest do
     refute File.exists?(marker)
   end
 
+  test "read commands disable repository fsmonitor hooks" do
+    repo = committed_repo()
+    marker = Path.join(repo, "fsmonitor-ran")
+    script = Path.join(repo, "fsmonitor.sh")
+
+    File.write!(script, "#!/bin/sh\nprintf ran > #{marker}\nexit 0\n")
+    File.chmod!(script, 0o755)
+
+    git!(repo, ["-c", "core.fsmonitor=#{script}", "status", "--porcelain=v1"])
+    assert File.exists?(marker)
+    File.rm!(marker)
+
+    git!(repo, ["config", "core.fsmonitor", script])
+    File.write!(Path.join(repo, "README.md"), "changed\n")
+
+    assert {:ok, %{clean?: false}} = Git.status(repo)
+    assert {:ok, %{text: diff}} = Git.diff(repo)
+    assert diff =~ "+changed"
+    refute File.exists?(marker)
+  end
+
   test "returns tagged errors for invalid workspaces and non-repos" do
     root = tmp_root()
 
@@ -109,6 +130,8 @@ defmodule Babs.GitTest do
     assert {:error, {:git_failed, failure}} = Git.diff(repo, base: "refs/heads/does-not-exist")
 
     assert failure.args == [
+             "-c",
+             "core.fsmonitor=false",
              "diff",
              "--no-ext-diff",
              "--no-textconv",
@@ -134,6 +157,17 @@ defmodule Babs.GitTest do
     assert String.ends_with?(diff, "\n[TRUNCATED]")
     assert byte_size(diff) <= 80
     assert String.valid?(diff)
+  end
+
+  test "normalizes invalid utf8 output without truncating" do
+    repo = committed_repo()
+
+    File.write!(Path.join(repo, "README.md"), <<"hello\n", 255, "\n">>)
+
+    assert {:ok, %{text: diff, truncated?: false}} = Git.diff(repo, max_bytes: 4_096)
+    assert String.valid?(diff)
+    assert diff =~ "+?"
+    assert :binary.match(diff, <<255>>) == :nomatch
   end
 
   test "handles unborn repositories without crashing" do

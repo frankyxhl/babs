@@ -11,6 +11,7 @@ defmodule Babs.Git do
   @max_count_range 1..100
   @truncation_marker "\n[TRUNCATED]"
   @min_max_bytes byte_size(@truncation_marker) + 1
+  @git_config_overrides ["-c", "core.fsmonitor=false"]
 
   @type bounded_text :: %{text: String.t(), truncated?: boolean()}
   @type status_result :: %{text: String.t(), clean?: boolean(), truncated?: boolean()}
@@ -247,8 +248,8 @@ defmodule Babs.Git do
       {:ok, output} ->
         {:ok, bound_text(output, max_bytes)}
 
-      {:error, {status, output, _args}} ->
-        {:error, {:git_failed, git_failure(args, status, output, max_bytes)}}
+      {:error, {status, output, executed_args}} ->
+        {:error, {:git_failed, git_failure(executed_args, status, output, max_bytes)}}
 
       {:error, reason} ->
         {:error, reason}
@@ -256,9 +257,11 @@ defmodule Babs.Git do
   end
 
   defp git_cmd(workspace, args) do
-    case System.cmd("git", args, cd: workspace, stderr_to_stdout: true) do
+    safe_args = @git_config_overrides ++ args
+
+    case System.cmd("git", safe_args, cd: workspace, stderr_to_stdout: true) do
       {output, 0} -> {:ok, output}
-      {output, status} -> {:error, {status, output, args}}
+      {output, status} -> {:error, {status, output, safe_args}}
     end
   rescue
     error in ErlangError ->
@@ -280,11 +283,21 @@ defmodule Babs.Git do
   end
 
   defp bound_text(value, max_bytes) do
+    value = normalize_text(value)
+
     if byte_size(value) > max_bytes do
       prefix_bytes = max_bytes - byte_size(@truncation_marker)
       %{text: utf8_prefix(value, prefix_bytes) <> @truncation_marker, truncated?: true}
     else
       %{text: value, truncated?: false}
+    end
+  end
+
+  defp normalize_text(value) do
+    if String.valid?(value) do
+      value
+    else
+      String.replace_invalid(value, "?")
     end
   end
 
