@@ -8,6 +8,8 @@ defmodule Babs.Knowledge do
   @temp_suffix ".babs.md.tmp"
   @stale_temp_age_ms 900_000
   @temp_write_attempts 16
+  @write_lock_registry Babs.Citizens.Knowledge.WriteRegistry
+  @write_lock_timeout_ms 5_000
 
   @spec list(term(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
   def list(slug, opts \\ []) do
@@ -43,9 +45,14 @@ defmodule Babs.Knowledge do
          :ok <- reject_symlink_path(guard_root, path, child_path),
          :ok <- cleanup_stale_temp_files(path, opts),
          {:ok, temp_path} <- write_temp(path, content, opts),
-         :ok <- maybe_reject_existing_final(opts, temp_path, path, child_path),
-         :ok <- run_before_rename(opts, temp_path, path),
-         :ok <- install_temp(temp_path, path, child_path, opts) do
+         :ok <-
+           with_write_lock(path, temp_path, child_path, opts, fn ->
+             with :ok <- maybe_reject_existing_final(opts, temp_path, path, child_path),
+                  :ok <- run_before_rename(opts, temp_path, path),
+                  :ok <- install_temp(temp_path, path, child_path, opts) do
+               :ok
+             end
+           end) do
       :ok
     end
   end
@@ -395,6 +402,43 @@ defmodule Babs.Knowledge do
         File.rm(temp_path)
         {:error, {:redacted_io_error, {:before_rename_knowledge, {:unexpected_return, other}}}}
     end
+  end
+
+  defp with_write_lock(final_path, temp_path, child_path, opts, fun) do
+    lock_key = Path.expand(final_path)
+
+    case acquire_write_lock(lock_key, write_lock_deadline(opts)) do
+      :ok ->
+        try do
+          fun.()
+        after
+          Registry.unregister(@write_lock_registry, lock_key)
+        end
+
+      {:error, :timeout} ->
+        File.rm(temp_path)
+        {:error, {:redacted_io_error, {:write_lock_timeout, child_path}}}
+    end
+  end
+
+  defp acquire_write_lock(lock_key, deadline) do
+    case Registry.register(@write_lock_registry, lock_key, nil) do
+      {:ok, _pid} ->
+        :ok
+
+      {:error, {:already_registered, _pid}} ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          {:error, :timeout}
+        else
+          Process.sleep(10)
+          acquire_write_lock(lock_key, deadline)
+        end
+    end
+  end
+
+  defp write_lock_deadline(opts) do
+    timeout_ms = Keyword.get(opts, :write_lock_timeout_ms, @write_lock_timeout_ms)
+    System.monotonic_time(:millisecond) + timeout_ms
   end
 
   defp maybe_reject_existing_final(opts, temp_path, final_path, child_path) do
