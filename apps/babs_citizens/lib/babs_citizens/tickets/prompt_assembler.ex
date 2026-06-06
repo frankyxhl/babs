@@ -1,18 +1,23 @@
 defmodule Babs.Citizens.Tickets.PromptAssembler do
   @moduledoc """
   Builds provider-neutral, sanitized prompts for multi-turn Ticket follow-ups.
+
+  Standing context defaults to root `Readme.md` and `GOAL.md`. Any Knowledge
+  markdown file can opt in with `inject: true` frontmatter or opt out with
+  `inject: false`; notes and other non-default files stay out unless flagged.
   """
 
   alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Ticket
   alias Babs.Knowledge
+  alias Babs.Knowledge.Markdown
 
   require Logger
 
   @default_max_messages 12
   @default_max_children 5
-  @standing_context_files ["Readme.md", "GOAL.md"]
+  @default_standing_context_files ["Readme.md", "GOAL.md"]
 
   @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
   def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
@@ -244,7 +249,8 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   end
 
   defp standing_context_section(citizen_slug, opts) do
-    @standing_context_files
+    citizen_slug
+    |> standing_context_files(opts)
     |> Enum.flat_map(&standing_context_entry(citizen_slug, &1, opts))
     |> case do
       [] ->
@@ -260,6 +266,18 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     end
   end
 
+  defp standing_context_files(citizen_slug, opts) do
+    case Knowledge.list(citizen_slug, opts) do
+      {:ok, files} ->
+        default_files = MapSet.new(@default_standing_context_files)
+        extra_files = Enum.reject(files, &MapSet.member?(default_files, &1))
+        @default_standing_context_files ++ extra_files
+
+      {:error, _reason} ->
+        @default_standing_context_files
+    end
+  end
+
   defp standing_context_entry(citizen_slug, file, opts) do
     case Knowledge.read(citizen_slug, file, opts) do
       {:ok, content} when is_binary(content) ->
@@ -272,7 +290,7 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
             []
 
           true ->
-            [{file, content}]
+            standing_context_markdown_entry(citizen_slug, file, content)
         end
 
       {:ok, _content} ->
@@ -287,6 +305,42 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
         []
     end
   end
+
+  defp standing_context_markdown_entry(citizen_slug, file, content) do
+    case Markdown.parse(content) do
+      {:ok, {frontmatter, body}} ->
+        if standing_context_injected?(file, frontmatter) and String.trim(body) != "" do
+          [{file, body}]
+        else
+          []
+        end
+
+      {:error, _reason} ->
+        Logger.warning("Babs standing context #{file} for #{citizen_slug} skipped")
+        []
+    end
+  end
+
+  defp standing_context_injected?(file, frontmatter) do
+    case inject_frontmatter_flag(frontmatter) do
+      {:ok, inject?} -> inject?
+      :missing -> file in @default_standing_context_files
+      :invalid -> false
+    end
+  end
+
+  defp inject_frontmatter_flag(%{"inject" => value}) when is_boolean(value), do: {:ok, value}
+
+  defp inject_frontmatter_flag(%{"inject" => value}) when is_binary(value) do
+    case value |> String.trim() |> String.downcase() do
+      "true" -> {:ok, true}
+      "false" -> {:ok, false}
+      _value -> :invalid
+    end
+  end
+
+  defp inject_frontmatter_flag(%{"inject" => _value}), do: :invalid
+  defp inject_frontmatter_flag(_frontmatter), do: :missing
 
   defp format_lines([]), do: "- none"
   defp format_lines(values), do: Enum.map_join(values, "\n", &"- #{sanitize(&1)}")

@@ -174,6 +174,78 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     refute prompt =~ "[file: Readme.md]"
   end
 
+  test "standing context selection respects defaults and frontmatter flags" do
+    root = tmp_root()
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               """
+               ---
+               inject: false
+               ---
+               Readme should stay private.
+               """,
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "GOAL.md",
+               "Default goal stays visible.\n",
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "notes/operator.md",
+               """
+               ---
+               inject: true
+               ---
+               Opted-in note context.
+               """,
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Plan.md",
+               "Unflagged root plan should stay out.\n",
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "notes/private.md",
+               "Unflagged note should stay out.\n",
+               knowledge_opts(root)
+             )
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "clare",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge"
+      )
+
+    assert prompt =~ "Citizen standing context:"
+    assert prompt =~ "[file: GOAL.md]\nDefault goal stays visible."
+    assert prompt =~ "[file: notes/operator.md]\nOpted-in note context."
+
+    refute prompt =~ "Readme should stay private."
+    refute prompt =~ "Unflagged root plan should stay out."
+    refute prompt =~ "Unflagged note should stay out."
+    refute prompt =~ "inject: true"
+    refute prompt =~ "inject: false"
+  end
+
   test "warns and skips invalid UTF-8 standing context without aborting valid files" do
     root = tmp_root()
 
