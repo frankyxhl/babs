@@ -335,6 +335,13 @@ def scenarios() -> list[Scenario]:
             run=scenario_mobile_pwa_shell,
         ),
         Scenario(
+            name="citizen home browser edit and external refresh",
+            given="a Citizen has an isolated Knowledge Home Readme",
+            when="the operator edits it in the browser and the file is later edited on disk",
+            then="the saved browser edit renders and the external edit refreshes in the Home tab",
+            run=scenario_citizen_home_browser_edit_and_external_refresh,
+        ),
+        Scenario(
             name="mobile ticket diff approval",
             given="a pending approval Ticket has assignee workspace git changes",
             when="the operator reviews the diff from a phone-sized browser viewport",
@@ -993,6 +1000,76 @@ def scenario_mobile_pwa_shell(context: BabsBddContext) -> None:
         cdp("Emulation.clearDeviceMetricsOverride")
         cleanup_ticket(context.tickets_root, ticket_id)
         cleanup_spawned_citizen(slug)
+
+
+def scenario_citizen_home_browser_edit_and_external_refresh(context: BabsBddContext) -> None:
+    slug = unique_slug("bdd-home")
+    initial_marker = unique_marker("BABS_BDD_HOME_INITIAL")
+    browser_marker = unique_marker("BABS_BDD_HOME_BROWSER_SAVE")
+    external_marker = unique_marker("BABS_BDD_HOME_EXTERNAL_REFRESH")
+
+    try:
+        create_shell_citizen_from_ui_without_terminal(context, slug)
+        write_knowledge_file(slug, "Readme.md", f"# Browser Home\n\n{initial_marker}\n")
+
+        context.open_path(f"/citizens/{slug}")
+        wait_until(
+            "LiveView socket to connect on Citizen Home",
+            lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+            timeout=10,
+        )
+        assert_element_visible('[data-testid="citizen-home"]', "Citizen Home tab")
+        assert_element_visible('[data-testid="knowledge-rendered"]', "rendered Knowledge Home")
+        wait_until(
+            "initial Readme content to render",
+            lambda: initial_marker in js("document.body.innerText"),
+            timeout=10,
+        )
+        assert_no_horizontal_overflow("Citizen Home BDD initial page")
+
+        click_selector('[data-testid="knowledge-edit-button"]')
+        assert_element_visible('[data-testid="knowledge-edit-form"]', "Knowledge edit form")
+        submit_home_edit(f"# Browser Saved\n\n{browser_marker}\n")
+
+        wait_until(
+            "browser-saved Readme to render",
+            lambda: browser_marker in js("document.body.innerText")
+            and "Saved Readme.md" in js("document.body.innerText"),
+            timeout=15,
+        )
+        assert knowledge_file_path(slug, "Readme.md").read_text(encoding="utf-8") == (
+            f"# Browser Saved\n\n{browser_marker}\n"
+        )
+        assert_no_element('[data-testid="knowledge-edit-form"]', "Knowledge edit form after save")
+
+        external_content = f"# External Edit\n\n{external_marker}\n"
+        last_external_write_at = 0.0
+
+        def external_edit_refreshed() -> bool:
+            nonlocal last_external_write_at
+
+            body = js("document.body.innerText")
+            if external_marker in body and browser_marker not in body:
+                return True
+
+            now = time.monotonic()
+            if now - last_external_write_at >= 0.5:
+                write_knowledge_file(slug, "Readme.md", external_content)
+                last_external_write_at = now
+
+            return False
+
+        write_knowledge_file(slug, "Readme.md", external_content)
+        last_external_write_at = time.monotonic()
+        wait_until(
+            "external Readme edit to refresh through Knowledge watcher",
+            external_edit_refreshed,
+            timeout=30,
+        )
+        assert_no_horizontal_overflow("Citizen Home BDD refreshed page")
+    finally:
+        cleanup_spawned_citizen(slug)
+        shutil.rmtree(knowledge_root() / slug, ignore_errors=True)
 
 
 def scenario_mobile_ticket_diff_approval(context: BabsBddContext) -> None:
@@ -2402,6 +2479,26 @@ def click_terminal() -> None:
     click_at_xy(rect["x"], rect["y"])
 
 
+def submit_home_edit(content: str) -> None:
+    values = json.dumps({"content": content})
+    js(f"window.__babsBddHomeEdit = {values}")
+    script = """
+        const values = window.__babsBddHomeEdit;
+        const textarea = document.querySelector('[data-testid="knowledge-edit-content"]');
+        if (!textarea) throw new Error("missing Knowledge edit textarea");
+        textarea.value = values.content;
+        textarea.dispatchEvent(new Event("input", {bubbles: true}));
+        textarea.dispatchEvent(new Event("change", {bubbles: true}));
+        const form = document.querySelector('[data-testid="knowledge-edit-form"]');
+        if (!form) throw new Error("missing Knowledge edit form");
+        form.requestSubmit();
+        """
+    try:
+        js(script)
+    finally:
+        js("delete window.__babsBddHomeEdit")
+
+
 def command_exists(command: str) -> bool:
     return subprocess.run(["sh", "-lc", f"command -v {command}"], stdout=subprocess.DEVNULL).returncode == 0
 
@@ -2615,6 +2712,27 @@ def create_shell_citizen_from_ui(context: BabsBddContext, slug: str) -> None:
         lambda: js("document.querySelector('[data-testid=\"connection-status\"]')?.dataset.state || ''")
         == "connected",
         timeout=15,
+    )
+
+
+def create_shell_citizen_from_ui_without_terminal(context: BabsBddContext, slug: str) -> None:
+    context.open_path("/citizens/new")
+    assert_element_visible('[data-testid="new-citizen-form"]', "new citizen form")
+    wait_until(
+        "LiveView socket to connect",
+        lambda: bool(js("window.liveSocket?.isConnected?.() || false")),
+        timeout=10,
+    )
+    submit_new_citizen_form(slug, f"BDD {slug}", "shell", slug)
+    wait_until(
+        f"browser to redirect to /citizens/{slug}",
+        lambda: js("window.location.pathname") == f"/citizens/{slug}",
+        timeout=15,
+    )
+    wait_until(
+        f"{slug} Home route to finish LiveView navigation",
+        lambda: js("Boolean(document.querySelector('[data-testid=\"citizen-home\"]'))"),
+        timeout=10,
     )
 
 
@@ -2847,6 +2965,32 @@ def tickets_root() -> Path:
         return path.resolve()
 
     return (RUNTIME_ROOT / "var" / "tickets").resolve()
+
+
+def knowledge_root() -> Path:
+    raw = os.environ.get("BABS_KNOWLEDGE_ROOT")
+
+    if raw and raw.strip():
+        path = Path(raw.strip()).expanduser()
+        if not path.is_absolute():
+            path = RUNTIME_ROOT / path
+        return path.resolve()
+
+    return workspace_root()
+
+
+def knowledge_file_path(slug: str, name: str) -> Path:
+    return knowledge_root() / slug / name
+
+
+def write_knowledge_file(slug: str, name: str, content: str) -> Path:
+    if not slug.startswith("bdd-"):
+        raise AssertionError(f"refusing to write non-BDD Knowledge slug: {slug}")
+
+    path = knowledge_file_path(slug, name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
 
 
 def allocate_ticket_id(root: Path) -> str:

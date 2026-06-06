@@ -119,6 +119,7 @@ defmodule Babs.Knowledge.Watcher do
     path
     |> Path.expand()
     |> String.replace_prefix("/private/var/", "/var/")
+    |> String.replace_prefix("/private/tmp/", "/tmp/")
   end
 
   defp inside_or_same?(path, root) do
