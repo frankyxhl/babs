@@ -5,6 +5,8 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
 
   alias Babs.Citizens.Hardline.Transcript
   alias Babs.Citizens.Tickets.Api, as: TicketApi
+  alias Babs.Citizens.Tickets.PromptAssembler
+  alias Babs.Knowledge
 
   @endpoint BabsWeb.Endpoint
 
@@ -256,6 +258,66 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
              "valid " <> <<0xEF, 0xBF, 0xBD>> <> <<0xEF, 0xBF, 0xBD>> <> "\n"
   end
 
+  test "citizen standing context preview endpoint returns assembler dry-run output", %{root: root} do
+    slug = "api-preview-clare"
+    previous_prompt_config = Application.get_env(:babs_citizens, PromptAssembler)
+
+    Application.put_env(:babs_citizens, PromptAssembler, standing_context_max_bytes: 180)
+
+    on_exit(fn ->
+      restore_env(PromptAssembler, previous_prompt_config)
+    end)
+
+    insert_citizen!(%{slug: slug, display_name: "API Preview Clare"})
+
+    assert :ok =
+             Knowledge.write(
+               slug,
+               "Readme.md",
+               String.duplicate("durable context ", 30) <> "must-not-survive",
+               root: root
+             )
+
+    assert :ok =
+             Knowledge.write(
+               slug,
+               "GOAL.md",
+               """
+               ---
+               inject: false
+               ---
+               Hidden goal context.
+               """,
+               root: root
+             )
+
+    assert :ok =
+             Knowledge.write(
+               slug,
+               "notes/operator.md",
+               """
+               ---
+               inject: true
+               ---
+               Operator note context.
+               """,
+               root: root
+             )
+
+    conn = get(build_conn(), "/api/v1/citizens/#{slug}/standing-context")
+    body = json_body(conn)
+    expected = PromptAssembler.standing_context_preview(slug)
+
+    assert conn.status == 200
+    assert body["citizen_slug"] == slug
+    assert body["standing_context"] == expected
+    assert expected =~ "Citizen standing context:"
+    assert expected =~ "... [standing context truncated]"
+    refute expected =~ "must-not-survive"
+    refute expected =~ "Hidden goal context."
+    refute expected =~ "inject: true"
+  end
+
   test "invalid transcript params return a stable JSON error" do
     conn = get(build_conn(), "/api/v1/citizens/clare/transcript?lines=0")
     body = json_body(conn)
@@ -319,6 +381,10 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
   test "unknown citizen and ticket resources return JSON 404s" do
     assert %{"error" => %{"code" => "not_found"}} =
              get(build_conn(), "/api/v1/citizens/missing") |> json_body()
+
+    preview_conn = get(build_conn(), "/api/v1/citizens/missing/standing-context")
+    assert preview_conn.status == 404
+    assert json_body(preview_conn)["error"]["code"] == "not_found"
 
     ticket_conn = get(build_conn(), "/api/v1/tickets/T-2026-05-09-999")
     assert ticket_conn.status == 404

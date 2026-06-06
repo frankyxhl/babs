@@ -23,6 +23,30 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   @default_standing_context_max_bytes 8_192
   @standing_context_truncation_marker "... [standing context truncated]"
 
+  @spec standing_context_preview(String.t(), keyword()) :: String.t()
+  def standing_context_preview(citizen_slug, opts \\ [])
+
+  def standing_context_preview(citizen_slug, opts) when is_binary(citizen_slug) do
+    citizen_slug
+    |> standing_context_files(opts)
+    |> Enum.flat_map(&standing_context_entry(citizen_slug, &1, opts))
+    |> case do
+      [] ->
+        ""
+
+      entries ->
+        body =
+          Enum.map_join(entries, "\n\n", fn {file, content} ->
+            "[file: #{file}]\n#{content |> String.trim() |> sanitize()}"
+          end)
+          |> truncate_standing_context(standing_context_max_bytes(opts))
+
+        "Citizen standing context:\n\n" <> body
+    end
+  end
+
+  def standing_context_preview(_citizen_slug, _opts), do: ""
+
   @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
   def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
     latest_message = Keyword.get(opts, :latest_message, "")
@@ -253,21 +277,9 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   end
 
   defp standing_context_section(citizen_slug, opts) do
-    citizen_slug
-    |> standing_context_files(opts)
-    |> Enum.flat_map(&standing_context_entry(citizen_slug, &1, opts))
-    |> case do
-      [] ->
-        ""
-
-      entries ->
-        body =
-          Enum.map_join(entries, "\n\n", fn {file, content} ->
-            "[file: #{file}]\n#{content |> String.trim() |> sanitize()}"
-          end)
-          |> truncate_standing_context(standing_context_max_bytes(opts))
-
-        "\nCitizen standing context:\n\n" <> body
+    case standing_context_preview(citizen_slug, opts) do
+      "" -> ""
+      block -> "\n" <> block
     end
   end
 

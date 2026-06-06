@@ -68,6 +68,7 @@ defmodule BabsWeb.Router do
     get("/events", EventsController, :index)
     get("/citizens", ReadController, :citizens)
     get("/citizens/:slug/transcript", ReadController, :citizen_transcript)
+    get("/citizens/:slug/standing-context", ReadController, :citizen_standing_context)
     post("/citizens/:slug/injections", ControlController, :inject)
     post("/citizens/:slug/lifecycle", ControlController, :lifecycle)
     get("/citizens/:slug", ReadController, :citizen)

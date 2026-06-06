@@ -300,6 +300,66 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     assert String.split(prompt, "Ticket body:") |> length() == 2
   end
 
+  test "standing context preview matches the exact block injected into follow-up prompts" do
+    root = tmp_root()
+    long_context = String.duplicate("durable context ", 30) <> "must-not-survive"
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               long_context,
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "GOAL.md",
+               """
+               ---
+               inject: false
+               ---
+               Hidden goal context.
+               """,
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "notes/operator.md",
+               """
+               ---
+               inject: true
+               ---
+               Operator note context.
+               """,
+               knowledge_opts(root)
+             )
+
+    opts = [
+      citizen_slug: "clare",
+      latest_message: "Continue.",
+      root: root,
+      knowledge_root: "knowledge",
+      standing_context_max_bytes: 180
+    ]
+
+    preview = PromptAssembler.standing_context_preview("clare", opts)
+    prompt = PromptAssembler.follow_up_prompt(ticket(), [], opts)
+
+    assert injected_standing_context(prompt, "clare") == preview
+    assert preview =~ "Citizen standing context:"
+    assert preview =~ "[file: Readme.md]\ndurable context"
+    assert preview =~ "... [standing context truncated]"
+    refute preview =~ "must-not-survive"
+    refute preview =~ "Ticket body:"
+    refute preview =~ "Hidden goal context."
+    refute preview =~ "inject: true"
+    refute preview =~ "inject: false"
+  end
+
   test "warns and skips invalid UTF-8 standing context without aborting valid files" do
     root = tmp_root()
 
@@ -665,6 +725,12 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     {left_index, _left_length} = :binary.match(text, left)
     {right_index, _right_length} = :binary.match(text, right)
     left_index < right_index
+  end
+
+  defp injected_standing_context(prompt, slug) do
+    [_before, after_citizen] = String.split(prompt, "Citizen: #{slug}\n\n", parts: 2)
+    [block, _after] = String.split(after_citizen, "\n\nTicket body:", parts: 2)
+    block
   end
 
   defp tmp_root do

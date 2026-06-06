@@ -6,7 +6,7 @@ defmodule BabsWeb.Api.V1.ReadController do
 
   alias Babs.Citizens.{Catalog, Federation, StatusSnapshot}
   alias Babs.Citizens.Hardline.Transcript
-  alias Babs.Citizens.Tickets.{Api, Config}
+  alias Babs.Citizens.Tickets.{Api, Config, PromptAssembler}
   alias BabsWeb.Api.V1.Presenter
 
   def init(action), do: action
@@ -78,6 +78,22 @@ defmodule BabsWeb.Api.V1.ReadController do
 
         {:error, _reason} ->
           error(conn, 500, "read_failed", "Transcript could not be read")
+      end
+    end)
+  end
+
+  def citizen_standing_context(conn, %{"slug" => slug}) do
+    with_federation(conn, fn conn, info ->
+      case fetch_citizen_record(slug) do
+        {:ok, _record} ->
+          json(conn, %{
+            "node" => Presenter.node_summary(info),
+            "citizen_slug" => slug,
+            "standing_context" => PromptAssembler.standing_context_preview(slug)
+          })
+
+        {:error, :not_found} ->
+          error(conn, 404, "not_found", "Citizen #{slug} was not found")
       end
     end)
   end
