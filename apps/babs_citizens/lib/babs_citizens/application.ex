@@ -12,6 +12,7 @@ defmodule Babs.Citizens.Application do
         {Registry, keys: :unique, name: Babs.Citizens.SpawnerRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.LifecycleRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.ExecutionLockRegistry},
+        {Registry, keys: :unique, name: Babs.Citizens.Knowledge.WriteRegistry},
         {Registry, keys: :unique, name: Babs.Citizens.Tickets.WriterRegistry},
         {Task.Supervisor, name: Babs.Citizens.DirectCli.TaskSupervisor},
         Babs.Citizens.Repo,

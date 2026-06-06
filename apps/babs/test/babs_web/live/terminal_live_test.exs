@@ -169,6 +169,257 @@ defmodule BabsWeb.TerminalLiveTest do
     refute html =~ "Selected file."
   end
 
+  test "home edit mode saves raw markdown and re-renders the document", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Before\n\nOld body.\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ "Before"
+
+    html =
+      view
+      |> element(~s(button[data-testid="knowledge-edit-button"]))
+      |> render_click()
+
+    assert html =~ ~s(data-testid="knowledge-edit-form")
+    assert html =~ "Old body."
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]),
+        home: %{content: "# After\n\nSaved **markdown**.\n"}
+      )
+      |> render_submit()
+
+    assert File.read!(path) == "# After\n\nSaved **markdown**.\n"
+    assert html =~ "After"
+    assert html =~ "<strong>markdown</strong>"
+    assert html =~ "Saved Readme.md"
+    refute html =~ ~s(data-testid="knowledge-edit-form")
+  end
+
+  test "home edit mode saves the selected knowledge file", %{knowledge_root: knowledge_root} do
+    slug = unique_slug("home-edit-file")
+    register_pane!(slug)
+    readme_path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n")
+    plan_path = write_knowledge!(knowledge_root, slug, "Plan.md", "# Plan\n\nOriginal.\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}?file=Plan.md")
+
+    assert html =~ "Original."
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]),
+        home: %{content: "# Plan\n\nUpdated selected file.\n"}
+      )
+      |> render_submit()
+
+    assert File.read!(plan_path) == "# Plan\n\nUpdated selected file.\n"
+    assert File.read!(readme_path) == "# Readme\n"
+    assert html =~ "Updated selected file."
+    refute html =~ "Original."
+  end
+
+  test "home edit validation reports and clears oversized content before save", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-validate")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Original\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]),
+        home: %{content: String.duplicate("x", 300_000)}
+      )
+      |> render_change()
+
+    assert html =~ ~s(data-testid="knowledge-edit-error")
+    assert html =~ "Knowledge home must be 256 KiB or smaller."
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]), home: %{content: "# Valid\n"})
+      |> render_change()
+
+    refute html =~ ~s(data-testid="knowledge-edit-error")
+  end
+
+  test "home edit mode allows blank saves and renders an explicit empty state", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-blank")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Before\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]), home: %{content: "  \n\n"})
+      |> render_submit()
+
+    assert File.read!(path) == "  \n\n"
+    assert html =~ ~s(data-testid="knowledge-empty-state")
+    assert html =~ "This file is empty."
+  end
+
+  test "home edit mode can be cancelled without writing and reloads external edits", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-cancel")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Original\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    File.write!(path, "# External\n")
+
+    html =
+      view
+      |> element(~s(button[data-testid="knowledge-cancel-edit"]))
+      |> render_click()
+
+    assert File.read!(path) == "# External\n"
+    assert html =~ "External"
+    refute html =~ "Original"
+    refute html =~ ~s(data-testid="knowledge-edit-form")
+  end
+
+  test "home edit mode creates missing Readme files", %{knowledge_root: knowledge_root} do
+    slug = unique_slug("home-edit-create")
+    register_pane!(slug)
+    path = Path.join([knowledge_root, slug, "Readme.md"])
+
+    refute File.exists?(path)
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ "This file does not exist yet."
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]),
+        home: %{content: "# Created\n\nNew file.\n"}
+      )
+      |> render_submit()
+
+    assert File.read!(path) == "# Created\n\nNew file.\n"
+    assert html =~ ~s(data-testid="knowledge-file-Readme.md")
+    assert html =~ "Created"
+    assert html =~ "New file."
+  end
+
+  test "home edit mode rejects oversized content without writing", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-large")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Original\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]),
+        home: %{content: String.duplicate("x", 300_000)}
+      )
+      |> render_submit()
+
+    assert File.read!(path) == "# Original\n"
+    assert html =~ ~s(data-testid="knowledge-edit-error")
+    assert html =~ ~s(data-testid="knowledge-edit-form")
+    assert html =~ "Knowledge home must be 256 KiB or smaller."
+  end
+
+  test "home edit mode refuses to clobber external edits", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-conflict")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Base\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    view
+    |> element(~s(button[data-testid="knowledge-edit-button"]))
+    |> render_click()
+
+    File.write!(path, "# External\n")
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-edit-form"]), home: %{content: "# Mine\n"})
+      |> render_submit()
+
+    assert File.read!(path) == "# External\n"
+    assert html =~ ~s(data-testid="knowledge-edit-error")
+    assert html =~ ~s(data-testid="knowledge-edit-form")
+    assert html =~ "This file changed on disk. Reload before saving."
+  end
+
+  test "knowledge PubSub does not clobber an active Home edit", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-edit-refresh")
+    register_pane!(slug)
+    path = write_knowledge!(knowledge_root, slug, "Readme.md", "# Initial\n\nDraft source.\n")
+
+    {:ok, view, _html} = live(build_conn(), "/citizens/#{slug}")
+
+    html =
+      view
+      |> element(~s(button[data-testid="knowledge-edit-button"]))
+      |> render_click()
+
+    assert html =~ "Draft source."
+
+    File.write!(path, "# External\n\nShould wait.\n")
+
+    Phoenix.PubSub.broadcast(
+      Babs.Citizens.PubSub,
+      Watcher.topic(),
+      {:knowledge_changed, slug, "Readme.md"}
+    )
+
+    html = render(view)
+
+    assert html =~ ~s(data-testid="knowledge-edit-form")
+    assert html =~ "Draft source."
+    refute html =~ "Should wait."
+  end
+
   test "missing Readme and empty knowledge list render friendly empty states" do
     slug = unique_slug("home-empty")
     register_pane!(slug)
@@ -224,6 +475,7 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ "Unable to read knowledge files."
     refute html =~ "unsafe_symlink"
     refute html =~ target
+    refute html =~ ~s(data-testid="knowledge-edit-button")
   end
 
   test "knowledge PubSub refreshes matching Home state and ignores other slugs", %{
