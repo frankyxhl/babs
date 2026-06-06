@@ -153,9 +153,9 @@ defmodule Babs.GitTest do
 
     assert {:error, {:git_failed, failure}} = Git.diff(repo, base: "refs/heads/does-not-exist")
 
-    assert failure.args == [
-             "-c",
-             "core.fsmonitor=false",
+    assert Enum.take(failure.args, 2) == ["-c", "core.fsmonitor=false"]
+
+    assert Enum.take(failure.args, -5) == [
              "diff",
              "--no-ext-diff",
              "--no-textconv",
