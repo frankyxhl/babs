@@ -133,6 +133,44 @@ defmodule Babs.GitTest do
     assert diff =~ "+from base"
   end
 
+  test "status and diff are scoped to workspace subdirectories" do
+    repo = empty_repo()
+    subdir = Path.join(repo, "subdir")
+    sibling = Path.join(repo, "sibling")
+
+    File.mkdir_p!(subdir)
+    File.mkdir_p!(sibling)
+    File.write!(Path.join(subdir, "README.md"), "subdir\n")
+    File.write!(Path.join(sibling, "README.md"), "sibling\n")
+    git!(repo, ["add", "."])
+    git!(repo, ["commit", "-m", "add scoped fixtures"])
+    base = git!(repo, ["rev-parse", "HEAD"]) |> String.trim()
+
+    File.write!(Path.join(subdir, "README.md"), "subdir\nchanged\n")
+    File.write!(Path.join(subdir, "NEW.md"), "subdir new\n")
+    File.write!(Path.join(sibling, "README.md"), "sibling\nchanged\n")
+    File.write!(Path.join(sibling, "NEW.md"), "sibling new\n")
+
+    assert {:ok, %{text: status, clean?: false}} = Git.status(subdir)
+    assert status =~ " M subdir/README.md"
+    assert status =~ "?? subdir/NEW.md"
+    refute status =~ "sibling/"
+
+    assert {:ok, %{text: default_diff, base: nil, truncated?: false}} = Git.diff(subdir)
+    assert default_diff =~ "diff --git a/subdir/README.md b/subdir/README.md"
+    assert default_diff =~ "diff --git a/subdir/NEW.md b/subdir/NEW.md"
+    assert default_diff =~ "+changed"
+    assert default_diff =~ "+subdir new"
+    refute default_diff =~ "sibling/"
+
+    assert {:ok, %{text: base_diff, base: ^base, truncated?: false}} =
+             Git.diff(subdir, base: base)
+
+    assert base_diff =~ "diff --git a/subdir/README.md b/subdir/README.md"
+    assert base_diff =~ "diff --git a/subdir/NEW.md b/subdir/NEW.md"
+    refute base_diff =~ "sibling/"
+  end
+
   test "diff disables repository textconv filters" do
     repo = committed_repo()
     marker = Path.join(repo, "textconv-ran")
@@ -255,12 +293,13 @@ defmodule Babs.GitTest do
 
     assert Enum.take(failure.args, 2) == ["-c", "core.fsmonitor=false"]
 
-    assert Enum.take(failure.args, -5) == [
+    assert Enum.take(failure.args, -6) == [
              "diff",
              "--no-ext-diff",
              "--no-textconv",
              "refs/heads/does-not-exist",
-             "--"
+             "--",
+             "."
            ]
 
     assert failure.exit_status > 0

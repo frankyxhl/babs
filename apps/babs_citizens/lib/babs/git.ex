@@ -12,7 +12,8 @@ defmodule Babs.Git do
   @truncation_marker "\n[TRUNCATED]"
   @min_max_bytes byte_size(@truncation_marker) + 1
   @git_config_overrides ["-c", "core.fsmonitor=false"]
-  @untracked_files_args ["ls-files", "--others", "--exclude-standard", "-z"]
+  @pathspec ["--", "."]
+  @untracked_files_args ["ls-files", "--others", "--exclude-standard", "-z"] ++ @pathspec
   @intent_to_add_chunk_size 100
 
   @type bounded_text :: %{text: String.t(), truncated?: boolean()}
@@ -39,7 +40,7 @@ defmodule Babs.Git do
   @spec status(term(), keyword()) :: {:ok, status_result()} | {:error, error()}
   def status(workspace, opts \\ []) do
     with {:ok, workspace, max_bytes} <- context(workspace, opts) do
-      case git_cmd(workspace, ["status", "--porcelain=v1"]) do
+      case git_cmd(workspace, ["status", "--porcelain=v1"] ++ @pathspec) do
         {:ok, output} ->
           bounded = bound_text(output, max_bytes)
 
@@ -216,12 +217,20 @@ defmodule Babs.Git do
   end
 
   defp run_diff(workspace, base, max_bytes) when is_binary(base) do
-    run_git_diff(workspace, ["diff", "--no-ext-diff", "--no-textconv", base, "--"], max_bytes)
+    run_git_diff(
+      workspace,
+      ["diff", "--no-ext-diff", "--no-textconv", base] ++ @pathspec,
+      max_bytes
+    )
   end
 
   defp run_diff(workspace, nil, max_bytes) do
     if head?(workspace) do
-      run_git_diff(workspace, ["diff", "--no-ext-diff", "--no-textconv", "HEAD", "--"], max_bytes)
+      run_git_diff(
+        workspace,
+        ["diff", "--no-ext-diff", "--no-textconv", "HEAD"] ++ @pathspec,
+        max_bytes
+      )
     else
       run_unborn_diff(workspace, max_bytes)
     end
@@ -230,11 +239,13 @@ defmodule Babs.Git do
   defp run_unborn_diff(workspace, max_bytes) do
     with_untracked_index(workspace, max_bytes, fn env ->
       with {:ok, cached} <-
-             git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv", "--cached", "--"],
+             git_cmd(
+               workspace,
+               ["diff", "--no-ext-diff", "--no-textconv", "--cached"] ++ @pathspec,
                env: env
              ),
            {:ok, worktree} <-
-             git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv", "--"], env: env) do
+             git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv"] ++ @pathspec, env: env) do
         {:ok, cached |> join_diff(worktree) |> bound_text(max_bytes)}
       else
         {:error, {status, output, args}} ->
