@@ -14,6 +14,9 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   setup do
     original = Application.get_env(:babs_citizens, :ai_reply_capture_enabled)
     Application.put_env(:babs_citizens, :ai_reply_capture_enabled, false)
+    Babs.Citizens.RepoCase.ensure_repo!()
+    Babs.Citizens.Repo.delete_all(Babs.Citizens.ProviderSession)
+    Babs.Citizens.Repo.delete_all(Babs.Citizens.CitizenRecord)
 
     on_exit(fn ->
       case original do
