@@ -91,12 +91,13 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
   test "citizen list and detail use the path-safe allowlisted projection", %{
     workspace_root: workspace_root
   } do
-    cwd = Path.join(workspace_root, "clare")
+    slug = "api-read-clare"
+    cwd = Path.join(workspace_root, slug)
     File.mkdir_p!(cwd)
 
     insert_citizen!(%{
       id: "BAB-CIT-00000000-0000-0000-0000-000000000001",
-      slug: "clare",
+      slug: slug,
       display_name: "Clare",
       cwd: cwd,
       cli: "claude",
@@ -111,19 +112,19 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
       last_error: "private failure at #{cwd}"
     })
 
-    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, "clare", nil)
+    {:ok, _value} = Registry.register(Babs.Citizens.PaneRegistry, slug, nil)
 
     conn = get(build_conn(), "/api/v1/citizens")
     body = json_body(conn)
     [citizen] = body["citizens"]
 
     assert body["node"] == %{"id" => "local", "name" => "Local Babs"}
-    assert citizen["slug"] == "clare"
+    assert citizen["slug"] == slug
     assert citizen["roles"] == ["developer"]
     assert citizen["live_status"] == "up"
     assert citizen["visual_state"] == "idle"
     assert citizen["actions"] == ["open", "full", "stop", "restart"]
-    assert citizen["cwd_label"] == "workspaces/clare"
+    assert citizen["cwd_label"] == "workspaces/#{slug}"
     assert citizen["interactive_attach"] == true
     assert citizen["kill_authority"] == false
     assert citizen["detach_authority"] == true
@@ -159,7 +160,7 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
     refute inspect(body) =~ "private-target"
     refute inspect(body) =~ "target_label"
 
-    detail = get(build_conn(), "/api/v1/citizens/clare") |> json_body()
+    detail = get(build_conn(), "/api/v1/citizens/#{slug}") |> json_body()
     assert detail["citizen"] == citizen
   end
 
