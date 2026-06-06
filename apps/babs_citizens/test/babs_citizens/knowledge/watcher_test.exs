@@ -175,6 +175,25 @@ defmodule Babs.Knowledge.WatcherTest do
     assert_receive {:knowledge_changed, "clare", "Readme.md"}, 1_000
   end
 
+  test "normalizes macOS private tmp aliases before checking root containment" do
+    root = Path.join("/tmp", "babs-knowledge-watcher-#{System.unique_integer([:positive])}")
+    File.rm_rf!(root)
+    File.mkdir_p!(Path.join(root, "clare"))
+    on_exit(fn -> File.rm_rf!(root) end)
+
+    pid = start_supervised!({Watcher, knowledge_root: root, name: unique_name(), debounce_ms: 20})
+    watcher = wait_for_watcher(pid)
+
+    path =
+      [root, "clare", "Readme.md"]
+      |> Path.join()
+      |> String.replace_prefix("/tmp/", "/private/tmp/")
+
+    send(pid, {:file_event, watcher, {path, [:modified]}})
+
+    assert_receive {:knowledge_changed, "clare", "Readme.md"}, 1_000
+  end
+
   defp unique_name do
     :"knowledge_watcher_#{System.unique_integer([:positive])}"
   end
