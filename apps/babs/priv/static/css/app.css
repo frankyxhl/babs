@@ -563,6 +563,10 @@
     align-content: start;
     min-width: 0;
   }
+  .ticket-review-diff {
+    max-width: 100%;
+    min-width: 0;
+  }
   .git-diff-panel {
     display: grid;
     gap: 12px;
@@ -1084,14 +1088,66 @@
     .ks-grid, .ticket-layout {
       grid-template-columns: minmax(0, 1fr);
     }
+    .ticket-layout, .ticket-rail, .ticket-main-stack, .ticket-review-diff, .git-diff-panel, .git-diff-file, .git-status-text, .git-diff-code {
+      max-width: 100%;
+      min-width: 0;
+    }
     .ticket-rail {
       position: static;
+    }
+    .rail-actions {
+      align-items: stretch;
+    }
+    .rail-actions .ks-button, .reject-form {
+      width: 100%;
+    }
+    .rail-actions .ks-button, .reject-form .ks-button {
+      min-height: 44px;
+      white-space: normal;
+      text-align: center;
+    }
+    .reject-feedback {
+      width: 100%;
+      min-height: 96px;
+    }
+    .git-diff-panel {
+      gap: 10px;
+      padding: 12px;
+    }
+    .git-diff-meta {
+      justify-content: flex-start;
+    }
+    .git-status-text, .git-diff-code {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .git-diff-file-head {
+      align-items: flex-start;
+      gap: 6px;
     }
     .composer {
       grid-template-columns: minmax(0, 1fr);
     }
     .summary-row {
       grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 520px) {
+    .git-diff-panel {
+      padding: 10px;
+    }
+    .git-status-text, .git-diff-code {
+      font-size: 11px;
+    }
+    .git-diff-file-head {
+      flex-direction: column;
+    }
+    .git-diff-line {
+      grid-template-columns: 28px minmax(0, 1fr);
+    }
+    .git-line-text {
+      padding: 0 8px;
     }
   }
 }
