@@ -268,6 +268,8 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
       restore_env(PromptAssembler, previous_prompt_config)
     end)
 
+    insert_citizen!(%{slug: slug, display_name: "API Preview Clare"})
+
     assert :ok =
              Knowledge.write(
                slug,
@@ -379,6 +381,10 @@ defmodule BabsWeb.Api.V1.ReadControllerTest do
   test "unknown citizen and ticket resources return JSON 404s" do
     assert %{"error" => %{"code" => "not_found"}} =
              get(build_conn(), "/api/v1/citizens/missing") |> json_body()
+
+    preview_conn = get(build_conn(), "/api/v1/citizens/missing/standing-context")
+    assert preview_conn.status == 404
+    assert json_body(preview_conn)["error"]["code"] == "not_found"
 
     ticket_conn = get(build_conn(), "/api/v1/tickets/T-2026-05-09-999")
     assert ticket_conn.status == 404

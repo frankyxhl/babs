@@ -84,11 +84,17 @@ defmodule BabsWeb.Api.V1.ReadController do
 
   def citizen_standing_context(conn, %{"slug" => slug}) do
     with_federation(conn, fn conn, info ->
-      json(conn, %{
-        "node" => Presenter.node_summary(info),
-        "citizen_slug" => slug,
-        "standing_context" => PromptAssembler.standing_context_preview(slug)
-      })
+      case fetch_citizen_record(slug) do
+        {:ok, _record} ->
+          json(conn, %{
+            "node" => Presenter.node_summary(info),
+            "citizen_slug" => slug,
+            "standing_context" => PromptAssembler.standing_context_preview(slug)
+          })
+
+        {:error, :not_found} ->
+          error(conn, 404, "not_found", "Citizen #{slug} was not found")
+      end
     end)
   end
 
