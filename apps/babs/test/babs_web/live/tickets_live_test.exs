@@ -796,6 +796,88 @@ defmodule BabsWeb.TicketsLiveTest do
     assert prompt =~ "Add docs."
   end
 
+  test "pending approval detail renders assignee git diff and still approves", %{root: root} do
+    workspace = tmp_git_workspace!()
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "clare",
+      display_name: "Clare",
+      cwd: workspace
+    })
+
+    ticket =
+      create_ticket!(root, "Review diff", "Approve after reading the diff.",
+        state: "pending_approval",
+        assignees: ["clare"]
+      )
+
+    {:ok, view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-review-diff")
+    assert html =~ ~s(data-testid="git-diff-component")
+    assert html =~ "README.md"
+    assert html =~ "new line"
+    assert html =~ ~s(data-line-kind="addition")
+    assert html =~ ~s(data-testid="ticket-approve")
+    assert html =~ ~s(data-testid="ticket-reject-form")
+
+    view
+    |> element(~s(button[data-testid="ticket-approve"]))
+    |> render_click()
+
+    html = render_async(view, 1_000)
+    assert html =~ "Approved ticket"
+    assert html =~ "closed"
+    refute html =~ ~s(data-testid="ticket-review-diff")
+  end
+
+  test "non approval detail does not render or fetch the assignee git diff", %{root: root} do
+    missing_workspace = Path.join(root, "missing-workspace")
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "clare",
+      display_name: "Clare",
+      cwd: missing_workspace
+    })
+
+    ticket =
+      create_ticket!(root, "Working ticket", "Do not fetch diff yet.",
+        state: "in_progress",
+        assignees: ["clare"]
+      )
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    refute html =~ ~s(data-testid="ticket-review-diff")
+    refute html =~ ~s(data-testid="git-diff-error")
+    refute html =~ "Workspace is unavailable"
+  end
+
+  test "pending approval detail renders inline git resolution errors", %{root: root} do
+    workspace = Path.join(root, "not-a-repo")
+    File.mkdir_p!(workspace)
+
+    Babs.Citizens.RepoCase.insert_citizen!(%{
+      slug: "clare",
+      display_name: "Clare",
+      cwd: workspace
+    })
+
+    ticket =
+      create_ticket!(root, "Broken workspace", "Show an inline diff error.",
+        state: "pending_approval",
+        assignees: ["clare"]
+      )
+
+    {:ok, _view, html} = live(build_conn(), "/tickets/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="ticket-review-diff")
+    assert html =~ ~s(data-testid="git-diff-error")
+    assert html =~ "Workspace is not a git repository"
+    assert html =~ ~s(data-testid="ticket-approve")
+    assert html =~ ~s(data-testid="ticket-reject-form")
+  end
+
   test "approve action closes pending approval ticket", %{root: root} do
     Babs.Citizens.RepoCase.insert_citizen!(%{slug: "clare", display_name: "Clare"})
 
@@ -1121,6 +1203,38 @@ defmodule BabsWeb.TicketsLiveTest do
     File.rm_rf!(root)
     File.mkdir_p!(root)
     root
+  end
+
+  defp tmp_git_workspace! do
+    workspace =
+      Path.join([
+        System.tmp_dir!(),
+        "babs-ticket-git-#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+      ])
+
+    File.rm_rf!(workspace)
+    File.mkdir_p!(workspace)
+
+    git!(workspace, ["init"])
+    git!(workspace, ["config", "user.email", "babs@example.test"])
+    git!(workspace, ["config", "user.name", "Babs Test"])
+
+    File.write!(Path.join(workspace, "README.md"), "old line\n")
+    git!(workspace, ["add", "README.md"])
+    git!(workspace, ["commit", "-m", "Initial commit"])
+
+    File.write!(Path.join(workspace, "README.md"), "old line\nnew line\n")
+    workspace
+  end
+
+  defp git!(workspace, args) do
+    {output, status} = System.cmd("git", args, cd: workspace, stderr_to_stdout: true)
+
+    if status != 0 do
+      raise "git #{Enum.join(args, " ")} failed: #{output}"
+    end
+
+    output
   end
 
   defp with_role_catalog(fun) do

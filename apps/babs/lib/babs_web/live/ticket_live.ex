@@ -11,7 +11,9 @@ defmodule BabsWeb.TicketLive do
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Error
   alias Babs.Citizens.Tickets.Watcher
+  alias Babs.Git
   alias BabsWeb.CitizenPath
+  alias BabsWeb.GitDiffComponent
   alias BabsWeb.TicketPath
   alias BabsWeb.TicketPresenter
 
@@ -667,6 +669,15 @@ defmodule BabsWeb.TicketLive do
             </div>
           </section>
 
+          <section :if={@ticket_diff} class="ticket-review-diff" data-testid="ticket-review-diff">
+            <GitDiffComponent.git_diff
+              branch={@ticket_diff.branch}
+              status={@ticket_diff.status}
+              diff={@ticket_diff.diff}
+              error={@ticket_diff.error}
+            />
+          </section>
+
           <article class="chat-card" data-testid="ticket-detail-chat">
             <header class="chat-head">
             <div>
@@ -797,6 +808,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:inspection_panel, TicketPresenter.inspection_panel(ticket, history))
         |> assign(:proposal_panel, TicketPresenter.proposal_panel(ticket, history))
         |> assign(:citizens, citizens)
+        |> assign(:ticket_diff, ticket_diff(ticket))
         |> assign(:error, nil)
 
       {:error, reason} ->
@@ -807,6 +819,7 @@ defmodule BabsWeb.TicketLive do
         |> assign(:inspection_panel, nil)
         |> assign(:proposal_panel, %{kind: :hidden})
         |> assign(:citizens, citizens)
+        |> assign(:ticket_diff, nil)
         |> assign(:error, TicketPresenter.error_message(reason))
     end
   end
@@ -838,6 +851,27 @@ defmodule BabsWeb.TicketLive do
       {:error, {:unknown_citizen, slug}}
     end
   end
+
+  defp ticket_diff(%{state: "pending_approval", id: ticket_id}) do
+    case Api.resolve_workspace(ticket_id) do
+      {:ok, %{workspace: workspace}} -> read_ticket_diff(workspace)
+      {:error, reason} -> ticket_diff_error(reason)
+    end
+  end
+
+  defp ticket_diff(_ticket), do: nil
+
+  defp read_ticket_diff(workspace) do
+    with {:ok, branch} <- Git.branch(workspace),
+         {:ok, status} <- Git.status(workspace),
+         {:ok, diff} <- Git.diff(workspace) do
+      %{branch: branch, status: status, diff: diff, error: nil}
+    else
+      {:error, reason} -> ticket_diff_error(reason)
+    end
+  end
+
+  defp ticket_diff_error(reason), do: %{branch: nil, status: nil, diff: nil, error: reason}
 
   defp assignable?(ticket), do: ticket.state == "open" and ticket.assignees == []
   defp role_assignable?(ticket), do: assignable?(ticket) and has_assignee_role?(ticket)
