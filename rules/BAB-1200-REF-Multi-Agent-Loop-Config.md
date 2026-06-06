@@ -1,11 +1,11 @@
 # REF-1200: Multi-Agent Loop Config
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-31
+**Last updated:** 2026-06-06
 **Last reviewed:** 2026-05-10
 **Status:** Active
 **Instantiates:** COR-1622 (Multi-Agent Loop Project Configuration parameter schema)
-**Related:** COR-1617 (umbrella SOP), COR-1618 (consent auto-pick), COR-1619 (worker dispatch), COR-1620 (loop primitives), COR-1621 (triage), BAB-1504 (GitHub Codex PR Review Loop), BAB-1800 (Evolution Philosophy / review weights)
+**Related:** COR-1617 (umbrella SOP), COR-1618 (consent auto-pick), COR-1619 (worker dispatch), COR-1620 (loop primitives), COR-1621 (triage), COR-1615 (GitHub App PR Review Bot Loop), BAB-1503 (Phase Delivery Workflow), BAB-1504 (deprecated GitHub Codex PR Review Loop), BAB-1800 (Evolution Philosophy / review weights)
 
 ---
 
@@ -69,6 +69,16 @@ COR-1622 separates the *shape* of the loop (specified once in the COR cluster) f
 | Key | Value | Notes |
 |-----|-------|-------|
 | `<bot-actors>` | `[chatgpt-codex-connector[bot], iterwheel-clearance[bot]]` | codex bot already in use per BAB-1504; iterwheel-clearance bot polled for clearance-side review activity. |
+
+### Delivery continuation (BAB-1503 binding)
+
+These keys are Babs-local loop policy, not required COR-1622 schema keys.
+
+| Key | Value | Notes |
+|-----|-------|-------|
+| `<approval-ready-auto-advance>` | `true` | When a PR reaches Stage 3 / `ready-for-approval`, the agent treats it as waiting for operator merge and immediately starts the next non-conflicting issue or roadmap slice. |
+| `<approval-ready-hold-worktree>` | `true` | Keep the approval-ready PR worktree available so new CI, review, conflict, or clearance feedback can be fixed before further new work. |
+| `<approval-ready-preempts-new-work>` | `true` | If an approval-ready PR falls back because of semantic review feedback, failed CI, merge conflicts, or clearance blockers, restore it to approval-ready before starting additional new work. |
 
 ### Loop primitives (COR-1620)
 
@@ -140,3 +150,4 @@ Babs-specific:
 |------|--------|----|
 | 2026-05-10 | Initial instantiation of COR-1622 schema for Babs. Panel = `[glm, deepseek, minimax]` (3 viable, MiniMax newly bootstrapped 2026-05-10). Worker = `trinity-glm`. 1FA intake. Two trade-offs accepted: worker/reviewer overlap (glm both sides) and shared-droid CLI surface (glm + minimax) — mitigated by §Resilience defaults from COR-1622 v1.16.0 (FXA-146). | Claude Opus 4.7 |
 | 2026-05-31 | Add R-count cap parameters introduced by COR-1622: `<max-r-count>`, `<max-r-count-extension>`, and `<convergence-severity>`; set Babs extension to `15` for a stricter review-loop budget. | Codex |
+| 2026-06-06 | Add Babs-local delivery continuation parameters: approval-ready PRs auto-advance to the next non-conflicting slice while keeping their worktrees available for fixes. | Codex |
