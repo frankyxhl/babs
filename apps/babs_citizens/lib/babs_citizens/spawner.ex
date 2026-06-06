@@ -3,9 +3,11 @@ defmodule Babs.Citizens.Spawner do
   Creates browser-submitted Citizens and starts their Hardline lifecycle.
   """
 
+  alias Babs.Knowledge
   alias Babs.Citizens.Citizen.TomlWriter
   alias Babs.Citizens.{Catalog, CitizenConfig, CitizenRecord, Lifecycle, Roles, TicketBackend}
 
+  @readme "Readme.md"
   @reserved_slugs ~w(new edit index)
   @param_atoms %{
     "slug" => :slug,
@@ -43,6 +45,7 @@ defmodule Babs.Citizens.Spawner do
          {:ok, config} <- build_config(attrs, paths.resolved_cwd, toml_path),
          {:ok, _path} <- write_toml(config, paths.toml_cwd, opts),
          :ok <- mkdir_workspace(paths, opts),
+         :ok <- seed_readme(config, opts),
          {:ok, record} <- insert_record(config, opts),
          :ok <- maybe_start_lifecycle(config, opts) do
       {:ok, record}
@@ -432,6 +435,78 @@ defmodule Babs.Citizens.Spawner do
 
   defp initial_status(%CitizenConfig{ticket_backend: "direct_cli"}), do: "stopped"
   defp initial_status(_config), do: "running"
+
+  defp seed_readme(config, opts) do
+    seeder = Keyword.get(opts, :readme_seeder, &default_readme_seeder/2)
+
+    case call_readme_seeder(seeder, config, opts) do
+      :ok -> :ok
+      {:error, reason} -> {:error, {:readme_seed_failed, reason}}
+    end
+  end
+
+  defp call_readme_seeder(seeder, config, opts) do
+    case :erlang.fun_info(seeder, :arity) do
+      {:arity, 1} -> seeder.(config)
+      {:arity, 2} -> seeder.(config, opts)
+    end
+  end
+
+  defp default_readme_seeder(config, opts) do
+    write_opts = Keyword.put(opts, :if_exists, :error)
+
+    case Knowledge.write(config.slug, @readme, default_readme(config), write_opts) do
+      :ok -> :ok
+      {:error, {:knowledge_file_exists, @readme}} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp default_readme(%CitizenConfig{} = config) do
+    role_lines =
+      config.roles
+      |> role_names()
+      |> case do
+        [] -> ["- none"]
+        names -> Enum.map(names, &"- #{&1}")
+      end
+
+    [
+      "# ",
+      template_display_name(config.display_name),
+      "\n\n",
+      "Slug: `",
+      config.slug,
+      "`\n\n",
+      "Roles:\n\n",
+      Enum.join(role_lines, "\n"),
+      "\n\n",
+      "## Standing Context\n\n",
+      "Add durable context for this Citizen here.\n"
+    ]
+    |> IO.iodata_to_binary()
+  end
+
+  defp template_display_name(display_name) when is_binary(display_name) do
+    display_name
+    |> String.replace(~r/[\r\n]+/, " ")
+    |> String.trim()
+    |> case do
+      "" -> "Citizen"
+      name -> name
+    end
+  end
+
+  defp template_display_name(_display_name), do: "Citizen"
+
+  defp role_names(roles) when is_list(roles) do
+    Enum.flat_map(roles, fn
+      %{"name" => name} when is_binary(name) and name != "" -> [name]
+      _role -> []
+    end)
+  end
+
+  defp role_names(_roles), do: []
 
   defp maybe_start_lifecycle(%CitizenConfig{ticket_backend: "direct_cli"}, _opts), do: :ok
 

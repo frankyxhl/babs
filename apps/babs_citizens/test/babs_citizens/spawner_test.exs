@@ -114,6 +114,7 @@ defmodule Babs.Citizens.SpawnerTest do
                root: root,
                workspace_root: "/",
                mkdir: fn "/root-workspace" -> :ok end,
+               readme_seeder: fn _config, _opts -> :ok end,
                lifecycle_start: fn _config -> {:ok, self()} end
              )
 
@@ -181,6 +182,30 @@ defmodule Babs.Citizens.SpawnerTest do
     assert config.cwd == record.cwd
   end
 
+  test "seeds default Readme on spawn with display name slug and roles" do
+    root = tmp_root!()
+
+    assert {:ok, record} =
+             Spawner.create_and_start(
+               %{
+                 "slug" => "readme-ok",
+                 "display_name" => "Readme OK",
+                 "cli_preset" => "shell",
+                 "roles" => "Developer\nInspector"
+               },
+               root: root,
+               lifecycle_start: fn _config -> {:ok, self()} end
+             )
+
+    content = File.read!(Path.join(record.cwd, "Readme.md"))
+
+    assert content =~ "# Readme OK\n"
+    assert content =~ "Slug: `readme-ok`"
+    assert content =~ "Roles:\n\n- developer\n- inspector\n"
+    assert content =~ "## Standing Context"
+    assert String.ends_with?(content, "\n")
+  end
+
   test "creates direct_cli citizen without starting lifecycle" do
     root = tmp_root!()
 
@@ -207,6 +232,8 @@ defmodule Babs.Citizens.SpawnerTest do
     toml = File.read!(Path.join(root, "citizens/citizen-direct-ok.toml"))
     assert toml =~ ~s(cli = "copilot")
     assert toml =~ ~s(ticket_backend = "direct_cli")
+
+    assert File.read!(Path.join(record.cwd, "Readme.md")) =~ "Roles:\n\n- none\n"
   end
 
   test "creates citizen with browser role labels" do
@@ -360,6 +387,58 @@ defmodule Babs.Citizens.SpawnerTest do
 
     assert_receive {:lifecycle_started, config}
     assert config.launch_profile == "trusted_autonomous"
+  end
+
+  test "seeds Readme under configured knowledge root without writing into workspace" do
+    root = tmp_root!()
+    knowledge_root = Path.join(root, "knowledge-home")
+
+    assert {:ok, record} =
+             Spawner.create_and_start(valid_params("knowledge-root"),
+               root: root,
+               knowledge_root: knowledge_root,
+               lifecycle_start: fn _config -> {:ok, self()} end
+             )
+
+    assert File.exists?(Path.join(knowledge_root, "knowledge-root/Readme.md"))
+    refute File.exists?(Path.join(record.cwd, "Readme.md"))
+  end
+
+  test "does not overwrite an existing Readme in the knowledge home" do
+    root = tmp_root!()
+    readme_path = Path.join(root, "workspaces/no-clobber/Readme.md")
+    File.mkdir_p!(Path.dirname(readme_path))
+    File.write!(readme_path, "operator notes\n")
+
+    assert {:ok, record} =
+             Spawner.create_and_start(valid_params("no-clobber"),
+               root: root,
+               lifecycle_start: fn _config -> {:ok, self()} end
+             )
+
+    assert record.cwd == Path.dirname(readme_path)
+    assert File.read!(readme_path) == "operator notes\n"
+  end
+
+  test "Readme seed failure preserves TOML and workspace without SQLite or lifecycle" do
+    root = tmp_root!()
+    parent = self()
+
+    assert {:error, {:readme_seed_failed, :denied}} =
+             Spawner.create_and_start(valid_params("seed-fail"),
+               root: root,
+               readme_seeder: fn config, _opts ->
+                 send(parent, {:readme_seed_attempted, config.slug})
+                 {:error, :denied}
+               end,
+               insert: fn _config, _opts -> flunk("SQLite insert should not be called") end,
+               lifecycle_start: unexpected_lifecycle()
+             )
+
+    assert_receive {:readme_seed_attempted, "seed-fail"}
+    assert File.exists?(Path.join(root, "citizens/citizen-seed-fail.toml"))
+    assert File.dir?(Path.join(root, "workspaces/seed-fail"))
+    assert Catalog.get_by_slug("seed-fail") == nil
   end
 
   test "duplicate TOML or SQLite slug blocks before lifecycle" do

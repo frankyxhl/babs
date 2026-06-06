@@ -43,8 +43,9 @@ defmodule Babs.Knowledge do
          :ok <- reject_symlink_path(guard_root, path, child_path),
          :ok <- cleanup_stale_temp_files(path, opts),
          {:ok, temp_path} <- write_temp(path, content, opts),
+         :ok <- maybe_reject_existing_final(opts, temp_path, path, child_path),
          :ok <- run_before_rename(opts, temp_path, path),
-         :ok <- install_temp(temp_path, path) do
+         :ok <- install_temp(temp_path, path, child_path, opts) do
       :ok
     end
   end
@@ -396,7 +397,34 @@ defmodule Babs.Knowledge do
     end
   end
 
-  defp install_temp(temp_path, final_path) do
+  defp maybe_reject_existing_final(opts, temp_path, final_path, child_path) do
+    if Keyword.get(opts, :if_exists) == :error do
+      case File.lstat(final_path) do
+        {:ok, _stat} ->
+          File.rm(temp_path)
+          {:error, {:knowledge_file_exists, child_path}}
+
+        {:error, :enoent} ->
+          :ok
+
+        {:error, reason} ->
+          File.rm(temp_path)
+          {:error, {:redacted_io_error, {:inspect_knowledge, reason}}}
+      end
+    else
+      :ok
+    end
+  end
+
+  defp install_temp(temp_path, final_path, child_path, opts) do
+    if Keyword.get(opts, :if_exists) == :error do
+      install_temp_exclusive(temp_path, final_path, child_path)
+    else
+      install_temp_replace(temp_path, final_path)
+    end
+  end
+
+  defp install_temp_replace(temp_path, final_path) do
     case File.rename(temp_path, final_path) do
       :ok ->
         :ok
@@ -404,6 +432,29 @@ defmodule Babs.Knowledge do
       {:error, reason} ->
         File.rm(temp_path)
         {:error, {:redacted_io_error, {:install_knowledge, reason}}}
+    end
+  end
+
+  defp install_temp_exclusive(temp_path, final_path, child_path) do
+    case File.ln(temp_path, final_path) do
+      :ok ->
+        remove_installed_temp(temp_path)
+
+      {:error, :eexist} ->
+        File.rm(temp_path)
+        {:error, {:knowledge_file_exists, child_path}}
+
+      {:error, reason} ->
+        File.rm(temp_path)
+        {:error, {:redacted_io_error, {:install_knowledge, reason}}}
+    end
+  end
+
+  defp remove_installed_temp(temp_path) do
+    case File.rm(temp_path) do
+      :ok -> :ok
+      {:error, :enoent} -> :ok
+      {:error, reason} -> {:error, {:redacted_io_error, {:cleanup_knowledge_temp, reason}}}
     end
   end
 end
