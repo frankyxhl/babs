@@ -1,11 +1,11 @@
 # SOP-1503: Phase Delivery Workflow
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
+**Last updated:** 2026-06-06
 **Last reviewed:** 2026-05-07
 **Status:** Active
 **Inherits from:** COR-1616 Contract-First Delivery Workflow
-**Related:** COR-1500, COR-1612, COR-1615, COR-1616, BAB-2100, BAB-2300
+**Related:** COR-1500, COR-1612, COR-1615, COR-1616, BAB-1200, BAB-2100, BAB-2300
 
 ---
 
@@ -154,6 +154,42 @@ shape:
 - Existing user changes must not be reverted unless the operator explicitly
   asks.
 
+## Babs Ready-For-Approval Auto-Advance
+
+For Babs phase delivery, a PR that has reached `ready-for-approval` is waiting
+for the operator to merge. It is not a reason for the agent to stop the session.
+
+Treat a PR as approval-ready only when all of these are true:
+
+- the PR is mergeable or only waits on an external merge/approval action
+- required checks have passed, or remaining checks are explicitly external to
+  the slice
+- `COR-1615`/`COR-1612` has cleared the current head: no semantic P0/P1/P2
+  Codex review threads remain open
+- the clearance bot reports Stage 3 / `ready-for-approval`, or the equivalent
+  project clearance state in `BAB-1200`
+- no operator message has paused the loop or changed priority
+
+When those conditions hold, the agent must:
+
+- keep the PR worktree available for later review fixes
+- report the approval-ready PR briefly
+- immediately select the next non-conflicting Babs issue or roadmap slice and
+  begin its delivery loop
+
+Do not wait for the operator merely because an approval-ready PR has not merged
+yet. Continue until one of these stop conditions applies:
+
+- the active PR falls back from approval-ready because new review feedback,
+  failed CI, merge conflicts, or clearance blockers appear
+- all available next issues are blocked by unmerged PRs, explicit dependencies,
+  missing scope, missing operator approval, or unsafe ambiguity
+- the operator explicitly asks the agent to pause, stop, merge, or switch tasks
+- the loop reaches the round/budget limits configured in `BAB-1200`
+
+If an approval-ready PR later receives new semantic review feedback, prioritize
+bringing that PR back to approval-ready before starting additional new work.
+
 ## Steps
 
 1. **Run COR-1616.**
@@ -177,7 +213,9 @@ shape:
 
 6. **Use Babs PR safety rules.**
    Publish with `gh` as `ryosaeba1985`, then follow COR-1615/COR-1612 until the
-   current PR head has no required changes or the operator pauses the loop.
+   current PR head has no required changes or the operator pauses the loop. If
+   the PR reaches approval-ready, apply the Babs ready-for-approval
+   auto-advance rule instead of stopping.
 
 7. **Close out after merge.**
    Pull `main`, reconcile local state, update phase docs or trackers if needed,
@@ -216,3 +254,4 @@ shape:
 | 2026-05-07 | Add Mermaid workflow graph for the phase delivery control flow | Codex |
 | 2026-05-07 | Add browser-harness BDD policy: isolated Chrome + `BU_CDP_URL` for repeatable validation, real Chrome only for operator-assistance flows | Codex |
 | 2026-05-07 | Rebase BAB-1503 onto promoted COR-1616 and keep only Babs-specific adapter rules | Codex |
+| 2026-06-06 | Codify ready-for-approval auto-advance: approval-ready PRs wait for operator merge while the agent starts the next non-conflicting slice | Codex |
