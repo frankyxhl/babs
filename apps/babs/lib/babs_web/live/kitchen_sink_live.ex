@@ -6,6 +6,7 @@ defmodule BabsWeb.KitchenSinkLive do
   use Phoenix.LiveView
 
   alias BabsWeb.CitizenPath
+  alias BabsWeb.GitDiffComponent
   alias BabsWeb.TicketPath
 
   @impl true
@@ -201,6 +202,14 @@ defmodule BabsWeb.KitchenSinkLive do
           </article>
         </section>
 
+        <section data-testid="git-diff-preview">
+          <GitDiffComponent.git_diff
+            branch={git_branch_example()}
+            status={git_status_example()}
+            diff={git_diff_example()}
+          />
+        </section>
+
         <section class="ks-grid">
           <article class="ks-card">
             <div class="card-head">
@@ -356,5 +365,29 @@ defmodule BabsWeb.KitchenSinkLive do
       "assistant: ready for the next turn"
     ]
     |> Enum.join("\n")
+  end
+
+  defp git_branch_example do
+    %{name: "issue/100-git-diff-liveview", detached?: false, truncated?: false}
+  end
+
+  defp git_status_example do
+    %{text: " M apps/babs/lib/babs_web/live/ticket_live.ex", clean?: false, truncated?: false}
+  end
+
+  defp git_diff_example do
+    %{
+      text: """
+      diff --git a/apps/babs/lib/babs_web/live/ticket_live.ex b/apps/babs/lib/babs_web/live/ticket_live.ex
+      --- a/apps/babs/lib/babs_web/live/ticket_live.ex
+      +++ b/apps/babs/lib/babs_web/live/ticket_live.ex
+      @@ -10,2 +10,3 @@
+       alias BabsWeb.TicketPath
+      +alias BabsWeb.GitDiffComponent
+       alias BabsWeb.TicketPresenter
+      """,
+      truncated?: false,
+      base: nil
+    }
   end
 end

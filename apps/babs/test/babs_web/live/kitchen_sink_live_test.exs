@@ -22,6 +22,9 @@ defmodule BabsWeb.KitchenSinkLiveTest do
     assert html =~ ~s(data-testid="ticket-chat-preview")
     assert html =~ "Ticket Chat"
     assert html =~ "Legacy Comment"
+    assert html =~ ~s(data-testid="git-diff-preview")
+    assert html =~ ~s(data-testid="git-diff-component")
+    assert html =~ "issue/100-git-diff-liveview"
     assert html =~ "terminal-in-light-shell"
     assert html =~ ~s(data-testid="tabs-preview")
     assert html =~ ~s(data-testid="table-preview")
