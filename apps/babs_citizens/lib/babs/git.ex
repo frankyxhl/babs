@@ -74,7 +74,7 @@ defmodule Babs.Git do
       if head?(workspace) do
         run_git(
           workspace,
-          ["log", "--oneline", "--decorate", "-n", Integer.to_string(max_count)],
+          ["log", "--oneline", "--decorate", "-n", Integer.to_string(max_count)] ++ @pathspec,
           max_bytes
         )
       else

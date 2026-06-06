@@ -171,6 +171,32 @@ defmodule Babs.GitTest do
     refute base_diff =~ "sibling/"
   end
 
+  test "log is scoped to workspace subdirectories" do
+    repo = empty_repo()
+    subdir = Path.join(repo, "subdir")
+    sibling = Path.join(repo, "sibling")
+
+    File.mkdir_p!(subdir)
+    File.mkdir_p!(sibling)
+    File.write!(Path.join(subdir, "README.md"), "subdir\n")
+    File.write!(Path.join(sibling, "README.md"), "sibling\n")
+    git!(repo, ["add", "."])
+    git!(repo, ["commit", "-m", "initial scoped fixtures"])
+
+    File.write!(Path.join(sibling, "ONLY.md"), "sibling only\n")
+    git!(repo, ["add", "sibling/ONLY.md"])
+    git!(repo, ["commit", "-m", "sibling only"])
+
+    File.write!(Path.join(subdir, "ONLY.md"), "subdir only\n")
+    git!(repo, ["add", "subdir/ONLY.md"])
+    git!(repo, ["commit", "-m", "subdir only"])
+
+    assert {:ok, %{text: log, truncated?: false}} = Git.log(subdir, max_count: 10)
+    assert log =~ "subdir only"
+    assert log =~ "initial scoped fixtures"
+    refute log =~ "sibling only"
+  end
+
   test "diff disables repository textconv filters" do
     repo = committed_repo()
     marker = Path.join(repo, "textconv-ran")
