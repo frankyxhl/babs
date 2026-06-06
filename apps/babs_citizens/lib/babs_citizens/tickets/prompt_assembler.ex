@@ -6,9 +6,13 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
   alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Ticket
+  alias Babs.Knowledge
+
+  require Logger
 
   @default_max_messages 12
   @default_max_children 5
+  @standing_context_files ["Readme.md", "GOAL.md"]
 
   @spec compact_follow_up_prompt(Ticket.t(), keyword()) :: String.t()
   def compact_follow_up_prompt(%Ticket{} = ticket, opts \\ []) do
@@ -37,6 +41,7 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     citizen_slug = Keyword.fetch!(opts, :citizen_slug)
     latest_message = Keyword.get(opts, :latest_message, "")
     max_messages = Keyword.get(opts, :max_messages, @default_max_messages)
+    standing_context = standing_context_section(citizen_slug, opts)
 
     messages =
       conversation.messages
@@ -54,6 +59,7 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     Priority: #{ticket.priority}
     Assignees: #{Enum.join(ticket.assignees, ", ")}
     Citizen: #{citizen_slug}
+    #{standing_context}
 
     Ticket body:
     #{sanitize(ticket.body)}
@@ -235,6 +241,51 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
 
   defp format_message(message) do
     "- #{message.ts || "unknown"} #{message.author}: #{sanitize(message.body)}"
+  end
+
+  defp standing_context_section(citizen_slug, opts) do
+    @standing_context_files
+    |> Enum.flat_map(&standing_context_entry(citizen_slug, &1, opts))
+    |> case do
+      [] ->
+        ""
+
+      entries ->
+        body =
+          Enum.map_join(entries, "\n\n", fn {file, content} ->
+            "[file: #{file}]\n#{content |> String.trim() |> sanitize()}"
+          end)
+
+        "\nCitizen standing context:\n\n" <> body
+    end
+  end
+
+  defp standing_context_entry(citizen_slug, file, opts) do
+    case Knowledge.read(citizen_slug, file, opts) do
+      {:ok, content} when is_binary(content) ->
+        cond do
+          not String.valid?(content) ->
+            Logger.warning("Babs standing context #{file} for #{citizen_slug} skipped")
+            []
+
+          String.trim(content) == "" ->
+            []
+
+          true ->
+            [{file, content}]
+        end
+
+      {:ok, _content} ->
+        Logger.warning("Babs standing context #{file} for #{citizen_slug} skipped")
+        []
+
+      {:error, {:not_found, ^file}} ->
+        []
+
+      {:error, _reason} ->
+        Logger.warning("Babs standing context #{file} for #{citizen_slug} skipped")
+        []
+    end
   end
 
   defp format_lines([]), do: "- none"

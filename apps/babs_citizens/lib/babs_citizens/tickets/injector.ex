@@ -56,11 +56,26 @@ defmodule Babs.Citizens.Tickets.Injector do
           String.t()
   def comment_prompt(%Ticket{} = ticket, slug, by, body, history_or_conversation)
       when is_binary(slug) and is_binary(by) and is_binary(body) do
+    comment_prompt(ticket, slug, by, body, history_or_conversation, [])
+  end
+
+  @spec comment_prompt(
+          Ticket.t(),
+          String.t(),
+          String.t(),
+          String.t(),
+          [map()] | Conversation.t(),
+          keyword()
+        ) :: String.t()
+  def comment_prompt(%Ticket{} = ticket, slug, by, body, history_or_conversation, opts)
+      when is_binary(slug) and is_binary(by) and is_binary(body) do
+    prompt_opts =
+      opts
+      |> Keyword.put(:citizen_slug, slug)
+      |> Keyword.put(:latest_message, body)
+
     follow_up =
-      PromptAssembler.follow_up_prompt(ticket, history_or_conversation,
-        citizen_slug: slug,
-        latest_message: body
-      )
+      PromptAssembler.follow_up_prompt(ticket, history_or_conversation, prompt_opts)
 
     """
     #{runtime_protocol(ticket, slug)}

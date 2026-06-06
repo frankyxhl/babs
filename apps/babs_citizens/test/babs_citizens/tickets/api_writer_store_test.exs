@@ -9,6 +9,7 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
   alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.TicketMarkdown
   alias Babs.Citizens.Tickets.WriterSupervisor
+  alias Babs.Knowledge
 
   setup do
     original = Application.get_env(:babs_citizens, :ai_reply_capture_enabled)
@@ -968,6 +969,51 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     attempted = Enum.find(history, &(&1["event"] == "comment_notification_attempted"))
     assert attempted["by"] == "clare"
     assert attempted["injected_to"] == ["clare", "dylan"]
+  end
+
+  test "comment_ticket threads Knowledge opts into delivered comment prompts" do
+    root = tmp_root()
+    tickets_root = Path.join(root, "tickets")
+    parent = self()
+
+    assert :ok =
+             Knowledge.write("clare", "Readme.md", "Prefer concise replies.\n",
+               root: root,
+               knowledge_root: "knowledge"
+             )
+
+    assert {:ok, ticket} =
+             Api.create_ticket(
+               %{
+                 title: "Comment context",
+                 body: "Use standing context.",
+                 state: "in_progress",
+                 assignees: ["clare"]
+               },
+               root: root,
+               tickets_root: tickets_root,
+               date: ~D[2026-05-06],
+               now: "2026-05-06T00:00:00Z"
+             )
+
+    assert {:ok, %{delivery: {:comment_notified, ["clare"]}}} =
+             Api.comment_ticket(ticket.id, %{body: "Continue.", by: "user"},
+               root: root,
+               tickets_root: tickets_root,
+               knowledge_root: "knowledge",
+               now: "2026-05-06T00:01:00Z",
+               citizen_fetcher: fn "clare" -> %{slug: "clare"} end,
+               pane_lookup: fn "clare" -> {:ok, self()} end,
+               pane_injector: fn "clare", prompt ->
+                 send(parent, {:comment_prompt, prompt})
+                 :ok
+               end
+             )
+
+    assert_receive {:comment_prompt, prompt}
+    assert prompt =~ "Citizen standing context:"
+    assert prompt =~ "[file: Readme.md]\nPrefer concise replies."
+    assert prompt =~ "Ticket body:\nUse standing context."
   end
 
   test "comment_ticket emits turn events and attempt ids for hardline fanout" do
