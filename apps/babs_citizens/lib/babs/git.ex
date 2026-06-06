@@ -12,6 +12,7 @@ defmodule Babs.Git do
   @truncation_marker "\n[TRUNCATED]"
   @min_max_bytes byte_size(@truncation_marker) + 1
   @git_config_overrides ["-c", "core.fsmonitor=false"]
+  @untracked_files_args ["ls-files", "--others", "--exclude-standard", "-z"]
 
   @type bounded_text :: %{text: String.t(), truncated?: boolean()}
   @type status_result :: %{text: String.t(), clean?: boolean(), truncated?: boolean()}
@@ -214,12 +215,12 @@ defmodule Babs.Git do
   end
 
   defp run_diff(workspace, base, max_bytes) when is_binary(base) do
-    run_git(workspace, ["diff", "--no-ext-diff", "--no-textconv", base, "--"], max_bytes)
+    run_git_diff(workspace, ["diff", "--no-ext-diff", "--no-textconv", base, "--"], max_bytes)
   end
 
   defp run_diff(workspace, nil, max_bytes) do
     if head?(workspace) do
-      run_git(workspace, ["diff", "--no-ext-diff", "--no-textconv", "HEAD", "--"], max_bytes)
+      run_git_diff(workspace, ["diff", "--no-ext-diff", "--no-textconv", "HEAD", "--"], max_bytes)
     else
       run_unborn_diff(workspace, max_bytes)
     end
@@ -228,8 +229,9 @@ defmodule Babs.Git do
   defp run_unborn_diff(workspace, max_bytes) do
     with {:ok, cached} <-
            git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv", "--cached", "--"]),
-         {:ok, worktree} <- git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv", "--"]) do
-      {:ok, cached |> join_diff(worktree) |> bound_text(max_bytes)}
+         {:ok, worktree} <- git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv", "--"]),
+         {:ok, untracked} <- untracked_diff(workspace, max_bytes) do
+      {:ok, cached |> join_diff(worktree) |> join_diff(untracked) |> bound_text(max_bytes)}
     else
       {:error, {status, output, args}} ->
         {:error, {:git_failed, git_failure(args, status, output, max_bytes)}}
@@ -242,6 +244,164 @@ defmodule Babs.Git do
   defp join_diff("", right), do: right
   defp join_diff(left, ""), do: left
   defp join_diff(left, right), do: left <> "\n" <> right
+
+  defp run_git_diff(workspace, args, max_bytes) do
+    with {:ok, tracked} <- git_cmd(workspace, args),
+         {:ok, untracked} <- untracked_diff(workspace, max_bytes) do
+      {:ok, tracked |> join_diff(untracked) |> bound_text(max_bytes)}
+    else
+      {:error, {status, output, executed_args}} ->
+        {:error, {:git_failed, git_failure(executed_args, status, output, max_bytes)}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp untracked_diff(workspace, max_bytes) do
+    case git_cmd(workspace, @untracked_files_args) do
+      {:ok, ""} ->
+        {:ok, ""}
+
+      {:ok, output} ->
+        output
+        |> nul_split()
+        |> Enum.reject(&(&1 == ""))
+        |> Enum.reduce_while({:ok, [], 0}, fn relative_path, {:ok, acc, bytes} ->
+          case untracked_file_diff(workspace, relative_path, max_bytes) do
+            {:ok, ""} ->
+              {:cont, {:ok, acc, bytes}}
+
+            {:ok, diff} ->
+              bytes = bytes + byte_size(diff) + join_separator_size(acc)
+
+              if bytes > max_bytes do
+                {:halt, {:ok, [diff | acc], bytes}}
+              else
+                {:cont, {:ok, [diff | acc], bytes}}
+              end
+
+            {:error, reason} ->
+              {:halt, {:error, reason}}
+          end
+        end)
+        |> case do
+          {:ok, diffs, _bytes} -> {:ok, diffs |> Enum.reverse() |> Enum.join("\n")}
+          {:error, reason} -> {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp join_separator_size([]), do: 0
+  defp join_separator_size(_acc), do: 1
+
+  defp nul_split(value), do: :binary.split(value, <<0>>, [:global])
+
+  defp untracked_file_diff(workspace, relative_path, max_bytes) do
+    with {:ok, path} <- safe_workspace_path(workspace, relative_path, max_bytes),
+         {:ok, stat} <- lstat_untracked(path, max_bytes) do
+      case stat.type do
+        :regular -> untracked_regular_file_diff(relative_path, path, max_bytes)
+        :symlink -> untracked_symlink_diff(relative_path, path, max_bytes)
+        _other -> {:ok, ""}
+      end
+    end
+  end
+
+  defp safe_workspace_path(workspace, relative_path, max_bytes) do
+    workspace = Path.expand(workspace)
+    path = Path.expand(relative_path, workspace)
+
+    if path != workspace and String.starts_with?(path, child_path_prefix(workspace)) do
+      {:ok, path}
+    else
+      {:error, {:git_failed, git_failure(@untracked_files_args, 1, "invalid path", max_bytes)}}
+    end
+  end
+
+  defp child_path_prefix("/"), do: "/"
+  defp child_path_prefix(path), do: path <> "/"
+
+  defp lstat_untracked(path, max_bytes) do
+    case File.lstat(path) do
+      {:ok, stat} ->
+        {:ok, stat}
+
+      {:error, :enoent} ->
+        {:ok, %{type: :missing}}
+
+      {:error, reason} ->
+        {:error, {:git_failed, git_failure(@untracked_files_args, 1, inspect(reason), max_bytes)}}
+    end
+  end
+
+  defp untracked_regular_file_diff(relative_path, path, max_bytes) do
+    case File.open(path, [:read, :binary], &IO.binread(&1, max_bytes + 1)) do
+      {:ok, content} ->
+        {:ok, new_file_diff(relative_path, "100644", content)}
+
+      {:error, :enoent} ->
+        {:ok, ""}
+
+      {:error, reason} ->
+        {:error, {:git_failed, git_failure(@untracked_files_args, 1, inspect(reason), max_bytes)}}
+    end
+  end
+
+  defp untracked_symlink_diff(relative_path, path, max_bytes) do
+    case File.read_link(path) do
+      {:ok, target} ->
+        {:ok, new_file_diff(relative_path, "120000", target)}
+
+      {:error, :enoent} ->
+        {:ok, ""}
+
+      {:error, reason} ->
+        {:error, {:git_failed, git_failure(@untracked_files_args, 1, inspect(reason), max_bytes)}}
+    end
+  end
+
+  defp new_file_diff(relative_path, mode, content) do
+    display_path = display_path(relative_path)
+    lines = added_lines(content)
+
+    [
+      "diff --git a/#{display_path} b/#{display_path}\n",
+      "new file mode #{mode}\n",
+      "--- /dev/null\n",
+      "+++ b/#{display_path}\n",
+      "@@ -0,0 +1,#{length(lines)} @@\n",
+      Enum.map(lines, &["+", &1, "\n"])
+    ]
+    |> IO.iodata_to_binary()
+  end
+
+  defp added_lines(content) do
+    content
+    |> normalize_text()
+    |> String.split("\n", trim: false)
+    |> case do
+      [""] -> []
+      lines -> drop_trailing_empty_line(lines)
+    end
+  end
+
+  defp drop_trailing_empty_line(lines) do
+    if List.last(lines) == "" do
+      Enum.drop(lines, -1)
+    else
+      lines
+    end
+  end
+
+  defp display_path(path) do
+    path
+    |> normalize_text()
+    |> String.replace("\n", "\\n")
+  end
 
   defp run_git(workspace, args, max_bytes) do
     case git_cmd(workspace, args) do

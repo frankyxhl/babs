@@ -32,6 +32,27 @@ defmodule Babs.GitTest do
     assert diff =~ "+new content"
   end
 
+  test "default HEAD diff includes untracked files" do
+    repo = committed_repo()
+    base = git!(repo, ["rev-parse", "HEAD"]) |> String.trim()
+
+    File.write!(Path.join(repo, "UNTRACKED.md"), "untracked content\n")
+
+    assert {:ok, %{text: status, clean?: false}} = Git.status(repo)
+    assert status =~ "?? UNTRACKED.md"
+
+    assert {:ok, %{text: default_diff, base: nil, truncated?: false}} = Git.diff(repo)
+    assert default_diff =~ "diff --git a/UNTRACKED.md b/UNTRACKED.md"
+    assert default_diff =~ "new file mode 100644"
+    assert default_diff =~ "--- /dev/null"
+    assert default_diff =~ "+++ b/UNTRACKED.md"
+    assert default_diff =~ "+untracked content"
+
+    assert {:ok, %{text: base_diff, base: ^base, truncated?: false}} = Git.diff(repo, base: base)
+    assert base_diff =~ "diff --git a/UNTRACKED.md b/UNTRACKED.md"
+    assert base_diff =~ "+untracked content"
+  end
+
   test "unborn default diff includes staged initial files" do
     repo = empty_repo()
 
@@ -40,6 +61,17 @@ defmodule Babs.GitTest do
 
     assert {:ok, %{text: diff, base: nil, truncated?: false}} = Git.diff(repo)
     assert diff =~ "new file mode"
+    assert diff =~ "+first content"
+  end
+
+  test "unborn default diff includes untracked initial files" do
+    repo = empty_repo()
+
+    File.write!(Path.join(repo, "FIRST.md"), "first content\n")
+
+    assert {:ok, %{text: diff, base: nil, truncated?: false}} = Git.diff(repo)
+    assert diff =~ "diff --git a/FIRST.md b/FIRST.md"
+    assert diff =~ "new file mode 100644"
     assert diff =~ "+first content"
   end
 
