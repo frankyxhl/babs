@@ -147,6 +147,65 @@ defmodule BabsWeb.TerminalLiveTest do
     assert html =~ ~s(data-testid="terminal")
   end
 
+  test "home sidebar lists notes and selecting a note renders it", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-note")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n\nDefault file.\n")
+    write_knowledge!(knowledge_root, slug, "notes/alpha.md", "# Alpha Note\n\nSelected note.\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ ~s(data-testid="knowledge-notes")
+    assert html =~ ~s(data-testid="knowledge-file-notes/alpha.md")
+    assert html =~ "alpha"
+
+    html =
+      view
+      |> element(~s(a[data-testid="knowledge-file-notes/alpha.md"]))
+      |> render_click()
+
+    assert_patch(view, "/citizens/#{slug}?file=notes%2Falpha.md")
+    assert html =~ "Selected note."
+    refute html =~ "Default file."
+  end
+
+  test "home sidebar creates a new note with a slug name and selects it", %{
+    knowledge_root: knowledge_root
+  } do
+    slug = unique_slug("home-note-create")
+    register_pane!(slug)
+    write_knowledge!(knowledge_root, slug, "Readme.md", "# Readme\n")
+
+    {:ok, view, html} = live(build_conn(), "/citizens/#{slug}")
+
+    assert html =~ ~s(data-testid="knowledge-note-create-form")
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-note-create-form"]), note: %{name: "Bad Name"})
+      |> render_submit()
+
+    assert html =~ ~s(data-testid="knowledge-note-create-error")
+    assert html =~ "Use a-z, 0-9, and hyphens."
+    refute File.exists?(Path.join([knowledge_root, slug, "notes/Bad Name.md"]))
+
+    html =
+      view
+      |> form(~s(form[data-testid="knowledge-note-create-form"]), note: %{name: "build-plan"})
+      |> render_submit()
+
+    assert_patch(view, "/citizens/#{slug}?file=notes%2Fbuild-plan.md")
+
+    assert File.read!(Path.join([knowledge_root, slug, "notes/build-plan.md"])) ==
+             "# build-plan\n\n"
+
+    assert html =~ "Created notes/build-plan.md"
+    assert html =~ ~s(data-testid="knowledge-file-notes/build-plan.md")
+    assert html =~ "build-plan"
+  end
+
   test "clicking Readme in the knowledge list patches back to the default Home URL", %{
     knowledge_root: knowledge_root
   } do

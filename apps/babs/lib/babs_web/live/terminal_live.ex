@@ -18,6 +18,7 @@ defmodule BabsWeb.TerminalLive do
   @refresh_ms 1_000
   @readme "Readme.md"
   @max_home_edit_bytes 256 * 1024
+  @note_name_pattern ~r/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 
   @impl true
   def mount(_params, %{"slug" => slug} = session, socket) do
@@ -97,6 +98,22 @@ defmodule BabsWeb.TerminalLive do
       submit_home_edit(socket, params)
     else
       {:noreply, socket}
+    end
+  end
+
+  def handle_event("home_note_validate", params, socket) do
+    name = home_note_name(params)
+    error = if name == "", do: nil, else: validate_home_note_name(name)
+
+    {:noreply, update_home_note_form(socket, %{name: name, error: error})}
+  end
+
+  def handle_event("home_note_create", params, socket) do
+    name = home_note_name(params)
+
+    case validate_home_note_name(name) do
+      nil -> create_home_note(socket, name)
+      error -> {:noreply, update_home_note_form(socket, %{name: name, error: error})}
     end
   end
 
@@ -320,8 +337,11 @@ defmodule BabsWeb.TerminalLive do
       }
 
       .terminal-flash {
+        min-width: 0;
         color: var(--muted);
         font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
         white-space: nowrap;
       }
 
@@ -423,6 +443,19 @@ defmodule BabsWeb.TerminalLive do
         gap: 6px;
       }
 
+      .knowledge-sidebar-section {
+        margin-top: 16px;
+      }
+
+      .knowledge-sidebar-subtitle,
+      .knowledge-note-create-label {
+        margin: 0 0 8px;
+        color: var(--muted);
+        display: block;
+        font: 600 12px/1.4 system-ui, sans-serif;
+        text-transform: uppercase;
+      }
+
       .knowledge-file-link {
         min-width: 0;
         border: 1px solid transparent;
@@ -449,6 +482,54 @@ defmodule BabsWeb.TerminalLive do
 
       .knowledge-error {
         color: var(--danger);
+      }
+
+      .knowledge-note-create-form {
+        margin-top: 18px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .knowledge-note-create-row {
+        display: flex;
+        gap: 6px;
+      }
+
+      .knowledge-note-create-input {
+        min-width: 0;
+        min-height: 32px;
+        flex: 1 1 auto;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #101217;
+        color: var(--text);
+        padding: 5px 8px;
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .knowledge-note-create-input:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(85, 179, 166, 0.18);
+      }
+
+      .knowledge-note-create-button {
+        min-height: 32px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #18342f;
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px 10px;
+        font: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .knowledge-note-create-button:hover {
+        border-color: var(--accent);
       }
 
       .knowledge-document {
@@ -600,24 +681,39 @@ defmodule BabsWeb.TerminalLive do
       }
 
       @media (max-width: 680px) {
-        .terminal-page { --terminal-chrome-height: 84px; }
+        .terminal-page { --terminal-chrome-height: 176px; }
         .terminal-chrome {
-          grid-template-columns: auto auto;
-          grid-template-rows: auto auto;
+          height: auto;
+          min-height: var(--terminal-chrome-height);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          grid-auto-rows: auto;
           align-items: stretch;
         }
+        .terminal-chrome [data-testid="citizens-link"] {
+          grid-column: 1 / -1;
+        }
         .terminal-actions {
-          justify-content: flex-end;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
         .terminal-tabs {
           grid-column: 1 / -1;
-          grid-row: 2;
-          order: 3;
         }
         .citizen-page-tabs {
           grid-column: 1 / -1;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .terminal-chrome [data-testid="terminal-full-link"] {
+          min-width: 0;
+        }
+        .terminal-flash {
+          grid-column: 1 / -1;
+          white-space: normal;
+          overflow-wrap: anywhere;
         }
         .terminal-roles {
+          grid-column: 1 / -1;
           max-width: 100%;
         }
         .citizen-home {
@@ -635,7 +731,14 @@ defmodule BabsWeb.TerminalLive do
           align-items: stretch;
           flex-direction: column;
         }
+        .knowledge-note-create-row {
+          align-items: stretch;
+          flex-direction: column;
+        }
         .knowledge-edit-button {
+          width: 100%;
+        }
+        .knowledge-note-create-button {
           width: 100%;
         }
       }
@@ -789,17 +892,75 @@ defmodule BabsWeb.TerminalLive do
             <div :if={home.files == []} class="knowledge-empty" data-testid="knowledge-file-empty">
               No knowledge files yet.
             </div>
-            <nav :if={home.files != []} class="knowledge-files">
+            <% root_files = knowledge_root_files(home.files) %>
+            <% note_files = knowledge_note_files(home.files) %>
+            <nav :if={root_files != []} class="knowledge-files">
               <.terminal_nav_link
-                :for={file <- home.files}
+                :for={file <- root_files}
                 slug={@slug}
                 class={knowledge_file_class(file, home.selected_file)}
                 to={knowledge_file_path(@slug, @socket_token, file)}
                 testid={"knowledge-file-#{file}"}
               >
-                {file}
+                {knowledge_file_label(file)}
               </.terminal_nav_link>
             </nav>
+            <section
+              :if={note_files != []}
+              class="knowledge-sidebar-section"
+              data-testid="knowledge-notes"
+            >
+              <h3 class="knowledge-sidebar-subtitle">Notes</h3>
+              <nav class="knowledge-files">
+                <.terminal_nav_link
+                  :for={file <- note_files}
+                  slug={@slug}
+                  class={knowledge_file_class(file, home.selected_file)}
+                  to={knowledge_file_path(@slug, @socket_token, file)}
+                  testid={"knowledge-file-#{file}"}
+                >
+                  {knowledge_file_label(file)}
+                </.terminal_nav_link>
+              </nav>
+            </section>
+            <form
+              :if={home_note_create_available?(home)}
+              class="knowledge-note-create-form"
+              phx-change="home_note_validate"
+              phx-submit="home_note_create"
+              data-testid="knowledge-note-create-form"
+            >
+              <label class="knowledge-note-create-label" for="knowledge-note-name">
+                New note
+              </label>
+              <div class="knowledge-note-create-row">
+                <input
+                  id="knowledge-note-name"
+                  class="knowledge-note-create-input"
+                  type="text"
+                  name="note[name]"
+                  value={home.note_form.name}
+                  placeholder="build-plan"
+                  autocomplete="off"
+                  data-testid="knowledge-note-create-name"
+                />
+                <button
+                  type="submit"
+                  class="knowledge-note-create-button"
+                  phx-disable-with="Creating"
+                  data-testid="knowledge-note-create-button"
+                >
+                  Create
+                </button>
+              </div>
+              <p
+                :if={home.note_form.error}
+                class="knowledge-edit-error"
+                data-testid="knowledge-note-create-error"
+              >
+                {home.note_form.error}
+              </p>
+            </form>
           </aside>
           <article class="knowledge-document" data-testid="knowledge-document">
             <div class="knowledge-document-header">
@@ -995,7 +1156,8 @@ defmodule BabsWeb.TerminalLive do
       selected_file: @readme,
       list_error: nil,
       document: %{status: :empty, html: "", message: "This file does not exist yet."},
-      edit: inactive_home_edit()
+      edit: inactive_home_edit(),
+      note_form: inactive_home_note_form()
     }
   end
 
@@ -1006,6 +1168,13 @@ defmodule BabsWeb.TerminalLive do
       content: "",
       base_content: nil,
       base_missing?: false,
+      error: nil
+    }
+  end
+
+  defp inactive_home_note_form do
+    %{
+      name: "",
       error: nil
     }
   end
@@ -1029,7 +1198,8 @@ defmodule BabsWeb.TerminalLive do
           selected_file: selected_file,
           list_error: nil,
           document: load_document(slug, selected_file),
-          edit: inactive_home_edit()
+          edit: inactive_home_edit(),
+          note_form: inactive_home_note_form()
         }
 
       {:error, reason} ->
@@ -1038,7 +1208,8 @@ defmodule BabsWeb.TerminalLive do
           selected_file: @readme,
           list_error: friendly_list_error(reason),
           document: load_document(slug, @readme),
-          edit: inactive_home_edit()
+          edit: inactive_home_edit(),
+          note_form: inactive_home_note_form()
         }
     end
   end
@@ -1119,6 +1290,27 @@ defmodule BabsWeb.TerminalLive do
     end
   end
 
+  defp create_home_note(socket, name) do
+    file = Path.join("notes", "#{name}.md")
+    content = "# #{name}\n\n"
+
+    case Knowledge.write(socket.assigns.slug, file, content, if_exists: :error) do
+      :ok ->
+        socket =
+          socket
+          |> put_flash(:info, "Created #{file}")
+          |> push_patch(
+            to: knowledge_file_path(socket.assigns.slug, socket.assigns.socket_token, file)
+          )
+
+        {:noreply, socket}
+
+      {:error, reason} ->
+        {:noreply,
+         update_home_note_form(socket, %{name: name, error: friendly_note_create_error(reason)})}
+    end
+  end
+
   defp read_home_edit_source(slug, file) do
     case Knowledge.read(slug, file) do
       {:ok, content} ->
@@ -1161,6 +1353,21 @@ defmodule BabsWeb.TerminalLive do
 
   defp home_edit_content(_params), do: ""
 
+  defp home_note_name(%{"note" => %{"name" => name}}) when is_binary(name),
+    do: String.trim(name)
+
+  defp home_note_name(_params), do: ""
+
+  defp validate_home_note_name(""), do: "Note name is required."
+
+  defp validate_home_note_name(name) do
+    if Regex.match?(@note_name_pattern, name) do
+      nil
+    else
+      "Use a-z, 0-9, and hyphens."
+    end
+  end
+
   defp validate_home_edit_content(content) when is_binary(content) do
     cond do
       not String.valid?(content) ->
@@ -1185,7 +1392,17 @@ defmodule BabsWeb.TerminalLive do
     assign_home_edit(socket, edit)
   end
 
+  defp update_home_note_form(socket, attrs) do
+    note_form =
+      socket.assigns.home
+      |> Map.get(:note_form, inactive_home_note_form())
+      |> Map.merge(attrs)
+
+    assign(socket, :home, Map.put(socket.assigns.home, :note_form, note_form))
+  end
+
   defp home_edit_available?(home), do: home.list_error == nil and not home_editing?(home)
+  defp home_note_create_available?(home), do: home.list_error == nil and not home_editing?(home)
 
   defp home_editing?(%{edit: %{active?: true}}), do: true
   defp home_editing?(_home), do: false
@@ -1207,6 +1424,11 @@ defmodule BabsWeb.TerminalLive do
 
   defp friendly_save_error(_reason), do: "Unable to save this knowledge file."
 
+  defp friendly_note_create_error({:knowledge_file_exists, _file}),
+    do: "That note already exists."
+
+  defp friendly_note_create_error(_reason), do: "Unable to create this note."
+
   defp friendly_list_error(_reason), do: "Unable to read knowledge files."
 
   defp friendly_document_error({:invalid_frontmatter, _reason}),
@@ -1227,6 +1449,17 @@ defmodule BabsWeb.TerminalLive do
       "knowledge-file-link"
     end
   end
+
+  defp knowledge_root_files(files) do
+    Enum.reject(files, &String.starts_with?(&1, "notes/"))
+  end
+
+  defp knowledge_note_files(files) do
+    Enum.filter(files, &String.starts_with?(&1, "notes/"))
+  end
+
+  defp knowledge_file_label("notes/" <> note), do: Path.basename(note, ".md")
+  defp knowledge_file_label(file), do: file
 
   defp knowledge_file_path("new", socket_token, @readme),
     do: CitizenPath.terminal("new", socket_token, tab: :home, explicit_tab?: true)

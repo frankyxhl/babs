@@ -15,7 +15,7 @@ defmodule Babs.Knowledge do
   def list(slug, opts \\ []) do
     with {:ok, guard_root, home} <- resolve_home(slug, opts),
          :ok <- reject_symlink_path(guard_root, home, ".", :list_knowledge) do
-      list_home(slug, home, opts)
+      list_home(slug, guard_root, home, opts)
     end
   end
 
@@ -149,12 +149,13 @@ defmodule Babs.Knowledge do
     end
   end
 
-  defp list_home(slug, home, opts) do
+  defp list_home(slug, guard_root, home, opts) do
     case File.ls(home) do
       {:ok, entries} ->
-        entries
-        |> Enum.sort()
-        |> list_entries(slug, opts)
+        with {:ok, root_names} <- entries |> Enum.sort() |> list_entries(slug, opts),
+             {:ok, note_names} <- list_notes(slug, guard_root, home, opts) do
+          {:ok, root_names ++ note_names}
+        end
 
       {:error, :enoent} ->
         {:ok, []}
@@ -163,6 +164,39 @@ defmodule Babs.Knowledge do
         {:error, {:redacted_io_error, {:list_knowledge, reason}}}
     end
   end
+
+  defp list_notes(slug, guard_root, home, opts) do
+    notes_dir = Path.join(home, "notes")
+
+    with :ok <- reject_symlink_path(guard_root, notes_dir, "notes", :list_knowledge) do
+      case File.lstat(notes_dir) do
+        {:ok, %File.Stat{type: :directory}} ->
+          notes_dir
+          |> File.ls()
+          |> list_note_entries(slug, opts)
+
+        {:ok, _stat} ->
+          {:ok, []}
+
+        {:error, :enoent} ->
+          {:ok, []}
+
+        {:error, reason} ->
+          {:error, {:redacted_io_error, {:list_knowledge, reason}}}
+      end
+    end
+  end
+
+  defp list_note_entries({:ok, entries}, slug, opts) do
+    entries
+    |> Enum.sort()
+    |> Enum.filter(&visible_markdown_entry?/1)
+    |> Enum.map(&Path.join("notes", &1))
+    |> list_entries(slug, opts)
+  end
+
+  defp list_note_entries({:error, reason}, _slug, _opts),
+    do: {:error, {:redacted_io_error, {:list_knowledge, reason}}}
 
   defp list_entries(entries, slug, opts) do
     Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, names} ->

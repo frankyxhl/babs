@@ -26,6 +26,42 @@ defmodule Babs.KnowledgeTest do
     assert Knowledge.list("clare", opts(root)) == {:ok, ["A.md", "B.md"]}
   end
 
+  test "list includes sorted visible notes markdown names without recursing beyond notes" do
+    root = tmp_root()
+    home = home(root, "clare")
+    notes = Path.join(home, "notes")
+    File.mkdir_p!(notes)
+
+    File.write!(Path.join(home, "Readme.md"), "readme")
+    File.write!(Path.join(home, "Plan.md"), "plan")
+    File.write!(Path.join(notes, "beta.md"), "beta")
+    File.write!(Path.join(notes, "alpha.md"), "alpha")
+    File.write!(Path.join(notes, ".Hidden.md"), "hidden")
+    File.write!(Path.join(notes, "Draft.md~"), "backup")
+    File.write!(Path.join(notes, "ignore.txt"), "txt")
+    File.mkdir_p!(Path.join(notes, "nested"))
+    File.write!(Path.join(notes, "nested/deep.md"), "deep")
+
+    outside = Path.join(root, "outside-note.md")
+    File.write!(outside, "outside")
+    File.ln_s!(outside, Path.join(notes, "Linked.md"))
+
+    assert Knowledge.list("clare", opts(root)) ==
+             {:ok, ["Plan.md", "Readme.md", "notes/alpha.md", "notes/beta.md"]}
+  end
+
+  test "list rejects a symlinked notes directory instead of following it" do
+    root = tmp_root()
+    home = home(root, "clare")
+    outside = Path.join(root, "outside-notes")
+    File.mkdir_p!(home)
+    File.mkdir_p!(outside)
+    File.ln_s!(outside, Path.join(home, "notes"))
+
+    assert Knowledge.list("clare", opts(root)) ==
+             {:error, {:unsafe_symlink, %{path: "notes", component: "knowledge/clare/notes"}}}
+  end
+
   test "list returns empty for a missing Citizen home" do
     root = tmp_root()
 
