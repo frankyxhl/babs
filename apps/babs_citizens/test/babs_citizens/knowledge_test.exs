@@ -306,6 +306,91 @@ defmodule Babs.KnowledgeTest do
     refute File.exists?(unexpected_temp_path)
   end
 
+  test "before rename hook and final install are serialized for the same file" do
+    root = tmp_root()
+    final_path = Path.join(home(root, "clare"), "Readme.md")
+    File.mkdir_p!(Path.dirname(final_path))
+    File.write!(final_path, "old")
+    parent = self()
+
+    stale_guard = fn label ->
+      fn _temp_path, ^final_path ->
+        seen = File.read(final_path)
+        send(parent, {:before_rename_seen, label, self(), seen})
+
+        receive do
+          {:release_before_rename, ^label} -> :ok
+        after
+          1_000 -> {:error, :test_timeout}
+        end
+
+        case seen do
+          {:ok, "old"} -> :ok
+          {:ok, _content} -> {:error, :stale_home_edit}
+          {:error, reason} -> {:error, {:verify_home_edit, reason}}
+        end
+      end
+    end
+
+    first =
+      Task.async(fn ->
+        Knowledge.write(
+          "clare",
+          "Readme.md",
+          "first",
+          opts(root, before_rename: stale_guard.(:first))
+        )
+      end)
+
+    second =
+      Task.async(fn ->
+        Knowledge.write(
+          "clare",
+          "Readme.md",
+          "second",
+          opts(root, before_rename: stale_guard.(:second))
+        )
+      end)
+
+    assert_receive {:before_rename_seen, first_label, first_pid, {:ok, "old"}}
+
+    early_second =
+      receive do
+        {:before_rename_seen, second_label, second_pid, seen} -> {second_label, second_pid, seen}
+      after
+        200 -> nil
+      end
+
+    send(first_pid, {:release_before_rename, first_label})
+
+    {second_label, second_pid} =
+      case early_second do
+        {second_label, second_pid, _seen} ->
+          {second_label, second_pid}
+
+        nil ->
+          assert_receive {:before_rename_seen, second_label, second_pid, {:ok, content}}
+          assert content in ["first", "second"]
+          {second_label, second_pid}
+      end
+
+    send(second_pid, {:release_before_rename, second_label})
+
+    results = [Task.await(first), Task.await(second)]
+
+    assert Enum.count(results, &(&1 == :ok)) == 1
+
+    assert Enum.count(results, fn
+             {:error, {:redacted_io_error, {:before_rename_knowledge, :stale_home_edit}}} ->
+               true
+
+             _result ->
+               false
+           end) == 1
+
+    assert File.read!(final_path) in ["first", "second"]
+  end
+
   test "write with if_exists error creates missing files and preserves existing files" do
     root = tmp_root()
     final_path = Path.join(home(root, "clare"), "Readme.md")
