@@ -94,6 +94,30 @@ defmodule Babs.GitTest do
     refute File.exists?(marker)
   end
 
+  test "diff disables repository clean filters" do
+    repo = committed_repo()
+    marker = Path.join(repo, "clean-filter-ran")
+    script = Path.join(repo, "clean-filter.sh")
+
+    File.write!(script, "#!/bin/sh\nprintf ran > #{marker}\ncat\n")
+    File.chmod!(script, 0o755)
+    File.write!(Path.join(repo, ".gitattributes"), "*.dat filter=evil\n")
+    File.write!(Path.join(repo, "asset.dat"), "before\n")
+    git!(repo, ["add", ".gitattributes", "asset.dat"])
+    git!(repo, ["commit", "-m", "add clean filter fixture"])
+    git!(repo, ["config", "filter.evil.clean", script])
+
+    File.write!(Path.join(repo, "asset.dat"), "after\n")
+
+    git!(repo, ["diff", "--no-ext-diff", "--no-textconv", "HEAD", "--", "asset.dat"])
+    assert File.exists?(marker)
+    File.rm!(marker)
+
+    assert {:ok, %{text: diff}} = Git.diff(repo)
+    assert diff =~ "+after"
+    refute File.exists?(marker)
+  end
+
   test "returns tagged errors for invalid workspaces and non-repos" do
     root = tmp_root()
 

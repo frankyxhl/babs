@@ -257,7 +257,7 @@ defmodule Babs.Git do
   end
 
   defp git_cmd(workspace, args) do
-    safe_args = @git_config_overrides ++ args
+    safe_args = safe_git_args(workspace, args)
 
     case System.cmd("git", safe_args, cd: workspace, stderr_to_stdout: true) do
       {output, 0} -> {:ok, output}
@@ -270,6 +270,61 @@ defmodule Babs.Git do
       else
         reraise(error, __STACKTRACE__)
       end
+  end
+
+  defp safe_git_args(workspace, args) do
+    @git_config_overrides ++ filter_config_overrides(workspace) ++ args
+  end
+
+  defp filter_config_overrides(workspace) do
+    args = @git_config_overrides ++ ["config", "--get-regexp", "^filter\\..*\\.(clean|process)$"]
+
+    case System.cmd("git", args, cd: workspace, stderr_to_stdout: true) do
+      {output, 0} -> filter_override_args(output)
+      {_output, _status} -> []
+    end
+  rescue
+    error in ErlangError ->
+      if error.original == :enoent do
+        []
+      else
+        reraise(error, __STACKTRACE__)
+      end
+  end
+
+  defp filter_override_args(output) do
+    output
+    |> String.split("\n", trim: true)
+    |> Enum.flat_map(&filter_driver_name/1)
+    |> Enum.uniq()
+    |> Enum.flat_map(fn driver ->
+      [
+        "-c",
+        "filter.#{driver}.clean=",
+        "-c",
+        "filter.#{driver}.process=",
+        "-c",
+        "filter.#{driver}.required=false"
+      ]
+    end)
+  end
+
+  defp filter_driver_name(line) do
+    key = line |> String.split(~r/\s+/, parts: 2) |> List.first()
+
+    cond do
+      not is_binary(key) ->
+        []
+
+      String.starts_with?(key, "filter.") and String.ends_with?(key, ".clean") ->
+        [key |> String.replace_prefix("filter.", "") |> String.trim_trailing(".clean")]
+
+      String.starts_with?(key, "filter.") and String.ends_with?(key, ".process") ->
+        [key |> String.replace_prefix("filter.", "") |> String.trim_trailing(".process")]
+
+      true ->
+        []
+    end
   end
 
   defp git_failure(args, status, output, max_bytes) do
