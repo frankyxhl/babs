@@ -121,8 +121,16 @@ defmodule BabsWeb.GitDiffComponent do
     |> Enum.reverse()
   end
 
-  defp diff_text(%{text: text}) when is_binary(text), do: String.trim_trailing(text)
+  defp diff_text(%{text: text}) when is_binary(text), do: trim_final_line_break(text)
   defp diff_text(_diff), do: ""
+
+  defp trim_final_line_break(text) do
+    cond do
+      String.ends_with?(text, "\r\n") -> binary_part(text, 0, byte_size(text) - 2)
+      String.ends_with?(text, "\n") -> binary_part(text, 0, byte_size(text) - 1)
+      true -> text
+    end
+  end
 
   defp parse_diff_line(line, {files, current}) do
     case diff_file_path(line) do

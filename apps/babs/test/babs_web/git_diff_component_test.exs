@@ -96,6 +96,17 @@ defmodule BabsWeb.GitDiffComponentTest do
     refute html =~ "<strong>Workspace diff</strong>"
   end
 
+  test "preserves trailing whitespace in the last rendered diff line" do
+    html =
+      render_component(&GitDiffComponent.git_diff/1,
+        branch: %{name: "main", detached?: false, truncated?: false},
+        status: %{text: " M value.txt\n", clean?: false},
+        diff: %{text: trailing_space_diff(), truncated?: false, base: nil}
+      )
+
+    assert html =~ ">value   </span>"
+  end
+
   defp sample_diff do
     """
     diff --git a/lib/example.ex b/lib/example.ex
@@ -108,6 +119,18 @@ defmodule BabsWeb.GitDiffComponentTest do
     +  new line
      end
     """
+  end
+
+  defp trailing_space_diff do
+    [
+      "diff --git a/value.txt b/value.txt",
+      "--- a/value.txt",
+      "+++ b/value.txt",
+      "@@ -1 +1 @@",
+      "-old",
+      "+value   \n"
+    ]
+    |> Enum.join("\n")
   end
 
   defp quoted_path_diff do
