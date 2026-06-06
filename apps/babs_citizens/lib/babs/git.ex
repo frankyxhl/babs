@@ -40,7 +40,7 @@ defmodule Babs.Git do
   @spec status(term(), keyword()) :: {:ok, status_result()} | {:error, error()}
   def status(workspace, opts \\ []) do
     with {:ok, workspace, max_bytes} <- context(workspace, opts) do
-      case git_cmd(workspace, ["status", "--porcelain=v1"] ++ @pathspec) do
+      case git_cmd(workspace, ["status", "--porcelain=v1"] ++ @pathspec, max_bytes: max_bytes) do
         {:ok, output} ->
           bounded = bound_text(output, max_bytes)
 
@@ -242,10 +242,16 @@ defmodule Babs.Git do
              git_cmd(
                workspace,
                ["diff", "--no-ext-diff", "--no-textconv", "--cached"] ++ @pathspec,
-               env: env
+               env: env,
+               max_bytes: max_bytes
              ),
            {:ok, worktree} <-
-             git_cmd(workspace, ["diff", "--no-ext-diff", "--no-textconv"] ++ @pathspec, env: env) do
+             git_cmd(
+               workspace,
+               ["diff", "--no-ext-diff", "--no-textconv"] ++ @pathspec,
+               env: env,
+               max_bytes: max_bytes
+             ) do
         {:ok, cached |> join_diff(worktree) |> bound_text(max_bytes)}
       else
         {:error, {status, output, args}} ->
@@ -367,7 +373,7 @@ defmodule Babs.Git do
   defp nul_split(value), do: :binary.split(value, <<0>>, [:global])
 
   defp run_git(workspace, args, max_bytes, opts \\ []) do
-    case git_cmd(workspace, args, opts) do
+    case git_cmd(workspace, args, Keyword.put(opts, :max_bytes, max_bytes)) do
       {:ok, output} ->
         {:ok, bound_text(output, max_bytes)}
 
@@ -381,8 +387,10 @@ defmodule Babs.Git do
 
   defp git_cmd(workspace, args, opts \\ []) do
     safe_args = safe_git_args(workspace, args)
+    max_bytes = Keyword.get(opts, :max_bytes)
+    cmd_opts = cmd_opts(workspace, Keyword.delete(opts, :max_bytes))
 
-    case System.cmd("git", safe_args, cmd_opts(workspace, opts)) do
+    case run_git_cmd(safe_args, cmd_opts, max_bytes) do
       {output, 0} -> {:ok, output}
       {output, status} -> {:error, {status, output, safe_args}}
     end
@@ -393,6 +401,91 @@ defmodule Babs.Git do
       else
         reraise(error, __STACKTRACE__)
       end
+  end
+
+  defp run_git_cmd(safe_args, cmd_opts, max_bytes) when is_integer(max_bytes) do
+    case bounded_system_cmd("git", safe_args, cmd_opts, max_bytes) do
+      {:truncated, output} -> {output, 0}
+      result -> result
+    end
+  end
+
+  defp run_git_cmd(safe_args, cmd_opts, _max_bytes) do
+    System.cmd("git", safe_args, cmd_opts)
+  end
+
+  defp bounded_system_cmd(command, args, cmd_opts, max_bytes) do
+    port =
+      Port.open(
+        {:spawn_executable, System.find_executable(command) || command},
+        port_opts(args, cmd_opts)
+      )
+
+    collect_port(port, max_bytes, "")
+  end
+
+  defp collect_port(port, limit, output) do
+    receive do
+      {^port, {:data, data}} ->
+        case append_bounded(output, data, limit) do
+          {:truncated, bounded} ->
+            close_port(port)
+            flush_port_exit(port)
+            {:truncated, bounded}
+
+          {:cont, bounded} ->
+            collect_port(port, limit, bounded)
+        end
+
+      {^port, {:exit_status, status}} ->
+        {output, status}
+    end
+  end
+
+  defp append_bounded(output, data, limit) do
+    next_size = byte_size(output) + byte_size(data)
+
+    if next_size > limit do
+      remaining = max(limit + 1 - byte_size(output), 0)
+      {:truncated, output <> binary_part(data, 0, remaining)}
+    else
+      {:cont, output <> data}
+    end
+  end
+
+  defp close_port(port) do
+    Port.close(port)
+  rescue
+    ArgumentError -> :ok
+  end
+
+  defp flush_port_exit(port) do
+    receive do
+      {^port, {:exit_status, _status}} -> :ok
+    after
+      100 -> :ok
+    end
+  end
+
+  defp port_opts(args, cmd_opts) do
+    [
+      :binary,
+      :exit_status,
+      :stderr_to_stdout,
+      {:args, args},
+      {:cd, cmd_opts |> Keyword.fetch!(:cd) |> String.to_charlist()}
+    ] ++ port_env_opts(Keyword.get(cmd_opts, :env, []))
+  end
+
+  defp port_env_opts([]), do: []
+
+  defp port_env_opts(env) do
+    [
+      {:env,
+       Enum.map(env, fn {key, value} ->
+         {String.to_charlist(key), String.to_charlist(value)}
+       end)}
+    ]
   end
 
   defp cmd_opts(workspace, opts) do

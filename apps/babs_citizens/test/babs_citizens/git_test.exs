@@ -348,6 +348,20 @@ defmodule Babs.GitTest do
     assert String.valid?(diff)
   end
 
+  test "bounds large untracked diff output with a truncation marker inside max_bytes" do
+    repo = committed_repo()
+
+    File.write!(
+      Path.join(repo, "BIG.txt"),
+      Enum.map_join(1..1_000, "\n", &"generated #{&1}") <> "\n"
+    )
+
+    assert {:ok, %{text: diff, truncated?: true}} = Git.diff(repo, max_bytes: 80)
+    assert String.ends_with?(diff, "\n[TRUNCATED]")
+    assert byte_size(diff) <= 80
+    assert String.valid?(diff)
+  end
+
   test "normalizes invalid utf8 output without truncating" do
     repo = committed_repo()
 
