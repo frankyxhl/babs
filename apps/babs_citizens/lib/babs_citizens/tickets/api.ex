@@ -7,6 +7,7 @@ defmodule Babs.Citizens.Tickets.Api do
   alias Babs.Citizens.Tickets.Store
   alias Babs.Citizens.Tickets.Ticket
   alias Babs.Citizens.Tickets.TicketId
+  alias Babs.Citizens.Tickets.WorkspaceResolver
   alias Babs.Citizens.Tickets.Writer
   alias Babs.Citizens.Tickets.WriterSupervisor
 
@@ -38,6 +39,12 @@ defmodule Babs.Citizens.Tickets.Api do
           {:ok, %{ticket: Ticket.t(), history: [map()]}} | {:error, term()}
   def show_ticket(id, opts \\ []) do
     Store.show(id, opts)
+  end
+
+  @spec resolve_workspace(String.t(), keyword()) ::
+          {:ok, WorkspaceResolver.resolved_workspace()} | {:error, term()}
+  def resolve_workspace(id, opts \\ []) do
+    WorkspaceResolver.resolve_workspace(id, opts)
   end
 
   @spec comment_ticket(String.t(), map() | keyword(), keyword()) ::
