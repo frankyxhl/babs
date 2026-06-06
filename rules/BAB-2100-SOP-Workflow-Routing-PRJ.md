@@ -1,7 +1,7 @@
 # SOP-2100: Workflow Routing PRJ
 
 **Applies to:** BAB project
-**Last updated:** 2026-05-07
+**Last updated:** 2026-06-06
 **Last reviewed:** 2026-05-03
 **Status:** Active
 
@@ -139,7 +139,10 @@ Babs-specific contracts, Trinity defaults, validation commands, browser-harness
 settings, and GitHub identity rules. Once the PR is open, use `COR-1615` for
 the GitHub App PR review bot trigger/status/current-head loop, then `COR-1612`
 for fetched review findings. `BAB-1504` is deprecated historical Babs source
-material for the promoted COR workflow.
+material for the promoted COR workflow. When a phase PR reaches Stage 3 /
+`ready-for-approval`, follow `BAB-1503` and `BAB-1200`: keep the PR worktree
+available for fixes and immediately start the next non-conflicting Babs issue or
+roadmap slice instead of stopping for operator merge.
 
 ---
 
@@ -215,3 +218,4 @@ This SOP is consulted, not executed. The "steps" are the routing decision patter
 | 2026-05-05 | Phase 2a: route Citizen seed workspace references through configurable `workspace_root` from `BAB-2209` | Codex |
 | 2026-05-07 | Update Elena routing note to direct `copilot` after launch-profile support | Codex |
 | 2026-05-07 | Rebase phase-delivery routing onto promoted `COR-1616` with `BAB-1503` as the Babs adapter | Codex |
+| 2026-06-06 | Add route-level reminder that approval-ready phase PRs auto-advance to the next non-conflicting slice per `BAB-1503`/`BAB-1200` | Codex |

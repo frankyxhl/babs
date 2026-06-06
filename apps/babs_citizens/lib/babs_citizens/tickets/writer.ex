@@ -1188,16 +1188,16 @@ defmodule Babs.Citizens.Tickets.Writer do
   defp deliver_comment(root, ticket, slug, body, now, by, turn, opts, conversation) do
     case delivery_backend(slug, opts) do
       "direct_cli" ->
-        full_prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
+        full_prompt = Injector.comment_prompt(ticket, slug, by, body, conversation, opts)
         prompt = direct_comment_prompt(ticket, slug, body, opts, full_prompt)
         deliver_direct_comment(root, ticket, slug, prompt, full_prompt, turn, opts)
 
       "lazy_tmux" ->
-        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
+        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation, opts)
         deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
 
       _backend ->
-        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation)
+        prompt = Injector.comment_prompt(ticket, slug, by, body, conversation, opts)
         deliver_hardline_comment(root, ticket, slug, prompt, now, by, turn, opts)
     end
   end

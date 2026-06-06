@@ -1,6 +1,9 @@
 defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
+  alias Babs.Knowledge
   alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.Ticket
@@ -91,6 +94,141 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     refute prompt =~ "10.0.0.5"
     refute prompt =~ "secret-value"
     refute prompt =~ ticket.path
+  end
+
+  test "injects sanitized Citizen standing context before the Ticket body" do
+    root = tmp_root()
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "Readme.md",
+               "Use /Users/operator/private with token secret-value.\n",
+               knowledge_opts(root)
+             )
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "GOAL.md",
+               "Keep the operator dashboard moving.\n",
+               knowledge_opts(root)
+             )
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "clare",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge"
+      )
+
+    assert prompt =~ "Citizen: clare\n\nCitizen standing context:"
+    assert prompt =~ "[file: Readme.md]\nUse [local-path] with [secret]"
+    assert prompt =~ "[file: GOAL.md]\nKeep the operator dashboard moving."
+    refute prompt =~ "/Users/operator"
+    refute prompt =~ "secret-value"
+
+    assert String.split(prompt, "Citizen standing context:") |> length() == 2
+    assert before?(prompt, "Citizen standing context:", "Ticket body:")
+  end
+
+  test "omits the standing context block when files are missing or empty" do
+    root = tmp_root()
+
+    assert :ok = Knowledge.write("dylan", "Readme.md", " \n\t", knowledge_opts(root))
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "dylan",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge"
+      )
+
+    refute prompt =~ "Citizen standing context:"
+    assert prompt =~ "Ticket body:\nBuild the feature."
+  end
+
+  test "includes GOAL standing context when Readme is absent" do
+    root = tmp_root()
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "GOAL.md",
+               "Keep cross-ticket continuity visible.\n",
+               knowledge_opts(root)
+             )
+
+    prompt =
+      PromptAssembler.follow_up_prompt(ticket(), [],
+        citizen_slug: "clare",
+        latest_message: "Continue.",
+        root: root,
+        knowledge_root: "knowledge"
+      )
+
+    assert prompt =~ "Citizen standing context:"
+    assert prompt =~ "[file: GOAL.md]\nKeep cross-ticket continuity visible."
+    refute prompt =~ "[file: Readme.md]"
+  end
+
+  test "warns and skips invalid UTF-8 standing context without aborting valid files" do
+    root = tmp_root()
+
+    assert :ok = Knowledge.write("clare", "Readme.md", <<255, 255, 255>>, knowledge_opts(root))
+
+    assert :ok =
+             Knowledge.write(
+               "clare",
+               "GOAL.md",
+               "Keep valid context available.\n",
+               knowledge_opts(root)
+             )
+
+    log =
+      capture_log(fn ->
+        prompt =
+          PromptAssembler.follow_up_prompt(ticket(), [],
+            citizen_slug: "clare",
+            latest_message: "Continue.",
+            root: root,
+            knowledge_root: "knowledge"
+          )
+
+        assert prompt =~ "Citizen standing context:"
+        assert prompt =~ "[file: GOAL.md]\nKeep valid context available."
+        refute prompt =~ "[file: Readme.md]"
+      end)
+
+    assert log =~ "standing context"
+    assert log =~ "Readme.md"
+  end
+
+  test "warns and omits standing context files that cannot be read safely" do
+    root = tmp_root()
+    outside = Path.join(root, "outside.md")
+    home = Path.join(root, "knowledge/clare")
+    File.mkdir_p!(home)
+    File.write!(outside, "outside\n")
+    File.ln_s!(outside, Path.join(home, "Readme.md"))
+
+    log =
+      capture_log(fn ->
+        prompt =
+          PromptAssembler.follow_up_prompt(ticket(), [],
+            citizen_slug: "clare",
+            latest_message: "Continue.",
+            root: root,
+            knowledge_root: "knowledge"
+          )
+
+        refute prompt =~ "Citizen standing context:"
+      end)
+
+    assert log =~ "standing context"
+    assert log =~ "Readme.md"
   end
 
   test "does not duplicate the latest operator message already present in history" do
@@ -372,5 +510,46 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
       roles: Enum.map(roles, &%{"name" => &1, "skills" => []}),
       is_mayor: slug == "flora"
     }
+  end
+
+  defp ticket do
+    %Ticket{
+      id: "T-2026-05-07-CTX",
+      type: "assignment",
+      state: "in_progress",
+      assigner: "user",
+      assignees: ["clare"],
+      assignee_role: nil,
+      inspector: "user",
+      priority: "normal",
+      parent_ticket: nil,
+      created_at: "2026-05-07T10:00:00Z",
+      updated_at: "2026-05-07T10:01:00Z",
+      metadata: %{},
+      title: "Context",
+      body: "Build the feature.",
+      path: nil,
+      warnings: []
+    }
+  end
+
+  defp knowledge_opts(root), do: [root: root, knowledge_root: "knowledge"]
+
+  defp before?(text, left, right) do
+    {left_index, _left_length} = :binary.match(text, left)
+    {right_index, _right_length} = :binary.match(text, right)
+    left_index < right_index
+  end
+
+  defp tmp_root do
+    root =
+      Path.join([
+        System.tmp_dir!(),
+        "babs-prompt-context-#{System.system_time(:nanosecond)}-#{System.unique_integer([:positive])}"
+      ])
+
+    File.rm_rf!(root)
+    on_exit(fn -> File.rm_rf!(root) end)
+    root
   end
 end
