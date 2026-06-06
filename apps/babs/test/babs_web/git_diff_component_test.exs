@@ -83,6 +83,19 @@ defmodule BabsWeb.GitDiffComponentTest do
     assert html =~ "[TRUNCATED]"
   end
 
+  test "renders quoted git paths from diff headers" do
+    html =
+      render_component(&GitDiffComponent.git_diff/1,
+        branch: %{name: "main", detached?: false, truncated?: false},
+        status: %{text: " M #{<<195, 169>>}.txt\n M path with spaces.txt\n", clean?: false},
+        diff: %{text: quoted_path_diff(), truncated?: false, base: nil}
+      )
+
+    assert html =~ <<195, 169>> <> ".txt"
+    assert html =~ "path with spaces.txt"
+    refute html =~ "<strong>Workspace diff</strong>"
+  end
+
   defp sample_diff do
     """
     diff --git a/lib/example.ex b/lib/example.ex
@@ -94,6 +107,25 @@ defmodule BabsWeb.GitDiffComponentTest do
     -  old line
     +  new line
      end
+    """
+  end
+
+  defp quoted_path_diff do
+    ~S"""
+    diff --git "a/\303\251.txt" "b/\303\251.txt"
+    index 1111111..2222222 100644
+    --- "a/\303\251.txt"
+    +++ "b/\303\251.txt"
+    @@ -1 +1 @@
+    -old
+    +new
+    diff --git "a/path with spaces.txt" "b/path with spaces.txt"
+    index 3333333..4444444 100644
+    --- "a/path with spaces.txt"
+    +++ "b/path with spaces.txt"
+    @@ -1 +1 @@
+    -old
+    +new
     """
   end
 end
