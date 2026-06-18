@@ -27,6 +27,18 @@ Per BAB-2278, no new feature work happens during the dogfood window
 (→ 2026-06-27). This roadmap is the candidate batch for the **post-dogfood PRP
 cycle**, to be re-prioritised by the friction log at the 2026-06-27 review.
 
+**Design stance: adapt, don't clone.** This document captures the *problems
+solved* and the *information-architecture principles*, never a UI to copy. Every
+pattern below is a problem statement plus a Babs mapping — the concrete widgets,
+layout, and interaction are Babs's own design work. In particular, Babs's
+**terminal-first identity is a genuine differentiator, not just a deficiency to
+paper over**: the live Hardline (you see exactly what a Citizen does and can drop
+in) is a feature. The likely Babs synthesis is therefore *not* "hide the terminal
+behind a chat clone" but "keep the terminal first-class and build a scannable
+fleet view, readable handoff state, and a composer-style input around it." Where
+Babs's substrate or thesis is stronger (OTP/Channels; terminal-centric Hardline),
+it should diverge deliberately rather than converge on the reference.
+
 ---
 
 ## Content
