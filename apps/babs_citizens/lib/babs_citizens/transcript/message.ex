@@ -29,7 +29,7 @@ defmodule Babs.Citizens.Transcript.Message do
   def changeset(message, attrs) do
     message
     |> cast(attrs, [:id, :owner_id, :role, :content, :occurred_at, :raw])
-    |> validate_required([:id, :owner_id, :role, :occurred_at])
+    |> validate_required([:id, :owner_id, :role, :occurred_at, :raw])
     |> validate_inclusion(:role, @roles)
     |> unique_constraint(:id)
   end

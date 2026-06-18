@@ -45,6 +45,12 @@ defmodule Babs.Citizens.Transcript.MessageTest do
                List.keyfind(changeset.errors, :occurred_at, 0)
     end
 
+    test "validate_required rejects explicit nil raw (DB column is null: false)" do
+      changeset = Message.changeset(%Message{}, Map.put(@valid_attrs, :raw, nil))
+      refute changeset.valid?
+      assert {:raw, {"can't be blank", _}} = List.keyfind(changeset.errors, :raw, 0)
+    end
+
     test "validate_inclusion rejects unknown role" do
       changeset = Message.changeset(%Message{}, Map.put(@valid_attrs, :role, "banana"))
       refute changeset.valid?
