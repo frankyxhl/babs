@@ -13,7 +13,6 @@ defmodule Babs.Citizens.RepoCase do
 
   setup do
     Babs.Citizens.RepoCase.ensure_repo!()
-    Babs.Citizens.Repo.delete_all(Babs.Citizens.Transcript.Message)
     Babs.Citizens.Repo.delete_all(Babs.Citizens.ProviderSession)
     Babs.Citizens.Repo.delete_all(Babs.Citizens.CitizenRecord)
     :ok
