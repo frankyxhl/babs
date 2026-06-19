@@ -69,15 +69,19 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
       budget = budget(opts)
       auto_count = count_auto_replies(history)
 
-      if auto_count < budget do
+      remaining = budget - auto_count
+
+      if remaining > 0 do
         comment_id = comment["message_id"]
         deliver = Keyword.get(opts, :deliver_fn, &default_deliver/5)
+        deliver_opts = Keyword.put(opts, :focus_message_id, comment_id)
 
-        deliver_opts =
-          opts
-          |> Keyword.put(:focus_message_id, comment_id)
-
-        Enum.each(found_targets, fn slug ->
+        # Cap fan-out at the remaining budget: one comment targeting several
+        # citizens must not push the per-thread auto-reply count past the cap.
+        found_targets
+        |> Enum.sort()
+        |> Enum.take(remaining)
+        |> Enum.each(fn slug ->
           deliver.(slug, root, ticket, conversation, deliver_opts)
         end)
       end
