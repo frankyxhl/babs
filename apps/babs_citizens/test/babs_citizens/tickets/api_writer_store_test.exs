@@ -138,6 +138,29 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert reply_event["parent_comment_id"] == "msg_root"
   end
 
+  test "auto_reply marker round-trips through Writer.comment into history (budget can count it)" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Auto", body: "Auto-reply test."},
+               tickets_root: root,
+               date: ~D[2026-06-01],
+               now: "2026-06-01T00:00:00Z"
+             )
+
+    assert {:ok, _} =
+             Api.comment_ticket(
+               ticket.id,
+               %{"body" => "Auto reply.", "by" => "clare", "auto_reply" => true},
+               tickets_root: root,
+               now: "2026-06-01T00:01:00Z"
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    event = Enum.find(history, &(&1["body"] == "Auto reply."))
+    assert event["auto_reply"] == true
+  end
+
   test "append_ticket_events stores inspection events through the writer path" do
     root = tmp_root()
 

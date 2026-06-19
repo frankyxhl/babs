@@ -430,6 +430,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     |> put_optional("turn_id", turn.turn_id)
     |> put_optional("attempt_id", turn.captured_attempt_id)
     |> put_optional("parent_comment_id", turn.parent_comment_id)
+    |> put_optional("auto_reply", turn.auto_reply)
   end
 
   defp comment_events(ticket, body, now, by, notify?, turn, opts) do
@@ -2287,6 +2288,7 @@ defmodule Babs.Citizens.Tickets.Writer do
     supplied_attempt_id = fetch_attr(attrs, :attempt_id)
     parent_turn_id = fetch_attr(attrs, :parent_turn_id)
     parent_comment_id = fetch_attr(attrs, :parent_comment_id)
+    auto_reply = fetch_attr(attrs, :auto_reply)
     message_id = supplied_message_id || TurnIds.generate!(:message, now)
 
     cond do
@@ -2297,6 +2299,7 @@ defmodule Babs.Citizens.Tickets.Writer do
           captured_attempt_id: supplied_attempt_id,
           parent_turn_id: parent_turn_id,
           parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids: %{},
           new_turn?: false
         }
@@ -2310,6 +2313,7 @@ defmodule Babs.Citizens.Tickets.Writer do
           captured_attempt_id: nil,
           parent_turn_id: parent_turn_id,
           parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids:
             Map.new(ticket.assignees, fn slug ->
               {slug, TurnIds.generate!(:attempt, now)}
@@ -2324,6 +2328,7 @@ defmodule Babs.Citizens.Tickets.Writer do
           captured_attempt_id: nil,
           parent_turn_id: nil,
           parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids: %{},
           new_turn?: false
         }
