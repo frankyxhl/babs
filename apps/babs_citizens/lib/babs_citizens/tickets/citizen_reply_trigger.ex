@@ -128,7 +128,9 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
   defp mention_targets(comment, citizen_set, author) do
     body = comment["body"] || ""
 
-    ~r/@([a-zA-Z0-9_-]+)/
+    # Require a mention boundary: the `@` must not follow a word character, so
+    # email user-info (e.g. `ops@bob.example`) is not treated as `@bob`.
+    ~r/(?<![A-Za-z0-9_])@([a-zA-Z0-9_-]+)/
     |> Regex.scan(body, capture: :all_but_first)
     |> List.flatten()
     |> Enum.filter(fn slug ->
@@ -157,9 +159,15 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
   defp budget(opts) do
     case Keyword.fetch(opts, :citizen_auto_reply_budget) do
       {:ok, value} when is_integer(value) -> value
-      _ -> Application.get_env(:babs_citizens, :citizen_auto_reply_budget, @default_budget)
+      {:ok, _invalid} -> @default_budget
+      # Normalize app-config too: a non-integer (e.g. env string "6") must not
+      # reach the `budget - auto_count` subtraction and raise ArithmeticError.
+      :error -> normalize_budget(Application.get_env(:babs_citizens, :citizen_auto_reply_budget))
     end
   end
+
+  defp normalize_budget(value) when is_integer(value), do: value
+  defp normalize_budget(_value), do: @default_budget
 
   defp count_auto_replies(history) do
     Enum.count(history, fn event ->

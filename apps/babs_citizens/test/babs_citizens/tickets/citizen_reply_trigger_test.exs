@@ -188,6 +188,21 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
 
       assert CitizenReplyTrigger.targets(c, conversation, ["alice", "bob"]) == MapSet.new()
     end
+
+    test "@ inside an email address is not treated as a mention" do
+      conversation = conversation_from_comments([])
+      c = comment(id: "msg_1", by: "user", body: "ping ops@bob.example about it")
+
+      assert CitizenReplyTrigger.targets(c, conversation, ["bob"]) == MapSet.new()
+    end
+
+    test "a real @mention after a boundary still matches" do
+      conversation = conversation_from_comments([])
+      c = comment(id: "msg_1", by: "user", body: "hey @bob and (@alice)")
+
+      assert CitizenReplyTrigger.targets(c, conversation, ["alice", "bob"]) ==
+               MapSet.new(["alice", "bob"])
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -195,6 +210,27 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
   # ---------------------------------------------------------------------------
 
   describe "budget counting" do
+    test "a non-integer configured budget falls back to the default (no ArithmeticError)" do
+      conversation = conversation_from_comments([])
+      c = comment(id: "msg_x", by: "user", body: "go @alice")
+      deliver_calls = collect_deliver_calls()
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        deliver_fn: deliver_calls.fun,
+        citizen_auto_reply_enabled: true,
+        # non-integer budget must normalize to the default, not crash the subtraction
+        citizen_auto_reply_budget: "6",
+        citizen_slugs: ["alice"],
+        history: []
+      )
+
+      assert length(deliver_calls.calls.()) == 1
+    end
+
     test "trigger fires when auto_reply count is under the cap" do
       history = [
         %{"event" => "comment", "by" => "alice", "body" => "1", "auto_reply" => true},
