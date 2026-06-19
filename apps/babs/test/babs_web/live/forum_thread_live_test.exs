@@ -111,6 +111,51 @@ defmodule BabsWeb.ForumThreadLiveTest do
     refute html =~ ~s(<input type="text")
   end
 
+  # ---------------------------------------------------------------------------
+  # NEW: parent_comment_id-based threading renders nested
+  # ---------------------------------------------------------------------------
+
+  test "parent_comment_id thread renders child nested under parent", %{root: root} do
+    ticket = create_ticket!(root, "Message Threading", "Body.")
+
+    history = message_level_threaded_history(ticket.id)
+
+    Enum.each(history, fn event ->
+      :ok = Babs.Citizens.Tickets.History.append(root, ticket.id, event)
+    end)
+
+    {:ok, _view, html} = live(build_conn(), "/forum/#{ticket.id}")
+
+    assert html =~ "Top level post"
+    assert html =~ "Direct reply to top"
+    assert html =~ ~s(data-testid="forum-comment-depth-0")
+    assert html =~ ~s(data-testid="forum-comment-depth-1")
+  end
+
+  # ---------------------------------------------------------------------------
+  # NEW: context preview <details> shows correct ancestor count
+  # ---------------------------------------------------------------------------
+
+  test "context preview shows ancestor count for a depth-2 comment", %{root: root} do
+    ticket = create_ticket!(root, "Context Preview", "Body.")
+
+    history = three_level_message_history(ticket.id)
+
+    Enum.each(history, fn event ->
+      :ok = Babs.Citizens.Tickets.History.append(root, ticket.id, event)
+    end)
+
+    {:ok, _view, html} = live(build_conn(), "/forum/#{ticket.id}")
+
+    # depth-2 comment (msg_l2) has 2 ancestors: msg_l0 and msg_l1
+    assert html =~ ~s(data-testid="forum-context-preview")
+    assert html =~ "Reply context (2 messages)"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------------
+
   defp threaded_history(ticket_id) do
     [
       %{
@@ -145,6 +190,78 @@ defmodule BabsWeb.ForumThreadLiveTest do
         "message_id" => "msg_child_1",
         "turn_id" => "turn_child_1",
         "body" => "Child reply"
+      }
+    ]
+  end
+
+  defp message_level_threaded_history(ticket_id) do
+    [
+      %{
+        "ts" => "2026-06-01T10:00:00Z",
+        "event" => "turn_created",
+        "by" => "user",
+        "ticket_id" => ticket_id,
+        "turn_id" => "turn_t1"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:01Z",
+        "event" => "comment",
+        "by" => "user",
+        "ticket_id" => ticket_id,
+        "message_id" => "msg_top",
+        "turn_id" => "turn_t1",
+        "body" => "Top level post"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:02Z",
+        "event" => "comment",
+        "by" => "clare",
+        "ticket_id" => ticket_id,
+        "message_id" => "msg_reply",
+        "turn_id" => "turn_t1",
+        "parent_comment_id" => "msg_top",
+        "body" => "Direct reply to top"
+      }
+    ]
+  end
+
+  defp three_level_message_history(ticket_id) do
+    [
+      %{
+        "ts" => "2026-06-01T10:00:00Z",
+        "event" => "turn_created",
+        "by" => "user",
+        "ticket_id" => ticket_id,
+        "turn_id" => "turn_t1"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:01Z",
+        "event" => "comment",
+        "by" => "user",
+        "ticket_id" => ticket_id,
+        "message_id" => "msg_l0",
+        "turn_id" => "turn_t1",
+        "body" => "L0 root"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:02Z",
+        "event" => "comment",
+        "by" => "alice",
+        "ticket_id" => ticket_id,
+        "message_id" => "msg_l1",
+        "turn_id" => "turn_t1",
+        "parent_comment_id" => "msg_l0",
+        "body" => "L1 reply"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:03Z",
+        "event" => "comment",
+        "by" => "bob",
+        "ticket_id" => ticket_id,
+        "message_id" => "msg_l2",
+        "turn_id" => "turn_t1",
+        "parent_comment_id" => "msg_l1",
+        "body" => "L2 deep reply"
       }
     ]
   end

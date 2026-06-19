@@ -44,6 +44,7 @@ defmodule Babs.Citizens.Tickets.Conversation do
     message = %{
       id: id,
       turn_id: turn_id,
+      parent_id: event["parent_comment_id"],
       author: event["by"] || "unknown",
       role: role(event["by"]),
       body: body,
