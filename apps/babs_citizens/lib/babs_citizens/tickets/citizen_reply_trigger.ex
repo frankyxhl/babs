@@ -206,7 +206,10 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
         started_at: now,
         turn_id: TurnIds.generate!(:turn, now),
         attempt_id: TurnIds.generate!(:attempt, now),
-        auto_reply: true
+        auto_reply: true,
+        # Thread the woken Citizen's reply under the comment that triggered it,
+        # so it nests in the forum tree and path_to keeps the lineage.
+        parent_comment_id: Keyword.get(opts, :focus_message_id)
       }
 
       ReplyCapture.track(turn, opts)

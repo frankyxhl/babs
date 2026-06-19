@@ -276,6 +276,42 @@ defmodule Babs.Citizens.Tickets.ReplyCaptureTest do
     assert comment_event["auto_reply"] == true
   end
 
+  test "captured comment for an auto_reply turn carries the triggering parent_comment_id", %{
+    root: root,
+    ticket: ticket,
+    config: config
+  } do
+    transcript =
+      transcript([
+        %{
+          "timestamp" => "2026-05-06T00:00:00Z",
+          "role" => "user",
+          "content" => "Babs Ticket #{ticket.id}"
+        },
+        %{
+          "timestamp" => "2026-05-06T00:00:01Z",
+          "role" => "assistant",
+          "content" => "Threaded auto reply"
+        }
+      ])
+
+    auto_turn =
+      turn(root, ticket.id)
+      |> Map.put(:auto_reply, true)
+      |> Map.put(:parent_comment_id, "msg_trigger")
+
+    assert {:captured, "Threaded auto reply"} =
+             ReplyCapture.capture_once(auto_turn, citizen_config: config, paths: [transcript])
+
+    assert {:ok, history} = History.read(root, ticket.id)
+
+    comment_event =
+      Enum.find(history, &(&1["event"] == "comment" and &1["body"] == "Threaded auto reply"))
+
+    # nests the woken Citizen's reply under the comment that triggered it
+    assert comment_event["parent_comment_id"] == "msg_trigger"
+  end
+
   test "captured comment for a normal turn does NOT carry auto_reply in history", %{
     root: root,
     ticket: ticket,

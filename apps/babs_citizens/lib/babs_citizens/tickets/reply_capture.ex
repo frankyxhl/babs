@@ -132,6 +132,7 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
           attempt_id: turn.attempt_id
         }
         |> maybe_put_auto_reply(Map.get(turn, :auto_reply))
+        |> maybe_put_parent_comment_id(Map.get(turn, :parent_comment_id))
         |> Enum.reject(fn {_key, value} -> is_nil(value) end)
         |> Map.new()
 
@@ -151,6 +152,11 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
 
   defp maybe_put_auto_reply(attrs, true), do: Map.put(attrs, :auto_reply, true)
   defp maybe_put_auto_reply(attrs, _other), do: attrs
+
+  defp maybe_put_parent_comment_id(attrs, nil), do: attrs
+
+  defp maybe_put_parent_comment_id(attrs, parent_id),
+    do: Map.put(attrs, :parent_comment_id, parent_id)
 
   defp append_advisory(turn, event, reason, _opts) do
     History.append(turn.root, turn.ticket_id, %{
@@ -219,6 +225,7 @@ defmodule Babs.Citizens.Tickets.ReplyCapture do
       turn_id: Map.get(turn, :turn_id),
       attempt_id: Map.get(turn, :attempt_id),
       auto_reply: Map.get(turn, :auto_reply),
+      parent_comment_id: Map.get(turn, :parent_comment_id),
       started_at: started_at,
       window_ms: Map.get(turn, :window_ms, Keyword.get(opts, :window_ms, @window_ms))
     }
