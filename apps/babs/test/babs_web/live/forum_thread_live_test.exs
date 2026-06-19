@@ -152,6 +152,54 @@ defmodule BabsWeb.ForumThreadLiveTest do
     assert html =~ "Reply context (2 messages)"
   end
 
+  test "context preview truncates multibyte (CJK) ancestor bodies without corrupting UTF-8",
+       %{root: root} do
+    ticket = create_ticket!(root, "Multibyte Truncation", "Body.")
+    # 119 ASCII + CJK so a 120-byte cut would land inside the first 中 (3 bytes).
+    long_body = String.duplicate("a", 119) <> String.duplicate("中", 30)
+
+    history = [
+      %{
+        "ts" => "2026-06-01T10:00:00Z",
+        "event" => "turn_created",
+        "by" => "user",
+        "ticket_id" => ticket.id,
+        "turn_id" => "turn_t1"
+      },
+      %{
+        "ts" => "2026-06-01T10:00:01Z",
+        "event" => "comment",
+        "by" => "user",
+        "ticket_id" => ticket.id,
+        "message_id" => "msg_top",
+        "turn_id" => "turn_t1",
+        "body" => long_body
+      },
+      %{
+        "ts" => "2026-06-01T10:00:02Z",
+        "event" => "comment",
+        "by" => "clare",
+        "ticket_id" => ticket.id,
+        "message_id" => "msg_reply",
+        "turn_id" => "turn_t1",
+        "parent_comment_id" => "msg_top",
+        "body" => "Reply"
+      }
+    ]
+
+    Enum.each(history, fn event ->
+      :ok = Babs.Citizens.Tickets.History.append(root, ticket.id, event)
+    end)
+
+    {:ok, _view, html} = live(build_conn(), "/forum/#{ticket.id}")
+
+    assert html =~ ~s(data-testid="forum-context-preview")
+    assert String.valid?(html)
+    refute html =~ "�"
+    # truncated at a grapheme boundary: 119 a's then a whole 中, then ellipsis
+    assert html =~ String.duplicate("a", 119) <> "中…"
+  end
+
   # ---------------------------------------------------------------------------
   # Helpers
   # ---------------------------------------------------------------------------

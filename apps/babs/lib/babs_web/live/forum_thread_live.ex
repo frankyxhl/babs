@@ -180,8 +180,15 @@ defmodule BabsWeb.ForumThreadLive do
 
   defp indent_px(depth), do: depth * 24
 
-  defp truncate(text, max_len) when byte_size(text) <= max_len, do: text
-  defp truncate(text, max_len), do: binary_part(text, 0, max_len) <> "…"
+  # Grapheme-safe: byte-based truncation can split a multibyte codepoint
+  # (e.g. CJK / emoji) and emit invalid UTF-8. max_len counts characters.
+  defp truncate(text, max_len) do
+    if String.length(text) <= max_len do
+      text
+    else
+      String.slice(text, 0, max_len) <> "…"
+    end
+  end
 
   defp thread_styles do
     """
