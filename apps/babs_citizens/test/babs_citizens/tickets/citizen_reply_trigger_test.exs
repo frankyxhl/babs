@@ -250,6 +250,28 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
       assert length(deliver_calls.calls.()) == 1
     end
 
+    test "an assignee already notified is excluded from the auto-trigger (no double wake)" do
+      conversation = conversation_from_comments([])
+      c = comment(id: "msg_x", by: "user", body: "go @alice @bob")
+      deliver_calls = collect_deliver_calls()
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        deliver_fn: deliver_calls.fun,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["alice", "bob"],
+        exclude_slugs: ["alice"],
+        history: []
+      )
+
+      # alice was already notified via inject_comment → only bob is auto-triggered
+      slugs = deliver_calls.calls.() |> Enum.map(fn {slug, _opts} -> slug end)
+      assert slugs == ["bob"]
+    end
+
     test "trigger is blocked when auto_reply count is at the cap" do
       history =
         Enum.map(1..6, fn i ->

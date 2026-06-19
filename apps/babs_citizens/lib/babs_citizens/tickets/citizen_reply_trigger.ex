@@ -62,7 +62,16 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
   @spec maybe_trigger(String.t(), Ticket.t(), map(), Conversation.t(), keyword()) :: :ok
   def maybe_trigger(root, %Ticket{} = ticket, comment, %Conversation{} = conversation, opts) do
     citizen_slugs = Keyword.get(opts, :citizen_slugs, [])
-    found_targets = targets(comment, conversation, citizen_slugs)
+
+    # Exclude citizens already notified for this comment by the regular
+    # assignee-injection path, so an assigned citizen that is also @mentioned /
+    # reply-targeted is not woken twice for the same comment.
+    excluded = MapSet.new(Keyword.get(opts, :exclude_slugs, []))
+
+    found_targets =
+      comment
+      |> targets(conversation, citizen_slugs)
+      |> MapSet.difference(excluded)
 
     if gate_enabled?(opts) do
       history = Keyword.get(opts, :history, [])

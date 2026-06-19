@@ -637,12 +637,20 @@ defmodule Babs.Citizens.Tickets.Writer do
           :error -> Catalog.list_citizens() |> Enum.map(& &1.slug)
         end
 
+      # When notify? is true, inject_comment already delivered to the assignees,
+      # so exclude them from the auto-trigger to avoid waking them twice.
+      already_notified = if notify?, do: ticket.assignees || [], else: []
+
       CitizenReplyTrigger.maybe_trigger(
         root,
         ticket,
         comment_event,
         conversation,
-        Keyword.merge(opts, citizen_slugs: citizen_slugs, history: history)
+        Keyword.merge(opts,
+          citizen_slugs: citizen_slugs,
+          history: history,
+          exclude_slugs: already_notified
+        )
       )
     end
 
