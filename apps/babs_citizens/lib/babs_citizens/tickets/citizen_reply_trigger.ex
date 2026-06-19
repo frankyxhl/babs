@@ -148,7 +148,9 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
   defp gate_enabled?(opts) do
     case Keyword.fetch(opts, :citizen_auto_reply_enabled) do
       {:ok, value} -> value == true
-      :error -> Application.get_env(:babs_citizens, :citizen_auto_reply_enabled, false)
+      # Strict: a misconfigured truthy non-boolean (e.g. "false", "0") must not
+      # enable autonomous delivery. Only the literal boolean true enables it.
+      :error -> Application.get_env(:babs_citizens, :citizen_auto_reply_enabled, false) == true
     end
   end
 

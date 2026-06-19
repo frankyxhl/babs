@@ -365,6 +365,15 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
   # ---------------------------------------------------------------------------
 
   describe "gate" do
+    test "enabled? requires the literal boolean true (truthy non-booleans do not enable)" do
+      assert CitizenReplyTrigger.enabled?(citizen_auto_reply_enabled: true)
+      refute CitizenReplyTrigger.enabled?(citizen_auto_reply_enabled: "true")
+      refute CitizenReplyTrigger.enabled?(citizen_auto_reply_enabled: "false")
+      refute CitizenReplyTrigger.enabled?(citizen_auto_reply_enabled: 1)
+      # no opt → reads the env default (false)
+      refute CitizenReplyTrigger.enabled?([])
+    end
+
     test "gate off (default) — deliver_fn is never called" do
       conversation =
         conversation_from_comments([
