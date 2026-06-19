@@ -11,6 +11,7 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
 
   alias Babs.Citizens.CitizenRecord
   alias Babs.Citizens.Tickets.Conversation
+  alias Babs.Citizens.Tickets.ConversationTree
   alias Babs.Citizens.Tickets.Ticket
   alias Babs.Knowledge
   alias Babs.Knowledge.Markdown
@@ -75,9 +76,16 @@ defmodule Babs.Citizens.Tickets.PromptAssembler do
     latest_message = Keyword.get(opts, :latest_message, "")
     max_messages = Keyword.get(opts, :max_messages, @default_max_messages)
     standing_context = standing_context_section(citizen_slug, opts)
+    focus_message_id = Keyword.get(opts, :focus_message_id)
+
+    base_messages =
+      case focus_message_id && ConversationTree.path_to(conversation, focus_message_id) do
+        [_ | _] = lineage -> lineage
+        _ -> conversation.messages
+      end
 
     messages =
-      conversation.messages
+      base_messages
       |> drop_latest_operator_message(latest_message)
       |> Enum.take(-max_messages)
       |> Enum.map_join("\n", &format_message/1)

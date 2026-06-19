@@ -103,6 +103,41 @@ defmodule Babs.Citizens.Tickets.ApiWriterStoreTest do
     assert List.last(history)["ticket_id"] == ticket.id
   end
 
+  test "parent_comment_id round-trips through Writer.comment into history" do
+    root = tmp_root()
+
+    assert {:ok, ticket} =
+             Api.create_ticket(%{title: "Thread", body: "Thread test."},
+               tickets_root: root,
+               date: ~D[2026-06-01],
+               now: "2026-06-01T00:00:00Z"
+             )
+
+    assert {:ok, _} =
+             Api.comment_ticket(
+               ticket.id,
+               %{"body" => "First comment.", "by" => "user", "message_id" => "msg_root"},
+               tickets_root: root,
+               now: "2026-06-01T00:01:00Z"
+             )
+
+    assert {:ok, _} =
+             Api.comment_ticket(
+               ticket.id,
+               %{
+                 "body" => "Reply to first.",
+                 "by" => "user",
+                 "parent_comment_id" => "msg_root"
+               },
+               tickets_root: root,
+               now: "2026-06-01T00:02:00Z"
+             )
+
+    assert {:ok, %{history: history}} = Api.show_ticket(ticket.id, tickets_root: root)
+    reply_event = Enum.find(history, &(&1["body"] == "Reply to first."))
+    assert reply_event["parent_comment_id"] == "msg_root"
+  end
+
   test "append_ticket_events stores inspection events through the writer path" do
     root = tmp_root()
 
