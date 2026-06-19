@@ -114,17 +114,48 @@ defmodule Babs.Citizens.Tickets.ConversationTree do
   end
 
   defp turn_fallback_parent(msg, messages_by_turn, turns) do
-    with turn_id when not is_nil(turn_id) <- msg.turn_id,
-         %{parent_turn_id: parent_turn_id} when not is_nil(parent_turn_id) <-
-           Map.get(turns, turn_id),
-         sibling_msgs when sibling_msgs != [] <-
-           Map.get(messages_by_turn, parent_turn_id, []) do
-      sibling_msgs
-      |> Enum.sort_by(& &1.order)
-      |> List.last()
-      |> Map.fetch!(:id)
+    case msg.turn_id && Map.get(turns, msg.turn_id) do
+      %{parent_turn_id: parent_turn_id} when not is_nil(parent_turn_id) ->
+        # Nest under the latest PRIOR comment (order < msg.order) of the parent
+        # turn; walk up through commentless parent turns so an empty parent turn
+        # does not flatten the child. Cycle-guarded.
+        nearest_prior_ancestor(parent_turn_id, msg.order, messages_by_turn, turns, MapSet.new())
+
+      _ ->
+        nil
+    end
+  end
+
+  defp nearest_prior_ancestor(turn_id, child_order, messages_by_turn, turns, visited) do
+    if MapSet.member?(visited, turn_id) do
+      nil
     else
-      _ -> nil
+      prior =
+        messages_by_turn
+        |> Map.get(turn_id, [])
+        |> Enum.filter(&(&1.order < child_order))
+        |> Enum.sort_by(& &1.order)
+        |> List.last()
+
+      case prior do
+        %{id: id} ->
+          id
+
+        nil ->
+          case Map.get(turns, turn_id) do
+            %{parent_turn_id: parent_turn_id} when not is_nil(parent_turn_id) ->
+              nearest_prior_ancestor(
+                parent_turn_id,
+                child_order,
+                messages_by_turn,
+                turns,
+                MapSet.put(visited, turn_id)
+              )
+
+            _ ->
+              nil
+          end
+      end
     end
   end
 

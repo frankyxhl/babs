@@ -114,6 +114,40 @@ defmodule Babs.Citizens.Tickets.ConversationTreeTest do
     assert child.turn_id == "t2"
   end
 
+  test "turn fallback nests under the latest PRIOR parent-turn comment, not a later one" do
+    history = [
+      turn_created("p", nil, 0),
+      comment("p", "user", "parent first", 1),
+      turn_created("c", "p", 0),
+      comment("c", "clare", "child", 2),
+      comment("p", "user", "parent later", 3)
+    ]
+
+    conversation = Conversation.from_history(history)
+    child = Enum.find(conversation.messages, &(&1.body == "child"))
+    path = conversation |> ConversationTree.path_to(child.id) |> Enum.map(& &1.body)
+
+    # nests under the prior comment, never the later (future) one
+    assert path == ["parent first", "child"]
+  end
+
+  test "turn fallback walks up through a commentless parent turn to the nearest commented ancestor" do
+    history = [
+      turn_created("g", nil, 0),
+      comment("g", "user", "grandparent", 1),
+      turn_created("p", "g", 0),
+      turn_created("c", "p", 0),
+      comment("c", "clare", "child", 2)
+    ]
+
+    conversation = Conversation.from_history(history)
+    child = Enum.find(conversation.messages, &(&1.body == "child"))
+    path = conversation |> ConversationTree.path_to(child.id) |> Enum.map(& &1.body)
+
+    # commentless parent turn "p" must not flatten the child; nest under grandparent
+    assert path == ["grandparent", "child"]
+  end
+
   test "three levels of nesting via turn-level fallback produce depths 0, 1, 2" do
     history =
       history_with_turn("t1", nil, "user", ["Level 0"]) ++
