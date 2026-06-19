@@ -43,7 +43,10 @@ defmodule Babs.Citizens.Tickets.ConversationTree do
   defp build_turn_nodes(conversation) do
     turns = conversation.turns
     messages_by_turn = group_messages_by_turn(conversation.messages)
-    turn_ids = Map.keys(turns)
+    # Include turn ids that only appear on messages (a comment can carry a turn_id
+    # with no matching turn_created event); otherwise such replies are silently
+    # dropped. Message-only turn ids have no parent record, so they become roots.
+    turn_ids = Enum.uniq(Map.keys(turns) ++ Map.keys(messages_by_turn))
 
     children_map =
       Enum.reduce(turns, %{}, fn {_id, turn}, acc ->
@@ -58,8 +61,10 @@ defmodule Babs.Citizens.Tickets.ConversationTree do
 
     root_turn_ids =
       Enum.filter(turn_ids, fn id ->
-        turn = turns[id]
-        is_nil(turn.parent_turn_id) or turn.parent_turn_id not in turn_ids
+        case Map.get(turns, id) do
+          nil -> true
+          turn -> is_nil(turn.parent_turn_id) or turn.parent_turn_id not in turn_ids
+        end
       end)
 
     root_nodes =

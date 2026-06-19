@@ -52,6 +52,21 @@ defmodule Babs.Citizens.Tickets.ConversationTreeTest do
     assert [%{body: "Level 2"}] = leaf.messages
   end
 
+  test "comment carrying a turn_id with no turn_created event is preserved as a root node" do
+    # The captured-reply path can append a comment with a supplied turn_id and no
+    # matching turn_created record; such a reply must not be silently dropped.
+    history = [comment("t-orphan", "clare", "Reply with no turn record", 0)]
+
+    conversation = Conversation.from_history(history)
+    tree = ConversationTree.build(conversation)
+
+    assert [node] = tree
+    assert node.turn_id == "t-orphan"
+    assert node.depth == 0
+    assert node.children == []
+    assert [%{body: "Reply with no turn record"}] = node.messages
+  end
+
   test "legacy messages (turn_id nil) become standalone root nodes with no children" do
     history = [
       %{
