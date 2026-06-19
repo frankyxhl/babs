@@ -99,13 +99,15 @@ defmodule Babs.Citizens.Tickets.ConversationTree do
       msg.legacy? ->
         nil
 
-      # 1. Message-level: parent_id points to a known message
-      not is_nil(msg.parent_id) and Map.has_key?(messages_by_id, msg.parent_id) ->
-        msg.parent_id
-
-      # Orphan parent_id (set but not present) → root
+      # 1. Message-level: accept parent_comment_id only when it points to a known
+      #    PRIOR comment. Rejecting self / future / missing references (→ root)
+      #    keeps order strictly decreasing up the chain, so build/2 and path_to/2
+      #    cannot cycle or recurse forever on imported/hand-edited histories.
       not is_nil(msg.parent_id) ->
-        nil
+        case Map.get(messages_by_id, msg.parent_id) do
+          %{order: parent_order} when parent_order < msg.order -> msg.parent_id
+          _ -> nil
+        end
 
       # 2. Same-turn prompt: a non-prompt comment that shares the prompt's turn
       #    (the normal captured-reply shape: prompt + reply share a turn_id whose

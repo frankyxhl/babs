@@ -192,6 +192,30 @@ defmodule Babs.Citizens.Tickets.ConversationTreeTest do
     assert child.comment.body == "Citizen reply"
   end
 
+  test "self-referential parent_comment_id is treated as a root (no infinite recursion)" do
+    history = [comment_reply("m_self", "t1", "m_self", "clare", "self-referential")]
+
+    conversation = Conversation.from_history(history)
+
+    # build/path_to must terminate; the comment is a childless root
+    assert [node] = ConversationTree.build(conversation)
+    assert node.comment.id == "m_self"
+    assert node.children == []
+    assert conversation |> ConversationTree.path_to("m_self") |> Enum.map(& &1.id) == ["m_self"]
+  end
+
+  test "parent_comment_id pointing at a later comment is rejected (no future ancestor)" do
+    history = [
+      comment_reply("m_early", "t1", "m_late", "user", "earlier, points forward"),
+      comment_reply("m_late", "t2", nil, "clare", "later")
+    ]
+
+    conversation = Conversation.from_history(history)
+
+    # m_early (order 0) references m_late (order 1, future) → rejected → root
+    assert conversation |> ConversationTree.path_to("m_early") |> Enum.map(& &1.id) == ["m_early"]
+  end
+
   test "three levels of nesting via turn-level fallback produce depths 0, 1, 2" do
     history =
       history_with_turn("t1", nil, "user", ["Level 0"]) ++
