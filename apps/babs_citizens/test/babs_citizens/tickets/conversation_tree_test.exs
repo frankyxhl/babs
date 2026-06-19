@@ -148,6 +148,50 @@ defmodule Babs.Citizens.Tickets.ConversationTreeTest do
     assert path == ["grandparent", "child"]
   end
 
+  test "captured reply sharing the prompt's turn nests under the prompt (prompt_message_id)" do
+    # Normal Writer shape: prompt + reply share a turn_id whose parent_turn_id is nil;
+    # the turn's prompt_message_id points at the prompt comment.
+    history = [
+      %{
+        "event" => "turn_created",
+        "turn_id" => "t1",
+        "ticket_id" => "T-1",
+        "ts" => "2026-06-01T10:00:00Z",
+        "by" => "user",
+        "prompt_message_id" => "msg_prompt"
+      },
+      %{
+        "event" => "comment",
+        "turn_id" => "t1",
+        "ticket_id" => "T-1",
+        "ts" => "2026-06-01T10:00:01Z",
+        "by" => "user",
+        "message_id" => "msg_prompt",
+        "body" => "Operator prompt"
+      },
+      %{
+        "event" => "comment",
+        "turn_id" => "t1",
+        "ticket_id" => "T-1",
+        "ts" => "2026-06-01T10:00:02Z",
+        "by" => "clare",
+        "message_id" => "msg_reply",
+        "body" => "Citizen reply"
+      }
+    ]
+
+    conversation = Conversation.from_history(history)
+    reply = Enum.find(conversation.messages, &(&1.body == "Citizen reply"))
+
+    path = conversation |> ConversationTree.path_to(reply.id) |> Enum.map(& &1.body)
+    assert path == ["Operator prompt", "Citizen reply"]
+
+    assert [root] = ConversationTree.build(conversation)
+    assert root.comment.body == "Operator prompt"
+    assert [child] = root.children
+    assert child.comment.body == "Citizen reply"
+  end
+
   test "three levels of nesting via turn-level fallback produce depths 0, 1, 2" do
     history =
       history_with_turn("t1", nil, "user", ["Level 0"]) ++

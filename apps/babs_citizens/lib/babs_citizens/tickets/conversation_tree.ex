@@ -107,9 +107,25 @@ defmodule Babs.Citizens.Tickets.ConversationTree do
       not is_nil(msg.parent_id) ->
         nil
 
-      # 2. Turn-level fallback: find latest comment in parent_turn
+      # 2. Same-turn prompt: a non-prompt comment that shares the prompt's turn
+      #    (the normal captured-reply shape: prompt + reply share a turn_id whose
+      #    parent_turn_id is nil) nests under the turn's prompt_message_id.
+      # 3. Otherwise, turn-level fallback up the parent_turn chain.
       true ->
-        turn_fallback_parent(msg, messages_by_turn, turns)
+        same_turn_prompt_parent(msg, messages_by_id, turns) ||
+          turn_fallback_parent(msg, messages_by_turn, turns)
+    end
+  end
+
+  defp same_turn_prompt_parent(msg, messages_by_id, turns) do
+    with turn when not is_nil(turn) <- msg.turn_id && Map.get(turns, msg.turn_id),
+         prompt_id when not is_nil(prompt_id) <- turn.prompt_message_id,
+         true <- prompt_id != msg.id,
+         %{order: prompt_order} <- Map.get(messages_by_id, prompt_id),
+         true <- prompt_order < msg.order do
+      prompt_id
+    else
+      _ -> nil
     end
   end
 
