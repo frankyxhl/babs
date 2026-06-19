@@ -479,6 +479,60 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
       assert Keyword.get(call_opts, :focus_message_id) == "msg_trigger"
     end
 
+    test "gate on — deliver opts carry auto_reply: true alongside focus_message_id" do
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "ready", turn_id: "turn_a"}
+        ])
+
+      c = comment(id: "msg_trigger", by: "user", body: "@alice go")
+      deliver_calls = collect_deliver_calls()
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        deliver_fn: deliver_calls.fun,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["alice"]
+      )
+
+      calls = deliver_calls.calls.()
+      assert length(calls) == 1
+      {_slug, call_opts} = hd(calls)
+      assert Keyword.get(call_opts, :auto_reply) == true
+      assert Keyword.get(call_opts, :focus_message_id) == "msg_trigger"
+    end
+
+    test "gate off (default) — stub inject_fn is never called" do
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "ready", turn_id: "turn_a"}
+        ])
+
+      c = comment(id: "msg_trigger", by: "user", body: "@alice go")
+      parent = self()
+      ref = make_ref()
+
+      inject_stub = fn _slug, _prompt, _opts ->
+        send(parent, {ref, :inject_called})
+        :ok
+      end
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_slugs: ["alice"],
+        inject_fn: inject_stub
+        # citizen_auto_reply_enabled NOT set — defaults to false
+      )
+
+      refute_receive {^ref, :inject_called}, 100
+    end
+
     test "gate on — deliver_fn called once per target (two targets)" do
       conversation =
         conversation_from_comments([
@@ -506,6 +560,167 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
       for {_slug, call_opts} <- calls do
         assert Keyword.get(call_opts, :focus_message_id) == "msg_trigger"
       end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Real default_deliver — stub inject_fn (no AI CLI), no real Injector.prepare
+  # ---------------------------------------------------------------------------
+
+  describe "real default_deliver via inject_fn stub" do
+    test "when enabled, calls inject_fn with the target slug and a prompt containing focus lineage" do
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "I can help", turn_id: "turn_a"},
+          %{id: "msg_b", by: "user", body: "great @alice", parent_id: "msg_a", turn_id: nil}
+        ])
+
+      c = comment(id: "msg_b", by: "user", body: "great @alice", parent_id: "msg_a")
+
+      parent = self()
+      ref = make_ref()
+
+      inject_stub = fn slug, prompt, _opts ->
+        send(parent, {ref, :injected, slug, prompt})
+        :ok
+      end
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["alice"],
+        history: [],
+        now: "2026-06-01T10:00:00Z",
+        # Bypass Injector.prepare (no live pane needed in unit test)
+        pane_lookup: fn _slug -> {:ok, :fake_pid} end,
+        citizen_fetcher: fn _slug -> {:ok, %{}} end,
+        inject_fn: inject_stub,
+        reply_capture: fn _turn -> :ok end
+      )
+
+      assert_receive {^ref, :injected, "alice", prompt}, 500
+      # The prompt must contain focus_message_id context (lineage path to msg_b)
+      assert prompt =~ "alice"
+    end
+
+    test "skips delivery (execution_busy) when the citizen lock is already held" do
+      {:ok, _} = Application.ensure_all_started(:babs_citizens)
+
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "I can help", turn_id: "turn_a"}
+        ])
+
+      c = comment(id: "msg_b", by: "user", body: "great @alice", parent_id: "msg_a")
+
+      parent = self()
+      ref = make_ref()
+      inject_stub = fn slug, prompt, _opts -> send(parent, {ref, :injected, slug, prompt}) end
+
+      # Hold alice's execution lock in another process for the duration.
+      holder =
+        spawn(fn ->
+          Babs.Citizens.ExecutionLock.with_lock("alice", fn ->
+            send(parent, {ref, :locked})
+            receive(do: ({^ref, :release} -> :ok))
+          end)
+        end)
+
+      assert_receive {^ref, :locked}, 500
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["alice"],
+        history: [],
+        now: "2026-06-01T10:00:00Z",
+        pane_lookup: fn _slug -> {:ok, :fake_pid} end,
+        citizen_fetcher: fn _slug -> {:ok, %{}} end,
+        inject_fn: inject_stub,
+        reply_capture: fn _turn -> :ok end
+      )
+
+      # the lock was busy, so no prompt was injected into the pane
+      refute_received {^ref, :injected, _slug, _prompt}
+      send(holder, {ref, :release})
+    end
+
+    test "inject_fn receives the target slug, not the commenter" do
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_c", by: "bob", body: "I finished", turn_id: "turn_b"}
+        ])
+
+      c = comment(id: "msg_2", by: "user", body: "good job @bob", parent_id: "msg_c")
+
+      parent = self()
+      ref = make_ref()
+
+      inject_stub = fn slug, _prompt, _opts ->
+        send(parent, {ref, :slug, slug})
+        :ok
+      end
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["bob"],
+        history: [],
+        now: "2026-06-01T10:00:00Z",
+        pane_lookup: fn _slug -> {:ok, :fake_pid} end,
+        citizen_fetcher: fn _slug -> {:ok, %{}} end,
+        inject_fn: inject_stub,
+        reply_capture: fn _turn -> :ok end
+      )
+
+      assert_receive {^ref, :slug, "bob"}, 500
+    end
+
+    test "budget at cap — inject_fn is never called even with default_deliver" do
+      history =
+        Enum.map(1..6, fn i ->
+          %{"event" => "comment", "by" => "alice", "body" => "msg #{i}", "auto_reply" => true}
+        end)
+
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "start", turn_id: "turn_a"}
+        ])
+
+      c = comment(id: "msg_7", by: "user", body: "@alice go")
+
+      parent = self()
+      ref = make_ref()
+
+      inject_stub = fn _slug, _prompt, _opts ->
+        send(parent, {ref, :inject_called})
+        :ok
+      end
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_auto_reply_enabled: true,
+        citizen_auto_reply_budget: 6,
+        citizen_slugs: ["alice"],
+        history: history,
+        now: "2026-06-01T10:00:00Z",
+        inject_fn: inject_stub,
+        reply_capture: fn _turn -> :ok end
+      )
+
+      refute_receive {^ref, :inject_called}, 100
     end
   end
 

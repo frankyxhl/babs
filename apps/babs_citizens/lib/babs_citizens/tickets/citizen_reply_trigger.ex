@@ -21,10 +21,19 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
 
   The `deliver_fn` opt (default: `&default_deliver/5`) is the only function
   that enqueues/calls AI.  Tests pass a stub to avoid real CLI calls.
+
+  Inside the real `default_deliver/5`, the Injector is itself injectable via
+  the `:inject_fn` opt (a `fn slug, prompt, opts -> :ok | {:error, reason}`),
+  defaulting to `&Injector.inject/3`. This lets unit tests substitute a stub
+  without running any real AI CLI.
   """
 
+  alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Conversation
+  alias Babs.Citizens.Tickets.Injector
+  alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.Ticket
+  alias Babs.Citizens.Tickets.TurnIds
 
   @default_budget 6
 
@@ -83,7 +92,13 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
       if remaining > 0 do
         comment_id = comment["message_id"]
         deliver = Keyword.get(opts, :deliver_fn, &default_deliver/5)
-        deliver_opts = Keyword.put(opts, :focus_message_id, comment_id)
+
+        deliver_opts =
+          opts
+          |> Keyword.put(:focus_message_id, comment_id)
+          |> Keyword.put(:auto_reply, true)
+          |> Keyword.put(:trigger_by, comment["by"] || "")
+          |> Keyword.put(:trigger_body, comment["body"] || "")
 
         # Cap fan-out at the remaining budget: one comment targeting several
         # citizens must not push the per-thread auto-reply count past the cap.
@@ -175,5 +190,36 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
     end)
   end
 
-  defp default_deliver(_slug, _root, _ticket, _conversation, _opts), do: :ok
+  defp default_deliver(slug, root, ticket, conversation, opts) do
+    by = Keyword.get(opts, :trigger_by, "")
+    body = Keyword.get(opts, :trigger_body, "")
+    now = Keyword.get(opts, :now, DateTime.utc_now(:second) |> DateTime.to_iso8601())
+
+    prompt = Injector.comment_prompt(ticket, slug, by, body, conversation, opts)
+    inject = Keyword.get(opts, :inject_fn, &Injector.inject/3)
+
+    # Serialize on the Citizen lock like the other delivery paths, so an
+    # auto-reply can't interleave a prompt into a pane that another delivery /
+    # direct turn is already using (returns {:error, {:execution_busy, slug}}).
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.prepare(slug, opts),
+           :ok <- inject.(slug, prompt, opts) do
+        turn = %{
+          root: root,
+          ticket_id: ticket.id,
+          slug: slug,
+          started_at: now,
+          turn_id: TurnIds.generate!(:turn, now),
+          attempt_id: TurnIds.generate!(:attempt, now),
+          auto_reply: true,
+          # Thread the woken Citizen's reply under the comment that triggered it,
+          # so it nests in the forum tree and path_to keeps the lineage.
+          parent_comment_id: Keyword.get(opts, :focus_message_id)
+        }
+
+        ReplyCapture.track(turn, opts)
+        :ok
+      end
+    end)
+  end
 end
