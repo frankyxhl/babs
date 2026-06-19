@@ -28,6 +28,7 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
   without running any real AI CLI.
   """
 
+  alias Babs.Citizens.ExecutionLock
   alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.Injector
   alias Babs.Citizens.Tickets.ReplyCapture
@@ -197,23 +198,28 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTrigger do
     prompt = Injector.comment_prompt(ticket, slug, by, body, conversation, opts)
     inject = Keyword.get(opts, :inject_fn, &Injector.inject/3)
 
-    with :ok <- Injector.prepare(slug, opts),
-         :ok <- inject.(slug, prompt, opts) do
-      turn = %{
-        root: root,
-        ticket_id: ticket.id,
-        slug: slug,
-        started_at: now,
-        turn_id: TurnIds.generate!(:turn, now),
-        attempt_id: TurnIds.generate!(:attempt, now),
-        auto_reply: true,
-        # Thread the woken Citizen's reply under the comment that triggered it,
-        # so it nests in the forum tree and path_to keeps the lineage.
-        parent_comment_id: Keyword.get(opts, :focus_message_id)
-      }
+    # Serialize on the Citizen lock like the other delivery paths, so an
+    # auto-reply can't interleave a prompt into a pane that another delivery /
+    # direct turn is already using (returns {:error, {:execution_busy, slug}}).
+    ExecutionLock.with_lock(slug, fn ->
+      with :ok <- Injector.prepare(slug, opts),
+           :ok <- inject.(slug, prompt, opts) do
+        turn = %{
+          root: root,
+          ticket_id: ticket.id,
+          slug: slug,
+          started_at: now,
+          turn_id: TurnIds.generate!(:turn, now),
+          attempt_id: TurnIds.generate!(:attempt, now),
+          auto_reply: true,
+          # Thread the woken Citizen's reply under the comment that triggered it,
+          # so it nests in the forum tree and path_to keeps the lineage.
+          parent_comment_id: Keyword.get(opts, :focus_message_id)
+        }
 
-      ReplyCapture.track(turn, opts)
-      :ok
-    end
+        ReplyCapture.track(turn, opts)
+        :ok
+      end
+    end)
   end
 end

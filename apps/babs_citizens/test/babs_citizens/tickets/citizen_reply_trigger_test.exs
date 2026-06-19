@@ -606,6 +606,51 @@ defmodule Babs.Citizens.Tickets.CitizenReplyTriggerTest do
       assert prompt =~ "alice"
     end
 
+    test "skips delivery (execution_busy) when the citizen lock is already held" do
+      {:ok, _} = Application.ensure_all_started(:babs_citizens)
+
+      conversation =
+        conversation_from_comments([
+          %{id: "msg_a", by: "alice", body: "I can help", turn_id: "turn_a"}
+        ])
+
+      c = comment(id: "msg_b", by: "user", body: "great @alice", parent_id: "msg_a")
+
+      parent = self()
+      ref = make_ref()
+      inject_stub = fn slug, prompt, _opts -> send(parent, {ref, :injected, slug, prompt}) end
+
+      # Hold alice's execution lock in another process for the duration.
+      holder =
+        spawn(fn ->
+          Babs.Citizens.ExecutionLock.with_lock("alice", fn ->
+            send(parent, {ref, :locked})
+            receive(do: ({^ref, :release} -> :ok))
+          end)
+        end)
+
+      assert_receive {^ref, :locked}, 500
+
+      CitizenReplyTrigger.maybe_trigger(
+        "/tmp/root",
+        ticket(),
+        c,
+        conversation,
+        citizen_auto_reply_enabled: true,
+        citizen_slugs: ["alice"],
+        history: [],
+        now: "2026-06-01T10:00:00Z",
+        pane_lookup: fn _slug -> {:ok, :fake_pid} end,
+        citizen_fetcher: fn _slug -> {:ok, %{}} end,
+        inject_fn: inject_stub,
+        reply_capture: fn _turn -> :ok end
+      )
+
+      # the lock was busy, so no prompt was injected into the pane
+      refute_received {^ref, :injected, _slug, _prompt}
+      send(holder, {ref, :release})
+    end
+
     test "inject_fn receives the target slug, not the commenter" do
       conversation =
         conversation_from_comments([
