@@ -73,6 +73,20 @@ defmodule BabsWeb.TerminalController do
     )
   end
 
+  def forum(conn, params) do
+    conn = fetch_query_params(conn)
+
+    live_render(conn, BabsWeb.ForumLive, session: %{"socket_token" => socket_token(conn, params)})
+  end
+
+  def forum_thread(conn, %{"id" => id} = params) do
+    conn = fetch_query_params(conn)
+
+    live_render(conn, BabsWeb.ForumThreadLive,
+      session: %{"id" => id, "socket_token" => socket_token(conn, params)}
+    )
+  end
+
   def terminal_session(conn) do
     conn = fetch_query_params(conn)
 

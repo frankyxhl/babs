@@ -53,6 +53,8 @@ defmodule BabsWeb.Router do
     get("/tickets", TerminalController, :tickets)
     get("/tickets/new", TerminalController, :new_ticket)
     get("/tickets/:id", TerminalController, :ticket)
+    get("/forum", TerminalController, :forum)
+    get("/forum/:id", TerminalController, :forum_thread)
   end
 
   scope "/" do
