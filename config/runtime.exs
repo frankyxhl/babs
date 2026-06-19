@@ -105,6 +105,18 @@ citizens_config =
 
 config :babs_citizens, citizens_config
 
+# Citizen-to-Citizen auto-reply gate. OFF unless BABS_CITIZEN_AUTO_REPLY=1.
+# When enabled, a comment replying to / @mentioning a Citizen wakes it to
+# respond, bounded per thread by BABS_CITIZEN_AUTO_REPLY_BUDGET (default 6).
+config :babs_citizens,
+       :citizen_auto_reply_enabled,
+       non_empty_env.("BABS_CITIZEN_AUTO_REPLY") == "1"
+
+case non_empty_env.("BABS_CITIZEN_AUTO_REPLY_BUDGET") do
+  nil -> :ok
+  value -> config :babs_citizens, :citizen_auto_reply_budget, String.to_integer(value)
+end
+
 if config_env() != :prod and non_empty_env.("BABS_BDD_FAKE_DIRECT") == "1" do
   config :babs_citizens, :ticket_runtime_opts,
     adapter: Babs.Citizens.DirectCli.Adapters.Fake,
