@@ -5,6 +5,7 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
 
   alias Babs.Knowledge
   alias Babs.Citizens.CitizenRecord
+  alias Babs.Citizens.Tickets.Conversation
   alias Babs.Citizens.Tickets.PromptAssembler
   alias Babs.Citizens.Tickets.Ticket
 
@@ -743,5 +744,191 @@ defmodule Babs.Citizens.Tickets.PromptAssemblerTest do
     File.rm_rf!(root)
     on_exit(fn -> File.rm_rf!(root) end)
     root
+  end
+
+  # ---------------------------------------------------------------------------
+  # follow_up_prompt with :focus_message_id — ancestor-lineage context
+  # ---------------------------------------------------------------------------
+
+  describe "follow_up_prompt with :focus_message_id" do
+    # Build a conversation with a simple threaded history:
+    #   msg_1 (user, root)
+    #     msg_2 (alice, reply to msg_1 via parent_comment_id)
+    #       msg_3 (user, reply to msg_2)
+    #   msg_4 (user, sibling root — unrelated branch)
+    defp threaded_conversation do
+      history = [
+        %{
+          "ts" => "2026-06-01T10:00:00Z",
+          "event" => "turn_created",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "turn_id" => "turn_1"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:00Z",
+          "event" => "comment",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "message_id" => "msg_1",
+          "turn_id" => "turn_1",
+          "body" => "root comment"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:01Z",
+          "event" => "turn_created",
+          "by" => "alice",
+          "ticket_id" => "T-1",
+          "turn_id" => "turn_2"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:01Z",
+          "event" => "comment",
+          "by" => "alice",
+          "ticket_id" => "T-1",
+          "message_id" => "msg_2",
+          "turn_id" => "turn_2",
+          "parent_comment_id" => "msg_1",
+          "body" => "alice reply"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:02Z",
+          "event" => "turn_created",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "turn_id" => "turn_3"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:02Z",
+          "event" => "comment",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "message_id" => "msg_3",
+          "turn_id" => "turn_3",
+          "parent_comment_id" => "msg_2",
+          "body" => "user reply to alice"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:03Z",
+          "event" => "turn_created",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "turn_id" => "turn_4"
+        },
+        %{
+          "ts" => "2026-06-01T10:00:03Z",
+          "event" => "comment",
+          "by" => "user",
+          "ticket_id" => "T-1",
+          "message_id" => "msg_4",
+          "turn_id" => "turn_4",
+          "body" => "sibling branch — unrelated"
+        }
+      ]
+
+      Conversation.from_history(history)
+    end
+
+    test "focus_message_id includes only the lineage (root→focus), not sibling branches" do
+      conversation = threaded_conversation()
+
+      # Focus on msg_3 (user reply to alice): lineage is msg_1 → msg_2 → msg_3
+      prompt =
+        PromptAssembler.follow_up_prompt(
+          %Ticket{
+            id: "T-1",
+            type: "assignment",
+            state: "in_progress",
+            assigner: "user",
+            assignees: ["alice"],
+            assignee_role: nil,
+            inspector: "user",
+            priority: "normal",
+            parent_ticket: nil,
+            created_at: "2026-06-01T10:00:00Z",
+            updated_at: "2026-06-01T10:01:00Z",
+            metadata: %{},
+            title: "Thread test",
+            body: "Do the work.",
+            path: nil,
+            warnings: []
+          },
+          conversation,
+          citizen_slug: "alice",
+          latest_message: "user reply to alice",
+          focus_message_id: "msg_3"
+        )
+
+      assert prompt =~ "root comment"
+      assert prompt =~ "alice reply"
+      refute prompt =~ "sibling branch"
+    end
+
+    test "without focus_message_id, all conversation messages are included (unchanged behavior)" do
+      conversation = threaded_conversation()
+
+      prompt =
+        PromptAssembler.follow_up_prompt(
+          %Ticket{
+            id: "T-1",
+            type: "assignment",
+            state: "in_progress",
+            assigner: "user",
+            assignees: ["alice"],
+            assignee_role: nil,
+            inspector: "user",
+            priority: "normal",
+            parent_ticket: nil,
+            created_at: "2026-06-01T10:00:00Z",
+            updated_at: "2026-06-01T10:01:00Z",
+            metadata: %{},
+            title: "Thread test",
+            body: "Do the work.",
+            path: nil,
+            warnings: []
+          },
+          conversation,
+          citizen_slug: "alice",
+          latest_message: "user reply to alice"
+        )
+
+      assert prompt =~ "root comment"
+      assert prompt =~ "alice reply"
+      assert prompt =~ "sibling branch"
+    end
+
+    test "focus_message_id not present in conversation falls back to all messages" do
+      conversation = threaded_conversation()
+
+      prompt =
+        PromptAssembler.follow_up_prompt(
+          %Ticket{
+            id: "T-1",
+            type: "assignment",
+            state: "in_progress",
+            assigner: "user",
+            assignees: ["alice"],
+            assignee_role: nil,
+            inspector: "user",
+            priority: "normal",
+            parent_ticket: nil,
+            created_at: "2026-06-01T10:00:00Z",
+            updated_at: "2026-06-01T10:01:00Z",
+            metadata: %{},
+            title: "Thread test",
+            body: "Do the work.",
+            path: nil,
+            warnings: []
+          },
+          conversation,
+          citizen_slug: "alice",
+          latest_message: "something",
+          focus_message_id: "msg_nonexistent"
+        )
+
+      assert prompt =~ "root comment"
+      assert prompt =~ "alice reply"
+      assert prompt =~ "sibling branch"
+    end
   end
 end

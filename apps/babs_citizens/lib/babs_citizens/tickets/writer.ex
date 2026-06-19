@@ -22,6 +22,7 @@ defmodule Babs.Citizens.Tickets.Writer do
   alias Babs.Citizens.Tickets.MayorChildTickets
   alias Babs.Citizens.Tickets.MayorProposalReview
   alias Babs.Citizens.Tickets.PromptAssembler
+  alias Babs.Citizens.Tickets.CitizenReplyTrigger
   alias Babs.Citizens.Tickets.ReplyCapture
   alias Babs.Citizens.Tickets.RoleRouter
   alias Babs.Citizens.Tickets.StateMachine
@@ -428,6 +429,8 @@ defmodule Babs.Citizens.Tickets.Writer do
     |> put_optional("message_id", turn.message_id)
     |> put_optional("turn_id", turn.turn_id)
     |> put_optional("attempt_id", turn.captured_attempt_id)
+    |> put_optional("parent_comment_id", turn.parent_comment_id)
+    |> put_optional("auto_reply", turn.auto_reply)
   end
 
   defp comment_events(ticket, body, now, by, notify?, turn, opts) do
@@ -609,11 +612,50 @@ defmodule Babs.Citizens.Tickets.Writer do
          turn,
          opts
        ) do
-    if notify? do
-      inject_comment(root, ticket, body, now, by, turn, opts)
-    else
-      {:ok, %{ticket: ticket, delivery: :comment_stored}}
+    result =
+      if notify? do
+        inject_comment(root, ticket, body, now, by, turn, opts)
+      else
+        {:ok, %{ticket: ticket, delivery: :comment_stored}}
+      end
+
+    # Off-by-default: skip all trigger prep (history read, conversation reduction,
+    # citizen catalog) unless auto-reply is enabled, so the default path is unchanged.
+    if CitizenReplyTrigger.enabled?(opts) do
+      history = read_history_for_prompt(root, ticket.id)
+      conversation = Conversation.from_history(history)
+
+      comment_event = %{
+        "message_id" => turn.message_id,
+        "by" => by,
+        "body" => body,
+        "parent_comment_id" => turn.parent_comment_id
+      }
+
+      citizen_slugs =
+        case Keyword.fetch(opts, :citizen_slugs) do
+          {:ok, slugs} -> slugs
+          :error -> Catalog.list_citizens() |> Enum.map(& &1.slug)
+        end
+
+      # When notify? is true, inject_comment already delivered to the assignees,
+      # so exclude them from the auto-trigger to avoid waking them twice.
+      already_notified = if notify?, do: ticket.assignees || [], else: []
+
+      CitizenReplyTrigger.maybe_trigger(
+        root,
+        ticket,
+        comment_event,
+        conversation,
+        Keyword.merge(opts,
+          citizen_slugs: citizen_slugs,
+          history: history,
+          exclude_slugs: already_notified
+        )
+      )
     end
+
+    result
   end
 
   defp after_comment_append(
@@ -2245,6 +2287,8 @@ defmodule Babs.Citizens.Tickets.Writer do
     supplied_message_id = fetch_attr(attrs, :message_id)
     supplied_attempt_id = fetch_attr(attrs, :attempt_id)
     parent_turn_id = fetch_attr(attrs, :parent_turn_id)
+    parent_comment_id = fetch_attr(attrs, :parent_comment_id)
+    auto_reply = fetch_attr(attrs, :auto_reply)
     message_id = supplied_message_id || TurnIds.generate!(:message, now)
 
     cond do
@@ -2254,6 +2298,8 @@ defmodule Babs.Citizens.Tickets.Writer do
           message_id: message_id,
           captured_attempt_id: supplied_attempt_id,
           parent_turn_id: parent_turn_id,
+          parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids: %{},
           new_turn?: false
         }
@@ -2266,6 +2312,8 @@ defmodule Babs.Citizens.Tickets.Writer do
           message_id: message_id,
           captured_attempt_id: nil,
           parent_turn_id: parent_turn_id,
+          parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids:
             Map.new(ticket.assignees, fn slug ->
               {slug, TurnIds.generate!(:attempt, now)}
@@ -2279,6 +2327,8 @@ defmodule Babs.Citizens.Tickets.Writer do
           message_id: message_id,
           captured_attempt_id: nil,
           parent_turn_id: nil,
+          parent_comment_id: parent_comment_id,
+          auto_reply: auto_reply,
           attempt_ids: %{},
           new_turn?: false
         }
